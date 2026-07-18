@@ -43,7 +43,19 @@ target_compile_features(citrius PUBLIC cxx_std_20)
 
 enable_testing()
 
-find_package(GTest REQUIRED)
+find_package(GTest CONFIG QUIET)
+if(NOT GTest_FOUND)
+    include(FetchContent)
+
+    # Keep GoogleTest's MSVC runtime consistent with the parent project.
+    set(gtest_force_shared_crt ON CACHE BOOL "" FORCE)
+    FetchContent_Declare(
+        googletest
+        URL https://github.com/google/googletest/archive/refs/tags/v1.15.2.zip
+        DOWNLOAD_EXTRACT_TIMESTAMP TRUE
+    )
+    FetchContent_MakeAvailable(googletest)
+endif()
 include(GoogleTest)
 
 add_executable(tensor_test
@@ -74,4 +86,4 @@ if(GTEST_MAIN_LOCATION)
     set_target_properties(tensor_test PROPERTIES BUILD_RPATH "${GTEST_LIB_DIR}")
 endif()
 
-gtest_discover_tests(tensor_test)
+gtest_discover_tests(tensor_test DISCOVERY_MODE PRE_TEST)

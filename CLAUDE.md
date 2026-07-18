@@ -129,6 +129,16 @@ Clean Metal build:
 ./build.sh --clean --metal
 ```
 
+On Windows, build with MSVC using:
+
+```bat
+build.bat
+build.bat --clean --config Debug
+```
+
+The default Windows configuration is `Release`. If GoogleTest is not already installed,
+CMake downloads the pinned test dependency into the build directory automatically.
+
 The scripts configure CMake with:
 
 ```bash
@@ -153,6 +163,13 @@ Run CPU-only tests from a clean build:
 
 ```bash
 ./test.sh --clean
+```
+
+On Windows, run the tests with:
+
+```bat
+test.bat
+test.bat --clean --config Debug
 ```
 
 Run tests with Metal enabled:
