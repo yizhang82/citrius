@@ -192,6 +192,13 @@ test.bat --clean --config Debug
 test.bat --clean --cuda
 ```
 
+Run the end-to-end Float32 matmul benchmark on Windows with:
+
+```bat
+benchmark.bat --cpu
+benchmark.bat --cuda
+```
+
 Run tests with Metal enabled:
 
 ```bash

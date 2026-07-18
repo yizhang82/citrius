@@ -54,6 +54,12 @@ target_include_directories(citrius
 
 target_compile_features(citrius PUBLIC cxx_std_20)
 
+add_executable(matmul_benchmark benchmarks/matmul_benchmark.cpp)
+target_link_libraries(matmul_benchmark PRIVATE citrius)
+if(CITRIUS_ENABLE_CUDA)
+    target_compile_definitions(matmul_benchmark PRIVATE CITRIUS_HAS_CUDA=1)
+endif()
+
 enable_testing()
 
 find_package(GTest CONFIG QUIET)
