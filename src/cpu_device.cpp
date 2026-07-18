@@ -1,10 +1,10 @@
-#include "cpu_device.h"
+#include "impl/cpu_device.h"
 
 #include <algorithm>
 #include <stdexcept>
 #include <string>
 
-namespace citrius {
+namespace citrius::impl {
 
 namespace {
 
@@ -164,4 +164,4 @@ CpuMemTensorStorageImpl& CpuDeviceImpl::require_cpu_storage(ITensorStorage& stor
     return static_cast<CpuMemTensorStorageImpl&>(storage);
 }
 
-} // namespace citrius
+} // namespace citrius::impl

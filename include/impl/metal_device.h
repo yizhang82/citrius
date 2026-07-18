@@ -5,7 +5,7 @@
 
 #include <memory>
 
-namespace citrius {
+namespace citrius::impl {
 
 class MetalDeviceImpl final : public IDevice {
 public:
@@ -32,4 +32,4 @@ private:
     MetalMemTensorStorageImpl& require_metal_storage(ITensorStorage& storage) const;
 };
 
-} // namespace citrius
+} // namespace citrius::impl

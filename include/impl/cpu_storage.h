@@ -5,7 +5,7 @@
 #include <cstddef>
 #include <vector>
 
-namespace citrius {
+namespace citrius::impl {
 
 class CpuMemTensorStorageImpl final : public ITensorStorage {
 public:
@@ -37,4 +37,4 @@ private:
     DType dtype_;
 };
 
-} // namespace citrius
+} // namespace citrius::impl

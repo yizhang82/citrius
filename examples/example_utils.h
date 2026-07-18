@@ -22,19 +22,4 @@ inline Device parse_device(int argc, char** argv, const char* program_name) {
         std::string("Usage: ") + program_name + " --cpu|--cuda|--metal");
 }
 
-inline void print_tensor(const Tensor& tensor) {
-    std::cout << tensor << '\n';
-}
-
-template <typename Example>
-int run(int argc, char** argv, const char* program_name, Example example) {
-    try {
-        example(parse_device(argc, argv, program_name));
-        return 0;
-    } catch (const std::exception& error) {
-        std::cerr << error.what() << '\n';
-        return 1;
-    }
-}
-
 } // namespace citrius::examples

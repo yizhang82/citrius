@@ -3,7 +3,7 @@
 #include "cuda_storage.h"
 #include "device.h"
 
-namespace citrius {
+namespace citrius::impl {
 
 class CudaDeviceImpl final : public IDevice {
 public:
@@ -26,4 +26,4 @@ private:
     CudaMemTensorStorageImpl& require_cuda_storage(ITensorStorage& storage) const;
 };
 
-} // namespace citrius
+} // namespace citrius::impl

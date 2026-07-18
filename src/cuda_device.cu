@@ -1,6 +1,6 @@
-#include "cuda_device.h"
+#include "impl/cuda_device.h"
 
-#include "cpu_storage.h"
+#include "impl/cpu_storage.h"
 
 #include <cuda_runtime.h>
 
@@ -8,7 +8,7 @@
 #include <string>
 #include <utility>
 
-namespace citrius {
+namespace citrius::impl {
 namespace {
 
 void check_cuda(cudaError_t status, const char* operation) {
@@ -135,4 +135,4 @@ CudaMemTensorStorageImpl& CudaDeviceImpl::require_cuda_storage(ITensorStorage& s
     return const_cast<CudaMemTensorStorageImpl&>(require_cuda_storage(static_cast<const ITensorStorage&>(storage)));
 }
 
-} // namespace citrius
+} // namespace citrius::impl

@@ -1,4 +1,4 @@
-#include "cpu_device.h"
+#include "impl/cpu_device.h"
 
 #include <gtest/gtest.h>
 
@@ -9,12 +9,15 @@
 
 namespace {
 
+using citrius::impl::CpuDeviceImpl;
+using citrius::impl::CpuMemTensorStorageImpl;
+
 citrius::Tensor make_cpu_tensor(
-    const citrius::CpuDeviceImpl& device,
+    const CpuDeviceImpl& device,
     citrius::Shape shape,
     const std::vector<float>& values) {
     auto tensor = device.empty(std::move(shape), citrius::DType::Float32);
-    auto storage = std::static_pointer_cast<citrius::CpuMemTensorStorageImpl>(tensor.storage());
+    auto storage = std::static_pointer_cast<CpuMemTensorStorageImpl>(tensor.storage());
     float* data = storage->data_as<float>();
 
     for (std::size_t i = 0; i < values.size(); ++i) {
@@ -25,7 +28,7 @@ citrius::Tensor make_cpu_tensor(
 }
 
 std::vector<float> tensor_values(const citrius::Tensor& tensor) {
-    auto storage = std::static_pointer_cast<citrius::CpuMemTensorStorageImpl>(tensor.storage());
+    auto storage = std::static_pointer_cast<CpuMemTensorStorageImpl>(tensor.storage());
     const float* data = storage->data_as<float>();
     return std::vector<float>(data, data + tensor.numel());
 }
@@ -33,7 +36,7 @@ std::vector<float> tensor_values(const citrius::Tensor& tensor) {
 } // namespace
 
 TEST(CpuDeviceTest, EmptyAllocatesCpuStorage) {
-    const citrius::CpuDeviceImpl device;
+    const CpuDeviceImpl device;
 
     auto tensor = device.empty({2, 3}, citrius::DType::Float32);
 
@@ -41,12 +44,12 @@ TEST(CpuDeviceTest, EmptyAllocatesCpuStorage) {
     EXPECT_EQ(tensor.shape(), citrius::Shape({2, 3}));
     EXPECT_EQ(tensor.device(), citrius::Device::cpu());
     ASSERT_NE(tensor.storage(), nullptr);
-    EXPECT_EQ(tensor.storage()->type(), citrius::TensorStorageType::CpuMemory);
+    EXPECT_EQ(tensor.storage()->type(), citrius::impl::TensorStorageType::CpuMemory);
     EXPECT_EQ(tensor.storage()->nbytes(), 6 * sizeof(float));
 }
 
 TEST(CpuDeviceTest, AddsFloat32Tensors) {
-    const citrius::CpuDeviceImpl device;
+    const CpuDeviceImpl device;
     auto a = make_cpu_tensor(device, {2, 2}, {1.0f, 2.0f, 3.0f, 4.0f});
     auto b = make_cpu_tensor(device, {2, 2}, {10.0f, 20.0f, 30.0f, 40.0f});
 
@@ -56,7 +59,7 @@ TEST(CpuDeviceTest, AddsFloat32Tensors) {
 }
 
 TEST(CpuDeviceTest, SubtractsFloat32Tensors) {
-    const citrius::CpuDeviceImpl device;
+    const CpuDeviceImpl device;
     auto a = make_cpu_tensor(device, {2, 2}, {10.0f, 20.0f, 30.0f, 40.0f});
     auto b = make_cpu_tensor(device, {2, 2}, {1.0f, 2.0f, 3.0f, 4.0f});
 
@@ -66,7 +69,7 @@ TEST(CpuDeviceTest, SubtractsFloat32Tensors) {
 }
 
 TEST(CpuDeviceTest, MultipliesTwoDimensionalFloat32Matrices) {
-    const citrius::CpuDeviceImpl device;
+    const CpuDeviceImpl device;
     auto a = make_cpu_tensor(device, {2, 3}, {1.0f, 2.0f, 3.0f, 4.0f, 5.0f, 6.0f});
     auto b = make_cpu_tensor(device, {3, 2}, {7.0f, 8.0f, 9.0f, 10.0f, 11.0f, 12.0f});
 
@@ -77,7 +80,7 @@ TEST(CpuDeviceTest, MultipliesTwoDimensionalFloat32Matrices) {
 }
 
 TEST(CpuDeviceTest, RejectsShapeMismatchForAdd) {
-    const citrius::CpuDeviceImpl device;
+    const CpuDeviceImpl device;
     auto a = make_cpu_tensor(device, {2, 2}, {1.0f, 2.0f, 3.0f, 4.0f});
     auto b = make_cpu_tensor(device, {4}, {1.0f, 2.0f, 3.0f, 4.0f});
 

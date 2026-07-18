@@ -42,7 +42,7 @@ Common types live in `include/types.h`:
 - `Strides`
 - `dtype_size`
 
-Storage is abstracted through `ITensorStorage` in `include/storage.h`. Concrete storage implementations advertise their backend through `ITensorStorage::type()`, then compatible devices check the type before casting to the concrete implementation.
+Storage is abstracted through `ITensorStorage` in `include/impl/storage.h`. Concrete storage implementations advertise their backend through `ITensorStorage::type()`, then compatible devices check the type before casting to the concrete implementation.
 
 Tensor copies are shallow with respect to storage: tensor metadata is copied by value, while the underlying `ITensorStorage` is shared through `std::shared_ptr`.
 
@@ -56,15 +56,15 @@ Tensor copied = tensor.copy();
 
 Current storage implementations:
 
-- `CpuMemTensorStorageImpl` in `include/cpu_storage.h` and `src/cpu_storage.cpp`
-- `MetalMemTensorStorageImpl` in `include/metal_storage.h` and `src/metal_storage.mm`
-- `CudaMemTensorStorageImpl` in `include/cuda_storage.h` and `src/cuda_storage.cu`
+- `impl::CpuMemTensorStorageImpl` in `include/impl/cpu_storage.h` and `src/cpu_storage.cpp`
+- `impl::MetalMemTensorStorageImpl` in `include/impl/metal_storage.h` and `src/metal_storage.mm`
+- `impl::CudaMemTensorStorageImpl` in `include/impl/cuda_storage.h` and `src/cuda_storage.cu`
 
 Current device implementations:
 
-- `CpuDeviceImpl` in `include/cpu_device.h` and `src/cpu_device.cpp`
-- `MetalDeviceImpl` in `include/metal_device.h` and `src/metal_device.mm`
-- `CudaDeviceImpl` in `include/cuda_device.h` and `src/cuda_device.cu`
+- `impl::CpuDeviceImpl` in `include/impl/cpu_device.h` and `src/cpu_device.cpp`
+- `impl::MetalDeviceImpl` in `include/impl/metal_device.h` and `src/metal_device.mm`
+- `impl::CudaDeviceImpl` in `include/impl/cuda_device.h` and `src/cuda_device.cu`
 
 The device layer owns execution. Storage owns memory only. Arithmetic should live on `IDevice` implementations, not in storage.
 

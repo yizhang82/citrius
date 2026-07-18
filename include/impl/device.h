@@ -5,7 +5,7 @@
 
 #include <memory>
 
-namespace citrius {
+namespace citrius::impl {
 
 enum class ConversionPolicy {
     Error,
@@ -26,4 +26,4 @@ public:
         ConversionPolicy policy = ConversionPolicy::Error) const = 0;
 };
 
-} // namespace citrius
+} // namespace citrius::impl

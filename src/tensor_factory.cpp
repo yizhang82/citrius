@@ -1,13 +1,13 @@
 #include "tensor_factory.h"
-#include "cpu_device.h"
-#include "cpu_storage.h"
+#include "impl/cpu_device.h"
+#include "impl/cpu_storage.h"
 #ifdef CITRIUS_HAS_CUDA
-#include "cuda_device.h"
-#include "cuda_storage.h"
+#include "impl/cuda_device.h"
+#include "impl/cuda_storage.h"
 #endif
 #ifdef CITRIUS_HAS_METAL
-#include "metal_device.h"
-#include "metal_storage.h"
+#include "impl/metal_device.h"
+#include "impl/metal_storage.h"
 #endif
 #include <algorithm>
 #include <memory>
@@ -17,6 +17,17 @@
 
 namespace citrius {
 namespace {
+using impl::CpuDeviceImpl;
+using impl::CpuMemTensorStorageImpl;
+#ifdef CITRIUS_HAS_CUDA
+using impl::CudaDeviceImpl;
+using impl::CudaMemTensorStorageImpl;
+#endif
+#ifdef CITRIUS_HAS_METAL
+using impl::MetalDeviceImpl;
+using impl::MetalMemTensorStorageImpl;
+#endif
+
 Tensor copy_to_cpu(const Tensor& tensor) {
     if (tensor.device().type == DeviceType::CPU) return tensor;
     auto output = CpuDeviceImpl().empty(tensor.shape(), tensor.dtype());

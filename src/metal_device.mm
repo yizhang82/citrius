@@ -1,6 +1,6 @@
-#include "metal_device.h"
+#include "impl/metal_device.h"
 
-#include "cpu_storage.h"
+#include "impl/cpu_storage.h"
 
 #import <Foundation/Foundation.h>
 #import <Metal/Metal.h>
@@ -13,7 +13,7 @@
 #include <string>
 #include <utility>
 
-namespace citrius {
+namespace citrius::impl {
 
 namespace {
 
@@ -373,4 +373,4 @@ MetalMemTensorStorageImpl& MetalDeviceImpl::require_metal_storage(ITensorStorage
     return static_cast<MetalMemTensorStorageImpl&>(storage);
 }
 
-} // namespace citrius
+} // namespace citrius::impl

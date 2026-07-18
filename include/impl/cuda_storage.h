@@ -2,7 +2,7 @@
 
 #include "storage.h"
 
-namespace citrius {
+namespace citrius::impl {
 
 class CudaMemTensorStorageImpl final : public ITensorStorage {
 public:
@@ -31,4 +31,4 @@ private:
     int device_index_ = 0;
 };
 
-} // namespace citrius
+} // namespace citrius::impl

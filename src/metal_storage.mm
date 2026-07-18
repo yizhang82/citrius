@@ -1,11 +1,11 @@
-#include "metal_storage.h"
+#include "impl/metal_storage.h"
 
 #import <Metal/Metal.h>
 
 #include <cstring>
 #include <stdexcept>
 
-namespace citrius {
+namespace citrius::impl {
 
 class MetalMemTensorStorageImpl::Impl {
 public:
@@ -80,4 +80,4 @@ void MetalMemTensorStorageImpl::copy_to_host(void* data, std::size_t nbytes) con
     std::memcpy(data, [impl_->buffer contents], nbytes);
 }
 
-} // namespace citrius
+} // namespace citrius::impl

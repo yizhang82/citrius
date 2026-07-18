@@ -1,7 +1,7 @@
 #include "tensor.h"
 #include "tensor_factory.h"
 
-#include "cpu_storage.h"
+#include "impl/cpu_storage.h"
 
 #include <gtest/gtest.h>
 
@@ -12,8 +12,8 @@
 
 namespace {
 
-std::shared_ptr<citrius::CpuMemTensorStorageImpl> cpu_storage(const citrius::Tensor& tensor) {
-    return std::static_pointer_cast<citrius::CpuMemTensorStorageImpl>(tensor.storage());
+std::shared_ptr<citrius::impl::CpuMemTensorStorageImpl> cpu_storage(const citrius::Tensor& tensor) {
+    return std::static_pointer_cast<citrius::impl::CpuMemTensorStorageImpl>(tensor.storage());
 }
 
 std::vector<float> cpu_tensor_values(const citrius::Tensor& tensor) {

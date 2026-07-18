@@ -1,20 +1,28 @@
 #include "operations.h"
 
-#include "cpu_device.h"
+#include "impl/cpu_device.h"
 #include "exceptions.h"
 
 #ifdef CITRIUS_HAS_CUDA
-#include "cuda_device.h"
+#include "impl/cuda_device.h"
 #endif
 
 #ifdef CITRIUS_HAS_METAL
-#include "metal_device.h"
+#include "impl/metal_device.h"
 #endif
 
 #include <string>
 
 namespace citrius {
 namespace {
+
+using impl::CpuDeviceImpl;
+#ifdef CITRIUS_HAS_CUDA
+using impl::CudaDeviceImpl;
+#endif
+#ifdef CITRIUS_HAS_METAL
+using impl::MetalDeviceImpl;
+#endif
 
 void require_matching_devices(const Tensor& left, const Tensor& right) {
     if (left.device() != right.device()) {

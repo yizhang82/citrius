@@ -1,4 +1,4 @@
-#include "cpu_storage.h"
+#include "impl/cpu_storage.h"
 #include "operations.h"
 #include "tensor_factory.h"
 
@@ -16,6 +16,7 @@
 namespace {
 
 using Clock = std::chrono::steady_clock;
+using citrius::impl::CpuMemTensorStorageImpl;
 
 struct Result {
     double minimum_ms;
@@ -36,7 +37,7 @@ std::vector<float> input_values(std::int64_t count, int seed) {
 float cpu_checksum(const citrius::Tensor& tensor) {
     const auto cpu_tensor = tensor.to(citrius::Device::cpu());
     const auto storage =
-        std::static_pointer_cast<citrius::CpuMemTensorStorageImpl>(cpu_tensor.storage());
+        std::static_pointer_cast<CpuMemTensorStorageImpl>(cpu_tensor.storage());
     const float* values = storage->data_as<float>();
     float checksum = 0.0f;
     for (std::int64_t i = 0; i < cpu_tensor.numel(); ++i) checksum += values[i];

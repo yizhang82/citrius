@@ -1,9 +1,9 @@
-#include "cpu_storage.h"
+#include "impl/cpu_storage.h"
 
 #include <cstring>
 #include <utility>
 
-namespace citrius {
+namespace citrius::impl {
 
 CpuMemTensorStorageImpl::CpuMemTensorStorageImpl(std::size_t nbytes, DType dtype)
     : buffer_(nbytes),
@@ -47,4 +47,4 @@ const void* CpuMemTensorStorageImpl::data() const {
     return buffer_.data();
 }
 
-} // namespace citrius
+} // namespace citrius::impl

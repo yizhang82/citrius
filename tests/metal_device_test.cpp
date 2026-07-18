@@ -1,7 +1,7 @@
-#include "cpu_device.h"
-#include "cpu_storage.h"
-#include "metal_device.h"
-#include "metal_storage.h"
+#include "impl/cpu_device.h"
+#include "impl/cpu_storage.h"
+#include "impl/metal_device.h"
+#include "impl/metal_storage.h"
 
 #include <gtest/gtest.h>
 
@@ -13,9 +13,9 @@
 
 namespace {
 
-std::unique_ptr<citrius::MetalDeviceImpl> make_metal_device(std::string* error_message) {
+std::unique_ptr<citrius::impl::MetalDeviceImpl> make_metal_device(std::string* error_message) {
     try {
-        return std::make_unique<citrius::MetalDeviceImpl>();
+        return std::make_unique<citrius::impl::MetalDeviceImpl>();
     } catch (const std::runtime_error& error) {
         *error_message = error.what();
         return nullptr;
@@ -23,21 +23,21 @@ std::unique_ptr<citrius::MetalDeviceImpl> make_metal_device(std::string* error_m
 }
 
 citrius::Tensor make_metal_tensor(
-    const citrius::MetalDeviceImpl& device,
+    const citrius::impl::MetalDeviceImpl& device,
     citrius::Shape shape,
     const std::vector<float>& values) {
     auto tensor = device.empty(std::move(shape), citrius::DType::Float32);
-    auto storage = std::static_pointer_cast<citrius::MetalMemTensorStorageImpl>(tensor.storage());
+    auto storage = std::static_pointer_cast<citrius::impl::MetalMemTensorStorageImpl>(tensor.storage());
     storage->copy_from_host(values.data(), values.size() * sizeof(float));
     return tensor;
 }
 
 citrius::Tensor make_cpu_tensor(
-    const citrius::CpuDeviceImpl& device,
+    const citrius::impl::CpuDeviceImpl& device,
     citrius::Shape shape,
     const std::vector<float>& values) {
     auto tensor = device.empty(std::move(shape), citrius::DType::Float32);
-    auto storage = std::static_pointer_cast<citrius::CpuMemTensorStorageImpl>(tensor.storage());
+    auto storage = std::static_pointer_cast<citrius::impl::CpuMemTensorStorageImpl>(tensor.storage());
     float* data = storage->data_as<float>();
 
     for (std::size_t i = 0; i < values.size(); ++i) {
@@ -48,7 +48,7 @@ citrius::Tensor make_cpu_tensor(
 }
 
 std::vector<float> tensor_values(const citrius::Tensor& tensor) {
-    auto storage = std::static_pointer_cast<citrius::MetalMemTensorStorageImpl>(tensor.storage());
+    auto storage = std::static_pointer_cast<citrius::impl::MetalMemTensorStorageImpl>(tensor.storage());
     std::vector<float> values(static_cast<std::size_t>(tensor.numel()));
     storage->copy_to_host(values.data(), values.size() * sizeof(float));
     return values;
@@ -69,7 +69,7 @@ TEST(MetalDeviceTest, EmptyAllocatesMetalStorage) {
     EXPECT_EQ(tensor.shape(), citrius::Shape({2, 3}));
     EXPECT_EQ(tensor.device(), citrius::Device::metal());
     ASSERT_NE(tensor.storage(), nullptr);
-    EXPECT_EQ(tensor.storage()->type(), citrius::TensorStorageType::MetalMemory);
+    EXPECT_EQ(tensor.storage()->type(), citrius::impl::TensorStorageType::MetalMemory);
     EXPECT_EQ(tensor.storage()->nbytes(), 6 * sizeof(float));
 }
 
@@ -117,7 +117,7 @@ TEST(MetalDeviceTest, MultipliesTwoDimensionalFloat32Matrices) {
 }
 
 TEST(MetalDeviceTest, CopiesCpuStorageToMetalForOps) {
-    const citrius::CpuDeviceImpl cpu_device;
+    const citrius::impl::CpuDeviceImpl cpu_device;
     std::string error_message;
     auto metal_device = make_metal_device(&error_message);
     if (!metal_device) {
@@ -128,7 +128,7 @@ TEST(MetalDeviceTest, CopiesCpuStorageToMetalForOps) {
 
     auto result = metal_device->add(a, b);
 
-    EXPECT_EQ(result.storage()->type(), citrius::TensorStorageType::MetalMemory);
+    EXPECT_EQ(result.storage()->type(), citrius::impl::TensorStorageType::MetalMemory);
     EXPECT_EQ(tensor_values(result), std::vector<float>({11.0f, 22.0f, 33.0f, 44.0f}));
 }
 
@@ -142,19 +142,19 @@ TEST(MetalDeviceTest, TensorCopyCreatesDeepCopyOfMetalStorage) {
 
     auto copied = tensor.copy();
     auto original_storage =
-        std::static_pointer_cast<citrius::MetalMemTensorStorageImpl>(tensor.storage());
+        std::static_pointer_cast<citrius::impl::MetalMemTensorStorageImpl>(tensor.storage());
 
     const std::vector<float> updated_values = {100.0f, 2.0f, 3.0f, 4.0f};
     original_storage->copy_from_host(updated_values.data(), updated_values.size() * sizeof(float));
 
-    EXPECT_EQ(copied.storage()->type(), citrius::TensorStorageType::MetalMemory);
+    EXPECT_EQ(copied.storage()->type(), citrius::impl::TensorStorageType::MetalMemory);
     EXPECT_NE(copied.storage(), tensor.storage());
     EXPECT_EQ(tensor_values(tensor), std::vector<float>({100.0f, 2.0f, 3.0f, 4.0f}));
     EXPECT_EQ(tensor_values(copied), std::vector<float>({1.0f, 2.0f, 3.0f, 4.0f}));
 }
 
 TEST(MetalDeviceTest, RejectsCpuStorageWhenConversionPolicyIsError) {
-    const citrius::CpuDeviceImpl cpu_device;
+    const citrius::impl::CpuDeviceImpl cpu_device;
     std::string error_message;
     auto metal_device = make_metal_device(&error_message);
     if (!metal_device) {

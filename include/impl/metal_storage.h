@@ -4,7 +4,7 @@
 
 #include <memory>
 
-namespace citrius {
+namespace citrius::impl {
 
 class MetalMemTensorStorageImpl final : public ITensorStorage {
 public:
@@ -30,4 +30,4 @@ private:
     std::unique_ptr<Impl> impl_;
 };
 
-} // namespace citrius
+} // namespace citrius::impl

@@ -5,7 +5,7 @@
 #include <cstddef>
 #include <memory>
 
-namespace citrius {
+namespace citrius::impl {
 
 enum class TensorStorageType {
     CpuMemory,
@@ -33,4 +33,4 @@ public:
 
 using TensorStoragePtr = std::shared_ptr<ITensorStorage>;
 
-} // namespace citrius
+} // namespace citrius::impl

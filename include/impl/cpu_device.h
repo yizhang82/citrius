@@ -5,7 +5,7 @@
 
 #include <memory>
 
-namespace citrius {
+namespace citrius::impl {
 
 class CpuDeviceImpl final : public IDevice {
 public:
@@ -23,4 +23,4 @@ private:
     CpuMemTensorStorageImpl& require_cpu_storage(ITensorStorage& storage) const;
 };
 
-} // namespace citrius
+} // namespace citrius::impl

@@ -1,7 +1,7 @@
 #include "exceptions.h"
 #include "operations.h"
 
-#include "cpu_storage.h"
+#include "impl/cpu_storage.h"
 
 #include <gtest/gtest.h>
 
@@ -12,7 +12,7 @@ namespace {
 
 std::vector<float> values(const citrius::Tensor& tensor) {
     const auto storage =
-        std::static_pointer_cast<citrius::CpuMemTensorStorageImpl>(tensor.storage());
+        std::static_pointer_cast<citrius::impl::CpuMemTensorStorageImpl>(tensor.storage());
     const float* data = storage->data_as<float>();
     return std::vector<float>(data, data + tensor.numel());
 }

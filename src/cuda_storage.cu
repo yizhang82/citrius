@@ -1,11 +1,11 @@
-#include "cuda_storage.h"
+#include "impl/cuda_storage.h"
 
 #include <cuda_runtime.h>
 
 #include <stdexcept>
 #include <string>
 
-namespace citrius {
+namespace citrius::impl {
 namespace {
 
 void check_cuda(cudaError_t status, const char* operation) {
@@ -68,4 +68,4 @@ void CudaMemTensorStorageImpl::copy_to_host(void* data, std::size_t nbytes) cons
     if (nbytes != 0) check_cuda(cudaMemcpy(data, data_, nbytes, cudaMemcpyDeviceToHost), "failed to copy data from CUDA");
 }
 
-} // namespace citrius
+} // namespace citrius::impl

@@ -1,8 +1,8 @@
 #include "tensor.h"
 
 #include "tensor_factory.h"
-#include "cpu_storage.h"
-#include "storage.h"
+#include "impl/cpu_storage.h"
+#include "impl/storage.h"
 
 #include <cstdint>
 #include <numeric>
@@ -14,6 +14,8 @@
 namespace citrius {
 
 namespace {
+
+using impl::CpuMemTensorStorageImpl;
 
 const char* dtype_name(DType dtype) {
     switch (dtype) {
@@ -56,7 +58,11 @@ Tensor::Tensor(const std::vector<float>& values, Device device)
 Tensor::Tensor(const std::vector<float>& values, Shape shape, Device device)
     : Tensor(TensorFactory::from_vector(values, std::move(shape), device)) {}
 
-Tensor::Tensor(Shape shape, DType dtype, Device device, std::shared_ptr<ITensorStorage> storage)
+Tensor::Tensor(
+    Shape shape,
+    DType dtype,
+    Device device,
+    std::shared_ptr<impl::ITensorStorage> storage)
     : shape_(std::move(shape)),
       dtype_(dtype),
       device_(device),
@@ -75,7 +81,7 @@ Device Tensor::device() const {
     return device_;
 }
 
-std::shared_ptr<ITensorStorage> Tensor::storage() const {
+std::shared_ptr<impl::ITensorStorage> Tensor::storage() const {
     return storage_;
 }
 

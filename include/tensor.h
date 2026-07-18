@@ -10,7 +10,9 @@
 
 namespace citrius {
 
+namespace impl {
 class ITensorStorage;
+}
 
 class Tensor {
 public:
@@ -18,12 +20,16 @@ public:
     Tensor(Shape shape, DType dtype = DType::Float32, Device device = Device::cpu());
     explicit Tensor(const std::vector<float>& values, Device device = Device::cpu());
     Tensor(const std::vector<float>& values, Shape shape, Device device = Device::cpu());
-    Tensor(Shape shape, DType dtype, Device device, std::shared_ptr<ITensorStorage> storage);
+    Tensor(
+        Shape shape,
+        DType dtype,
+        Device device,
+        std::shared_ptr<impl::ITensorStorage> storage);
 
     const Shape& shape() const;
     DType dtype() const;
     Device device() const;
-    std::shared_ptr<ITensorStorage> storage() const;
+    std::shared_ptr<impl::ITensorStorage> storage() const;
 
     std::size_t ndim() const;
     std::int64_t numel() const;
@@ -36,7 +42,7 @@ private:
     Shape shape_;
     DType dtype_ = DType::Float32;
     Device device_ = Device::cpu();
-    std::shared_ptr<ITensorStorage> storage_;
+    std::shared_ptr<impl::ITensorStorage> storage_;
     bool defined_ = false;
 };
 
