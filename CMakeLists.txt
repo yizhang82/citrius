@@ -10,7 +10,10 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
 add_library(citrius
+    src/cpu_device.cpp
+    src/cpu_storage.cpp
     src/tensor.cpp
+    src/types.cpp
 )
 
 target_include_directories(citrius
@@ -26,6 +29,7 @@ find_package(GTest REQUIRED)
 include(GoogleTest)
 
 add_executable(tensor_test
+    tests/cpu_device_test.cpp
     tests/tensor_test.cpp
 )
 
