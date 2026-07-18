@@ -1,6 +1,7 @@
 #include "operations.h"
 
 #include "impl/cpu_device.h"
+#include "impl/multi_thread_cpu_device.h"
 #include "exceptions.h"
 
 #ifdef CITRIUS_HAS_CUDA
@@ -22,6 +23,7 @@ namespace citrius {
 namespace {
 
 using impl::CpuDeviceImpl;
+using impl::MultiThreadCpuDeviceImpl;
 #ifdef CITRIUS_HAS_CUDA
 using impl::CudaDeviceImpl;
 using impl::CublasCudaDeviceImpl;
@@ -65,7 +67,7 @@ Tensor dispatch(const Tensor& left, const Tensor& right, Operation operation) {
 
     switch (device.type) {
         case DeviceType::CPU:
-            return operation(CpuDeviceImpl(), left, right);
+            return operation(MultiThreadCpuDeviceImpl(), left, right);
 #ifdef CITRIUS_HAS_CUDA
         case DeviceType::CUDA: {
             auto cuda = cuda_device(device.index);

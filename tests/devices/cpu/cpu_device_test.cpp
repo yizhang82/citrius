@@ -1,4 +1,5 @@
 #include "impl/cpu_device.h"
+#include "impl/multi_thread_cpu_device.h"
 
 #include <gtest/gtest.h>
 
@@ -34,6 +35,39 @@ std::vector<float> tensor_values(const citrius::Tensor& tensor) {
 }
 
 } // namespace
+
+TEST(CpuDeviceTest, UsesExplicitThreadCount) {
+    const citrius::impl::MultiThreadCpuDeviceImpl device(3);
+    EXPECT_EQ(device.thread_count(), 3u);
+}
+
+TEST(CpuDeviceTest, MultiThreadAddAndSubMatchReferenceForUnevenPartitions) {
+    const CpuDeviceImpl reference;
+    const citrius::impl::MultiThreadCpuDeviceImpl multi_thread(3);
+    constexpr std::size_t count = 131'073;
+    std::vector<float> a_values(count), b_values(count);
+    for (std::size_t i = 0; i < count; ++i) {
+        a_values[i] = static_cast<float>(i % 31);
+        b_values[i] = static_cast<float>(i % 17);
+    }
+    auto a = make_cpu_tensor(reference, {static_cast<std::int64_t>(count)}, a_values);
+    auto b = make_cpu_tensor(reference, {static_cast<std::int64_t>(count)}, b_values);
+
+    EXPECT_EQ(tensor_values(multi_thread.add(a, b)), tensor_values(reference.add(a, b)));
+    EXPECT_EQ(tensor_values(multi_thread.sub(a, b)), tensor_values(reference.sub(a, b)));
+}
+
+TEST(CpuDeviceTest, MultiThreadMatmulMatchesReferenceForUnevenRows) {
+    const CpuDeviceImpl reference;
+    const citrius::impl::MultiThreadCpuDeviceImpl multi_thread(3);
+    std::vector<float> a_values(7 * 11), b_values(11 * 5);
+    for (std::size_t i = 0; i < a_values.size(); ++i) a_values[i] = static_cast<float>(i % 13) - 6.0f;
+    for (std::size_t i = 0; i < b_values.size(); ++i) b_values[i] = static_cast<float>(i % 7) - 3.0f;
+    auto a = make_cpu_tensor(reference, {7, 11}, a_values);
+    auto b = make_cpu_tensor(reference, {11, 5}, b_values);
+
+    EXPECT_EQ(tensor_values(multi_thread.matmul(a, b)), tensor_values(reference.matmul(a, b)));
+}
 
 TEST(CpuDeviceTest, EmptyAllocatesCpuStorage) {
     const CpuDeviceImpl device;

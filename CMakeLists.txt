@@ -16,6 +16,7 @@ option(CITRIUS_CUDA_USE_CUBLAS "Use cuBLAS for top-level CUDA matmul by default"
 add_library(citrius
     src/devices/cpu/cpu_device.cpp
     src/devices/cpu/cpu_storage.cpp
+    src/devices/cpu/multi_thread_cpu_device.cpp
     src/operations.cpp
     src/tensor.cpp
     src/tensor_factory.cpp

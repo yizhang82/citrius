@@ -90,6 +90,12 @@ Current operation constraints:
 - matmul supports 2D tensors only
 - broadcasting, strides, dtype dispatch, and autograd are not implemented yet
 
+`CpuDeviceImpl` is the single-threaded reference backend.
+`MultiThreadCpuDeviceImpl` uses `std::thread::hardware_concurrency()` workers by
+default. Override the worker count with a positive integer in
+`CITRIUS_CPU_THREADS`, or pass an explicit count to its constructor. Add/sub
+split contiguous element ranges and matmul splits output rows across workers.
+
 Device/storage compatibility is checked through `ITensorStorage::type()`.
 
 CPU expects:

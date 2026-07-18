@@ -1,4 +1,5 @@
 #include "impl/cpu_device.h"
+#include "impl/multi_thread_cpu_device.h"
 #include "impl/cpu_storage.h"
 #include "operations.h"
 #include "tensor_factory.h"
@@ -96,10 +97,13 @@ Result measure(double operations, int iterations, Operation operation) {
     return {minimum, average, total, operations / (minimum * 1.0e6), checksum};
 }
 
-Result benchmark_cpu(Operation operation, std::int64_t size, int iterations) {
+Result benchmark_cpu(
+    const citrius::impl::CpuDeviceImpl& device,
+    Operation operation,
+    std::int64_t size,
+    int iterations) {
     const auto a_values = input_values(size * size, 3);
     const auto b_values = input_values(size * size, 7);
-    citrius::impl::CpuDeviceImpl device;
     citrius::Tensor a(a_values, {size, size});
     auto b = citrius::TensorFactory::from_vector(b_values, {size, size});
     auto out = device.empty({size, size}, citrius::DType::Float32);
@@ -215,14 +219,23 @@ int main(int argc, char** argv) {
 
     try {
         if (use_cpu) {
-            print_section_header("CPU");
-            for (const auto [size, iterations] :
-                 std::vector<std::pair<std::int64_t, int>>{
-                     {128, 50}, {256, 50}, {512, 50}, {1024, 50}}) {
-                for (Operation operation : {Operation::Add, Operation::Sub, Operation::Matmul}) {
-                    print_result(operation, size, iterations, benchmark_cpu(operation, size, iterations));
+            const citrius::impl::CpuDeviceImpl reference;
+            const citrius::impl::MultiThreadCpuDeviceImpl multi_thread;
+            const auto run_cpu = [&](const char* name, const auto& device) {
+                print_section_header(name);
+                for (const auto [size, iterations] :
+                     std::vector<std::pair<std::int64_t, int>>{
+                         {128, 50}, {256, 50}, {512, 50}, {1024, 5}}) {
+                    for (Operation operation : {Operation::Add, Operation::Sub, Operation::Matmul}) {
+                        print_result(operation, size, iterations,
+                                     benchmark_cpu(device, operation, size, iterations));
+                    }
                 }
-            }
+            };
+            run_cpu("CPU (reference)", reference);
+            const std::string label = "CPU (multi-thread, " +
+                                      std::to_string(multi_thread.thread_count()) + " threads)";
+            run_cpu(label.c_str(), multi_thread);
         }
 #ifdef CITRIUS_HAS_CUDA
         if (use_cuda) {

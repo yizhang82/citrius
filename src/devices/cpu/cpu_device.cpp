@@ -42,6 +42,7 @@ DeviceType CpuDeviceImpl::type() const {
     return DeviceType::CPU;
 }
 
+
 Tensor CpuDeviceImpl::empty(Shape shape, DType dtype) const {
     const Tensor metadata(shape, dtype, Device::cpu());
     auto storage = std::make_shared<CpuMemTensorStorageImpl>(
@@ -79,9 +80,7 @@ void CpuDeviceImpl::add_out(const Tensor& a, const Tensor& b, Tensor& output) co
     const float* b_data = b_storage.data_as<float>();
     float* output_data = output_storage.data_as<float>();
 
-    for (std::int64_t i = 0; i < a.numel(); ++i) {
-        output_data[i] = a_data[i] + b_data[i];
-    }
+    for (std::int64_t i = 0; i < a.numel(); ++i) output_data[i] = a_data[i] + b_data[i];
 
 }
 
@@ -114,9 +113,7 @@ void CpuDeviceImpl::sub_out(const Tensor& a, const Tensor& b, Tensor& output) co
     const float* b_data = b_storage.data_as<float>();
     float* output_data = output_storage.data_as<float>();
 
-    for (std::int64_t i = 0; i < a.numel(); ++i) {
-        output_data[i] = a_data[i] - b_data[i];
-    }
+    for (std::int64_t i = 0; i < a.numel(); ++i) output_data[i] = a_data[i] - b_data[i];
 
 }
 
