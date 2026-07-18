@@ -3,15 +3,20 @@ set -euo pipefail
 
 BUILD_DIR="build"
 CLEAN=0
+METAL=0
 
 usage() {
-    echo "Usage: ./test.sh [--clean]"
+    echo "Usage: ./test.sh [--clean] [--metal]"
 }
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
         --clean)
             CLEAN=1
+            shift
+            ;;
+        --metal)
+            METAL=1
             shift
             ;;
         -h|--help)
@@ -29,6 +34,11 @@ if [[ "$CLEAN" -eq 1 ]]; then
     rm -rf "$BUILD_DIR"
 fi
 
-cmake -S . -B "$BUILD_DIR"
+if [[ "$METAL" -eq 1 ]]; then
+    cmake -S . -B "$BUILD_DIR" -DCITRIUS_ENABLE_METAL=ON
+else
+    cmake -S . -B "$BUILD_DIR" -DCITRIUS_ENABLE_METAL=OFF
+fi
+
 cmake --build "$BUILD_DIR"
 ctest --test-dir "$BUILD_DIR" --output-on-failure
