@@ -87,3 +87,12 @@ TEST(CudaDeviceTest, TopLevelOperationsDispatchToCuda) {
 
     EXPECT_EQ(values(citrius::add(left, right)), std::vector<float>({11, 22}));
 }
+
+TEST(CudaDeviceTest, ToStringCopiesValuesForDisplay) {
+    std::string error; auto device = make_cuda_device(&error); if (!device) GTEST_SKIP() << error;
+    const citrius::Tensor tensor(std::vector<float>{1, 2}, citrius::Device::cuda());
+
+    EXPECT_EQ(
+        tensor.to_string(),
+        "tensor([1, 2], shape=[2], dtype=float32, device=cuda:0)");
+}

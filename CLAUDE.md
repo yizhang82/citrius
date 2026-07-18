@@ -22,6 +22,9 @@ Top-level `citrius::add`, `citrius::sub`, and `citrius::matmul` dispatch through
 input tensors' device and reject device mismatches. Tensor `+`, `-`, and `*` delegate
 to those functions; `*` means matrix multiplication.
 
+`Tensor::to_string()` and `operator<<` print tensor values and metadata, copying values
+to CPU for display when necessary.
+
 `Tensor` stores metadata directly:
 
 - `Shape`
@@ -213,6 +216,15 @@ Run the end-to-end Float32 matmul benchmark on Windows with:
 ```bat
 benchmark.bat --cpu
 benchmark.bat --cuda
+```
+
+The `examples` directory contains one program that runs add, sub, and matmul. It is built
+with the library and selects a backend at runtime:
+
+```bat
+build\Release\example_operations.exe --cpu
+build\Release\example_operations.exe --cuda
+build\Release\example_operations.exe --metal
 ```
 
 Run tests with Metal enabled:

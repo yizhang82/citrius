@@ -58,6 +58,9 @@ target_include_directories(citrius
 
 target_compile_features(citrius PUBLIC cxx_std_20)
 
+add_executable(example_operations examples/operations.cpp)
+target_link_libraries(example_operations PRIVATE citrius)
+
 add_executable(matmul_benchmark benchmarks/matmul_benchmark.cpp)
 target_link_libraries(matmul_benchmark PRIVATE citrius)
 if(CITRIUS_ENABLE_CUDA)

@@ -6,6 +6,7 @@
 #include <gtest/gtest.h>
 
 #include <memory>
+#include <sstream>
 #include <stdexcept>
 #include <vector>
 
@@ -111,4 +112,27 @@ TEST(TensorTest, CopyRejectsUndefinedTensor) {
     const citrius::Tensor undefined;
 
     EXPECT_THROW(undefined.copy(), std::invalid_argument);
+}
+
+TEST(TensorTest, ToStringIncludesValuesAndMetadata) {
+    const citrius::Tensor tensor(
+        std::vector<float>{1.0f, 2.0f, 3.0f, 4.0f},
+        {2, 2});
+
+    EXPECT_EQ(
+        tensor.to_string(),
+        "tensor([1, 2, 3, 4], shape=[2, 2], dtype=float32, device=cpu)");
+}
+
+TEST(TensorTest, StreamOperatorUsesTensorString) {
+    const citrius::Tensor tensor(std::vector<float>{1.0f, 2.0f});
+    std::ostringstream stream;
+
+    stream << tensor;
+
+    EXPECT_EQ(stream.str(), tensor.to_string());
+}
+
+TEST(TensorTest, UndefinedTensorHasStringRepresentation) {
+    EXPECT_EQ(citrius::Tensor().to_string(), "tensor(undefined)");
 }

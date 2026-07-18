@@ -3,7 +3,9 @@
 #include "types.h"
 
 #include <cstddef>
+#include <iosfwd>
 #include <memory>
+#include <string>
 #include <vector>
 
 namespace citrius {
@@ -28,6 +30,7 @@ public:
     bool defined() const;
     Tensor copy() const;
     Tensor to(Device device) const;
+    std::string to_string() const;
 
 private:
     Shape shape_;
@@ -36,5 +39,7 @@ private:
     std::shared_ptr<ITensorStorage> storage_;
     bool defined_ = false;
 };
+
+std::ostream& operator<<(std::ostream& stream, const Tensor& tensor);
 
 } // namespace citrius
