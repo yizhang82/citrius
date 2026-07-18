@@ -9,7 +9,7 @@ class CutlassCudaDeviceImpl final : public CudaDeviceImpl {
 public:
     explicit CutlassCudaDeviceImpl(int device_index = 0);
 
-    Tensor matmul(const Tensor& a, const Tensor& b) const override;
+    void matmul_out(const Tensor& a, const Tensor& b, Tensor& out) const override;
 };
 
 } // namespace citrius::impl

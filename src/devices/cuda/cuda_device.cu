@@ -71,26 +71,40 @@ Tensor CudaDeviceImpl::add(const Tensor& a, const Tensor& b) const {
     require_defined(a, "left"); require_defined(b, "right");
     require_float32(a, "left"); require_float32(b, "right"); require_same_shape(a, b);
     auto out = empty(a.shape(), a.dtype());
+    add_out(a, b, out);
+    return out;
+}
+
+void CudaDeviceImpl::add_out(const Tensor& a, const Tensor& b, Tensor& out) const {
+    require_defined(a, "left"); require_defined(b, "right");
+    require_float32(a, "left"); require_float32(b, "right"); require_same_shape(a, b);
+    require_defined(out, "output"); require_float32(out, "output"); require_same_shape(a, out);
     auto ap = ensure_storage(a.storage(), ConversionPolicy::CopyToDevice);
     auto bp = ensure_storage(b.storage(), ConversionPolicy::CopyToDevice);
     const auto count = a.numel();
     if (count != 0) add_f32<<<static_cast<unsigned>((count + 255) / 256), 256>>>(data(require_cuda_storage(*ap)), data(require_cuda_storage(*bp)), data(require_cuda_storage(*out.storage())), count);
     check_cuda(cudaGetLastError(), "failed to launch CUDA add kernel");
     check_cuda(cudaDeviceSynchronize(), "CUDA add kernel failed");
-    return out;
 }
 
 Tensor CudaDeviceImpl::sub(const Tensor& a, const Tensor& b) const {
     require_defined(a, "left"); require_defined(b, "right");
     require_float32(a, "left"); require_float32(b, "right"); require_same_shape(a, b);
     auto out = empty(a.shape(), a.dtype());
+    sub_out(a, b, out);
+    return out;
+}
+
+void CudaDeviceImpl::sub_out(const Tensor& a, const Tensor& b, Tensor& out) const {
+    require_defined(a, "left"); require_defined(b, "right");
+    require_float32(a, "left"); require_float32(b, "right"); require_same_shape(a, b);
+    require_defined(out, "output"); require_float32(out, "output"); require_same_shape(a, out);
     auto ap = ensure_storage(a.storage(), ConversionPolicy::CopyToDevice);
     auto bp = ensure_storage(b.storage(), ConversionPolicy::CopyToDevice);
     const auto count = a.numel();
     if (count != 0) sub_f32<<<static_cast<unsigned>((count + 255) / 256), 256>>>(data(require_cuda_storage(*ap)), data(require_cuda_storage(*bp)), data(require_cuda_storage(*out.storage())), count);
     check_cuda(cudaGetLastError(), "failed to launch CUDA sub kernel");
     check_cuda(cudaDeviceSynchronize(), "CUDA sub kernel failed");
-    return out;
 }
 
 Tensor CudaDeviceImpl::matmul(const Tensor& a, const Tensor& b) const {
@@ -98,6 +112,16 @@ Tensor CudaDeviceImpl::matmul(const Tensor& a, const Tensor& b) const {
     require_float32(a, "left"); require_float32(b, "right"); require_2d_matmul_shapes(a, b);
     const auto m = a.shape()[0], k = a.shape()[1], n = b.shape()[1];
     auto out = empty({m, n}, a.dtype());
+    matmul_out(a, b, out);
+    return out;
+}
+
+void CudaDeviceImpl::matmul_out(const Tensor& a, const Tensor& b, Tensor& out) const {
+    require_defined(a, "left"); require_defined(b, "right");
+    require_float32(a, "left"); require_float32(b, "right"); require_2d_matmul_shapes(a, b);
+    const auto m = a.shape()[0], k = a.shape()[1], n = b.shape()[1];
+    require_defined(out, "output"); require_float32(out, "output");
+    if (out.shape() != Shape({m, n})) throw std::invalid_argument("matmul output shape must be [m, n]");
     auto ap = ensure_storage(a.storage(), ConversionPolicy::CopyToDevice);
     auto bp = ensure_storage(b.storage(), ConversionPolicy::CopyToDevice);
     if (m != 0 && n != 0) {
@@ -107,7 +131,6 @@ Tensor CudaDeviceImpl::matmul(const Tensor& a, const Tensor& b) const {
     }
     check_cuda(cudaGetLastError(), "failed to launch CUDA matmul kernel");
     check_cuda(cudaDeviceSynchronize(), "CUDA matmul kernel failed");
-    return out;
 }
 
 TensorStoragePtr CudaDeviceImpl::ensure_storage(const TensorStoragePtr& storage, ConversionPolicy policy) const {

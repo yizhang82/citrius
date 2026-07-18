@@ -1,3 +1,4 @@
+#include "impl/cpu_device.h"
 #include "impl/cpu_storage.h"
 #include "operations.h"
 #include "tensor_factory.h"
@@ -6,6 +7,7 @@
 #include "impl/cublas_cuda_device.h"
 #include "impl/cuda_device.h"
 #include "impl/cutlass_cuda_device.h"
+#include <cuda_runtime.h>
 #endif
 
 #include <algorithm>
@@ -97,19 +99,27 @@ Result measure(double operations, int iterations, Operation operation) {
 Result benchmark_cpu(Operation operation, std::int64_t size, int iterations) {
     const auto a_values = input_values(size * size, 3);
     const auto b_values = input_values(size * size, 7);
-    return measure(operation_count(operation, size), iterations, [&] {
-        citrius::Tensor a(a_values, {size, size});
-        auto b = citrius::TensorFactory::from_vector(b_values, {size, size});
+    citrius::impl::CpuDeviceImpl device;
+    citrius::Tensor a(a_values, {size, size});
+    auto b = citrius::TensorFactory::from_vector(b_values, {size, size});
+    auto out = device.empty({size, size}, citrius::DType::Float32);
+    auto result = measure(operation_count(operation, size), iterations, [&] {
         switch (operation) {
-            case Operation::Add: return cpu_checksum(citrius::add(a, b));
-            case Operation::Sub: return cpu_checksum(citrius::sub(a, b));
-            case Operation::Matmul: return cpu_checksum(citrius::matmul(a, b));
+            case Operation::Add: device.add_out(a, b, out); break;
+            case Operation::Sub: device.sub_out(a, b, out); break;
+            case Operation::Matmul: device.matmul_out(a, b, out); break;
         }
-        throw std::logic_error("unknown benchmark operation");
+        return 0.0f;
     });
+    result.checksum = cpu_checksum(out);
+    return result;
 }
 
 #ifdef CITRIUS_HAS_CUDA
+void check_cuda(cudaError_t status, const char* operation) {
+    if (status != cudaSuccess) throw std::runtime_error(std::string(operation) + ": " + cudaGetErrorString(status));
+}
+
 template <typename CudaDevice>
 Result benchmark_cuda(
     const CudaDevice& device,
@@ -118,17 +128,43 @@ Result benchmark_cuda(
     int iterations) {
     const auto a_values = input_values(size * size, 3);
     const auto b_values = input_values(size * size, 7);
-    return measure(operation_count(operation, size), iterations, [&] {
-        citrius::Tensor a(a_values, {size, size}, citrius::Device::cuda());
-        auto b = citrius::TensorFactory::from_vector(
-            b_values, {size, size}, citrius::Device::cuda());
+    citrius::Tensor a(a_values, {size, size}, citrius::Device::cuda());
+    auto b = citrius::TensorFactory::from_vector(
+        b_values, {size, size}, citrius::Device::cuda());
+    auto out = device.empty({size, size}, citrius::DType::Float32);
+    const auto run = [&] {
         switch (operation) {
-            case Operation::Add: return cpu_checksum(device.add(a, b));
-            case Operation::Sub: return cpu_checksum(device.sub(a, b));
-            case Operation::Matmul: return cpu_checksum(device.matmul(a, b));
+            case Operation::Add: device.add_out(a, b, out); return;
+            case Operation::Sub: device.sub_out(a, b, out); return;
+            case Operation::Matmul: device.matmul_out(a, b, out); return;
         }
         throw std::logic_error("unknown benchmark operation");
-    });
+    };
+
+    run();
+    cudaEvent_t start = nullptr, stop = nullptr;
+    check_cuda(cudaEventCreate(&start), "failed to create CUDA start event");
+    check_cuda(cudaEventCreate(&stop), "failed to create CUDA stop event");
+    std::vector<double> timings;
+    timings.reserve(static_cast<std::size_t>(iterations));
+    for (int iteration = 0; iteration < iterations; ++iteration) {
+        check_cuda(cudaEventRecord(start), "failed to record CUDA start event");
+        run();
+        check_cuda(cudaEventRecord(stop), "failed to record CUDA stop event");
+        check_cuda(cudaEventSynchronize(stop), "failed to synchronize CUDA stop event");
+        float elapsed_ms = 0.0f;
+        check_cuda(cudaEventElapsedTime(&elapsed_ms, start, stop), "failed to measure CUDA operation");
+        timings.push_back(elapsed_ms);
+    }
+    check_cuda(cudaEventDestroy(start), "failed to destroy CUDA start event");
+    check_cuda(cudaEventDestroy(stop), "failed to destroy CUDA stop event");
+
+    const double minimum = *std::min_element(timings.begin(), timings.end());
+    double total = 0.0;
+    for (double timing : timings) total += timing;
+    const double average = total / iterations;
+    return {minimum, average, total,
+            operation_count(operation, size) / (minimum * 1.0e6), cpu_checksum(out)};
 }
 #endif
 
@@ -175,7 +211,7 @@ int main(int argc, char** argv) {
     }
 #endif
 
-    std::cout << "End-to-end square Float32 operations (one warmup; input setup and output read included)\n";
+    std::cout << "Preallocated square Float32 operations (one warmup; CUDA timed with device events)\n";
 
     try {
         if (use_cpu) {

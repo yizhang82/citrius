@@ -41,7 +41,7 @@ float* data(ITensorStorage& storage) {
 CutlassCudaDeviceImpl::CutlassCudaDeviceImpl(int device_index)
     : CudaDeviceImpl(device_index) {}
 
-Tensor CutlassCudaDeviceImpl::matmul(const Tensor& a, const Tensor& b) const {
+void CutlassCudaDeviceImpl::matmul_out(const Tensor& a, const Tensor& b, Tensor& out) const {
     require_matmul_inputs(a, b);
 
     const auto m = a.shape()[0];
@@ -51,13 +51,13 @@ Tensor CutlassCudaDeviceImpl::matmul(const Tensor& a, const Tensor& b) const {
         throw std::invalid_argument("CUTLASS matmul dimensions are too large");
     }
 
-    auto out = empty({m, n}, DType::Float32);
-    if (m == 0 || n == 0) return out;
+    if (out.shape() != Shape({m, n})) throw std::invalid_argument("matmul output shape must be [m, n]");
+    if (m == 0 || n == 0) return;
 
     check_cuda(cudaSetDevice(device_index()), "failed to select CUDA device");
     if (k == 0) {
         check_cuda(cudaMemset(data(*out.storage()), 0, out.storage()->nbytes()), "failed to clear CUDA matmul output");
-        return out;
+        return;
     }
 
     auto ap = ensure_storage(a.storage(), ConversionPolicy::CopyToDevice);
@@ -93,7 +93,6 @@ Tensor CutlassCudaDeviceImpl::matmul(const Tensor& a, const Tensor& b) const {
     // Citrius operations are currently eager and synchronous, so do not return
     // until the kernel has completed and asynchronous CUDA errors are visible.
     check_cuda(cudaDeviceSynchronize(), "CUDA CUTLASS matmul failed");
-    return out;
 }
 
 } // namespace citrius::impl

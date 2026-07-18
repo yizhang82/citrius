@@ -16,7 +16,7 @@ public:
     CublasCudaDeviceImpl(const CublasCudaDeviceImpl&) = delete;
     CublasCudaDeviceImpl& operator=(const CublasCudaDeviceImpl&) = delete;
 
-    Tensor matmul(const Tensor& a, const Tensor& b) const override;
+    void matmul_out(const Tensor& a, const Tensor& b, Tensor& out) const override;
 
 private:
     class Impl;

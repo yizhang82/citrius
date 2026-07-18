@@ -55,7 +55,7 @@ CublasCudaDeviceImpl::CublasCudaDeviceImpl(int device_index)
 
 CublasCudaDeviceImpl::~CublasCudaDeviceImpl() = default;
 
-Tensor CublasCudaDeviceImpl::matmul(const Tensor& a, const Tensor& b) const {
+void CublasCudaDeviceImpl::matmul_out(const Tensor& a, const Tensor& b, Tensor& out) const {
     require_matmul_inputs(a, b);
 
     const auto m = a.shape()[0];
@@ -65,13 +65,13 @@ Tensor CublasCudaDeviceImpl::matmul(const Tensor& a, const Tensor& b) const {
         throw std::invalid_argument("cuBLAS matmul dimensions are too large");
     }
 
-    auto out = empty({m, n}, DType::Float32);
-    if (m == 0 || n == 0) return out;
+    if (out.shape() != Shape({m, n})) throw std::invalid_argument("matmul output shape must be [m, n]");
+    if (m == 0 || n == 0) return;
 
     check_cuda(cudaSetDevice(device_index()), "failed to select CUDA device");
     if (k == 0) {
         check_cuda(cudaMemset(data(*out.storage()), 0, out.storage()->nbytes()), "failed to clear CUDA matmul output");
-        return out;
+        return;
     }
 
     auto ap = ensure_storage(a.storage(), ConversionPolicy::CopyToDevice);
@@ -105,7 +105,6 @@ Tensor CublasCudaDeviceImpl::matmul(const Tensor& a, const Tensor& b) const {
             static_cast<int>(n)),          // leading dimension of C^T
         "cuBLAS matmul failed");
     check_cuda(cudaDeviceSynchronize(), "CUDA cuBLAS matmul failed");
-    return out;
 }
 
 } // namespace citrius::impl

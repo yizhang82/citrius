@@ -58,6 +58,19 @@ Tensor CpuDeviceImpl::add(const Tensor& a, const Tensor& b) const {
     require_same_shape(a, b);
 
     auto output = empty(a.shape(), a.dtype());
+    add_out(a, b, output);
+    return output;
+}
+
+void CpuDeviceImpl::add_out(const Tensor& a, const Tensor& b, Tensor& output) const {
+    require_defined(a, "left");
+    require_defined(b, "right");
+    require_float32(a, "left");
+    require_float32(b, "right");
+    require_same_shape(a, b);
+    require_defined(output, "output");
+    require_float32(output, "output");
+    require_same_shape(a, output);
     const auto& a_storage = require_cpu_storage(*ensure_storage(a.storage()));
     const auto& b_storage = require_cpu_storage(*ensure_storage(b.storage()));
     auto& output_storage = require_cpu_storage(*output.storage());
@@ -70,7 +83,6 @@ Tensor CpuDeviceImpl::add(const Tensor& a, const Tensor& b) const {
         output_data[i] = a_data[i] + b_data[i];
     }
 
-    return output;
 }
 
 Tensor CpuDeviceImpl::sub(const Tensor& a, const Tensor& b) const {
@@ -81,6 +93,19 @@ Tensor CpuDeviceImpl::sub(const Tensor& a, const Tensor& b) const {
     require_same_shape(a, b);
 
     auto output = empty(a.shape(), a.dtype());
+    sub_out(a, b, output);
+    return output;
+}
+
+void CpuDeviceImpl::sub_out(const Tensor& a, const Tensor& b, Tensor& output) const {
+    require_defined(a, "left");
+    require_defined(b, "right");
+    require_float32(a, "left");
+    require_float32(b, "right");
+    require_same_shape(a, b);
+    require_defined(output, "output");
+    require_float32(output, "output");
+    require_same_shape(a, output);
     const auto& a_storage = require_cpu_storage(*ensure_storage(a.storage()));
     const auto& b_storage = require_cpu_storage(*ensure_storage(b.storage()));
     auto& output_storage = require_cpu_storage(*output.storage());
@@ -93,7 +118,6 @@ Tensor CpuDeviceImpl::sub(const Tensor& a, const Tensor& b) const {
         output_data[i] = a_data[i] - b_data[i];
     }
 
-    return output;
 }
 
 Tensor CpuDeviceImpl::matmul(const Tensor& a, const Tensor& b) const {
@@ -108,6 +132,23 @@ Tensor CpuDeviceImpl::matmul(const Tensor& a, const Tensor& b) const {
     const std::int64_t n = b.shape()[1];
 
     auto output = empty({m, n}, a.dtype());
+    matmul_out(a, b, output);
+    return output;
+}
+
+void CpuDeviceImpl::matmul_out(const Tensor& a, const Tensor& b, Tensor& output) const {
+    require_defined(a, "left");
+    require_defined(b, "right");
+    require_float32(a, "left");
+    require_float32(b, "right");
+    require_2d_matmul_shapes(a, b);
+
+    const std::int64_t m = a.shape()[0];
+    const std::int64_t k = a.shape()[1];
+    const std::int64_t n = b.shape()[1];
+    require_defined(output, "output");
+    require_float32(output, "output");
+    if (output.shape() != Shape({m, n})) throw std::invalid_argument("matmul output shape must be [m, n]");
     const auto& a_storage = require_cpu_storage(*ensure_storage(a.storage()));
     const auto& b_storage = require_cpu_storage(*ensure_storage(b.storage()));
     auto& output_storage = require_cpu_storage(*output.storage());
@@ -126,7 +167,6 @@ Tensor CpuDeviceImpl::matmul(const Tensor& a, const Tensor& b) const {
         }
     }
 
-    return output;
 }
 
 TensorStoragePtr CpuDeviceImpl::ensure_storage(
