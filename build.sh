@@ -5,9 +5,10 @@ BUILD_DIR="build"
 CLEAN=0
 METAL=0
 CUDA=0
+CUDA_CUBLAS=1
 
 usage() {
-    echo "Usage: ./build.sh [--clean] [--metal] [--cuda]"
+    echo "Usage: ./build.sh [--clean] [--metal] [--cuda|--cuda-reference]"
 }
 
 while [[ $# -gt 0 ]]; do
@@ -22,6 +23,11 @@ while [[ $# -gt 0 ]]; do
             ;;
         --cuda)
             CUDA=1
+            shift
+            ;;
+        --cuda-reference)
+            CUDA=1
+            CUDA_CUBLAS=0
             shift
             ;;
         -h|--help)
@@ -41,6 +47,7 @@ fi
 
 cmake -S . -B "$BUILD_DIR" \
     -DCITRIUS_ENABLE_METAL=$([[ "$METAL" -eq 1 ]] && echo ON || echo OFF) \
-    -DCITRIUS_ENABLE_CUDA=$([[ "$CUDA" -eq 1 ]] && echo ON || echo OFF)
+    -DCITRIUS_ENABLE_CUDA=$([[ "$CUDA" -eq 1 ]] && echo ON || echo OFF) \
+    -DCITRIUS_CUDA_USE_CUBLAS=$([[ "$CUDA_CUBLAS" -eq 1 ]] && echo ON || echo OFF)
 
 cmake --build "$BUILD_DIR"

@@ -1,0 +1,26 @@
+#pragma once
+
+#include "cuda_device.h"
+
+#include <memory>
+
+namespace citrius::impl {
+
+// CUDA device variant that uses NVIDIA cuBLAS for matrix multiplication while
+// inheriting the reference CUDA implementations of the other operations.
+class CublasCudaDeviceImpl final : public CudaDeviceImpl {
+public:
+    explicit CublasCudaDeviceImpl(int device_index = 0);
+    ~CublasCudaDeviceImpl() override;
+
+    CublasCudaDeviceImpl(const CublasCudaDeviceImpl&) = delete;
+    CublasCudaDeviceImpl& operator=(const CublasCudaDeviceImpl&) = delete;
+
+    Tensor matmul(const Tensor& a, const Tensor& b) const override;
+
+private:
+    class Impl;
+    std::unique_ptr<Impl> impl_;
+};
+
+} // namespace citrius::impl

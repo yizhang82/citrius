@@ -5,7 +5,7 @@
 
 namespace citrius::impl {
 
-class CudaDeviceImpl final : public IDevice {
+class CudaDeviceImpl : public IDevice {
 public:
     explicit CudaDeviceImpl(int device_index = 0);
 

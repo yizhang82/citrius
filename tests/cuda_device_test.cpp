@@ -1,6 +1,7 @@
 #include "impl/cpu_device.h"
 #include "impl/cpu_storage.h"
 #include "impl/cuda_device.h"
+#include "impl/cublas_cuda_device.h"
 #include "impl/cuda_storage.h"
 #include "operations.h"
 
@@ -68,6 +69,28 @@ TEST(CudaDeviceTest, TensorCopyCreatesDeepCopy) {
     EXPECT_NE(tensor.storage(), copied.storage()); EXPECT_EQ(values(copied), std::vector<float>({1, 2}));
 }
 
+TEST(CudaDeviceTest, CublasMatmulMatchesReferenceForNonSquareMatrices) {
+    std::string error; auto baseline = make_cuda_device(&error); if (!baseline) GTEST_SKIP() << error;
+    citrius::impl::CublasCudaDeviceImpl cublas;
+    auto a = make_cuda_tensor(*baseline, {3, 5}, {
+        1, 2, 3, 4, 5,
+        -1, 0, 2, -3, 4,
+        0.5f, 1.5f, -2, 3, 0,
+    });
+    auto b = make_cuda_tensor(*baseline, {5, 2}, {
+        2, -1,
+        0, 3,
+        4, 0.5f,
+        -2, 1,
+        1.5f, -4,
+    });
+
+    const auto expected = values(baseline->matmul(a, b));
+    const auto actual = values(cublas.matmul(a, b));
+    ASSERT_EQ(actual.size(), expected.size());
+    for (std::size_t i = 0; i < actual.size(); ++i) EXPECT_NEAR(actual[i], expected[i], 1e-5f);
+}
+
 TEST(CudaDeviceTest, TensorConstructorAndToTransferValues) {
     std::string error; auto device = make_cuda_device(&error); if (!device) GTEST_SKIP() << error;
     const std::vector<float> input = {1, 2, 3, 4};
@@ -86,6 +109,14 @@ TEST(CudaDeviceTest, TopLevelOperationsDispatchToCuda) {
     const citrius::Tensor right(std::vector<float>{10, 20}, citrius::Device::cuda());
 
     EXPECT_EQ(values(citrius::add(left, right)), std::vector<float>({11, 22}));
+}
+
+TEST(CudaDeviceTest, TopLevelMatmulUsesConfiguredCudaBackend) {
+    std::string error; auto device = make_cuda_device(&error); if (!device) GTEST_SKIP() << error;
+    const citrius::Tensor a(std::vector<float>{1, 2, 3, 4, 5, 6}, {2, 3}, citrius::Device::cuda());
+    const citrius::Tensor b(std::vector<float>{7, 8, 9, 10, 11, 12}, {3, 2}, citrius::Device::cuda());
+
+    EXPECT_EQ(values(citrius::matmul(a, b)), std::vector<float>({58, 64, 139, 154}));
 }
 
 TEST(CudaDeviceTest, ToStringCopiesValuesForDisplay) {

@@ -11,6 +11,7 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 
 option(CITRIUS_ENABLE_METAL "Build Citrius with Apple Metal support" OFF)
 option(CITRIUS_ENABLE_CUDA "Build Citrius with NVIDIA CUDA support" OFF)
+option(CITRIUS_CUDA_USE_CUBLAS "Use cuBLAS for top-level CUDA matmul by default" ON)
 
 add_library(citrius
     src/cpu_device.cpp
@@ -41,9 +42,12 @@ endif()
 if(CITRIUS_ENABLE_CUDA)
     enable_language(CUDA)
     find_package(CUDAToolkit REQUIRED)
-    target_sources(citrius PRIVATE src/cuda_device.cu src/cuda_storage.cu)
-    target_link_libraries(citrius PUBLIC CUDA::cudart)
+    target_sources(citrius PRIVATE src/cuda_device.cu src/cuda_storage.cu src/cublas_cuda_device.cu)
+    target_link_libraries(citrius PUBLIC CUDA::cudart CUDA::cublas)
     target_compile_definitions(citrius PRIVATE CITRIUS_HAS_CUDA=1)
+    if(CITRIUS_CUDA_USE_CUBLAS)
+        target_compile_definitions(citrius PRIVATE CITRIUS_CUDA_DEFAULT_CUBLAS=1)
+    endif()
     set_target_properties(citrius PROPERTIES
         CUDA_ARCHITECTURES native
         CUDA_STANDARD 20

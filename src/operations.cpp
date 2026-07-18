@@ -5,6 +5,7 @@
 
 #ifdef CITRIUS_HAS_CUDA
 #include "impl/cuda_device.h"
+#include "impl/cublas_cuda_device.h"
 #endif
 
 #ifdef CITRIUS_HAS_METAL
@@ -12,6 +13,9 @@
 #endif
 
 #include <string>
+#include <cstdlib>
+#include <memory>
+#include <string_view>
 
 namespace citrius {
 namespace {
@@ -19,6 +23,7 @@ namespace {
 using impl::CpuDeviceImpl;
 #ifdef CITRIUS_HAS_CUDA
 using impl::CudaDeviceImpl;
+using impl::CublasCudaDeviceImpl;
 #endif
 #ifdef CITRIUS_HAS_METAL
 using impl::MetalDeviceImpl;
@@ -31,6 +36,25 @@ void require_matching_devices(const Tensor& left, const Tensor& right) {
     }
 }
 
+#ifdef CITRIUS_HAS_CUDA
+std::unique_ptr<impl::IDevice> cuda_device(int device_index) {
+    const char* configured_backend = std::getenv("CITRIUS_CUDA_BACKEND");
+    if (configured_backend) {
+        const std::string_view backend(configured_backend);
+        if (backend == "cublas") return std::make_unique<CublasCudaDeviceImpl>(device_index);
+        if (backend == "reference") return std::make_unique<CudaDeviceImpl>(device_index);
+        throw CitriusException(
+            "CITRIUS_CUDA_BACKEND must be 'cublas' or 'reference', got '" +
+            std::string(backend) + "'");
+    }
+#ifdef CITRIUS_CUDA_DEFAULT_CUBLAS
+    return std::make_unique<CublasCudaDeviceImpl>(device_index);
+#else
+    return std::make_unique<CudaDeviceImpl>(device_index);
+#endif
+}
+#endif
+
 template <typename Operation>
 Tensor dispatch(const Tensor& left, const Tensor& right, Operation operation) {
     require_matching_devices(left, right);
@@ -40,8 +64,10 @@ Tensor dispatch(const Tensor& left, const Tensor& right, Operation operation) {
         case DeviceType::CPU:
             return operation(CpuDeviceImpl(), left, right);
 #ifdef CITRIUS_HAS_CUDA
-        case DeviceType::CUDA:
-            return operation(CudaDeviceImpl(device.index), left, right);
+        case DeviceType::CUDA: {
+            auto cuda = cuda_device(device.index);
+            return operation(*cuda, left, right);
+        }
 #endif
 #ifdef CITRIUS_HAS_METAL
         case DeviceType::Metal:
