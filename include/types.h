@@ -15,6 +15,7 @@ enum class DType {
 
 enum class DeviceType {
     CPU,
+    Metal,
     CUDA,
 };
 
@@ -23,6 +24,7 @@ struct Device {
     int index = 0;
 
     static Device cpu();
+    static Device metal(int index = 0);
     static Device cuda(int index = 0);
 
     bool operator==(const Device& other) const = default;

@@ -2,7 +2,7 @@ cmake_minimum_required(VERSION 3.20)
 
 project(citrius
     VERSION 0.1.0
-    LANGUAGES CXX
+    LANGUAGES CXX OBJCXX
 )
 
 set(CMAKE_CXX_STANDARD 20)
@@ -12,6 +12,8 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 add_library(citrius
     src/cpu_device.cpp
     src/cpu_storage.cpp
+    src/metal_device.mm
+    src/metal_storage.mm
     src/tensor.cpp
     src/types.cpp
 )
@@ -23,6 +25,12 @@ target_include_directories(citrius
 
 target_compile_features(citrius PUBLIC cxx_std_20)
 
+target_link_libraries(citrius
+    PUBLIC
+        "-framework Foundation"
+        "-framework Metal"
+)
+
 enable_testing()
 
 find_package(GTest REQUIRED)
@@ -30,6 +38,7 @@ include(GoogleTest)
 
 add_executable(tensor_test
     tests/cpu_device_test.cpp
+    tests/metal_device_test.cpp
     tests/tensor_test.cpp
 )
 

@@ -9,6 +9,7 @@ namespace citrius {
 
 enum class TensorStorageType {
     CpuMemory,
+    MetalMemory,
     CudaMemory,
 };
 

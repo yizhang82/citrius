@@ -8,6 +8,10 @@ Device Device::cpu() {
     return Device{DeviceType::CPU, 0};
 }
 
+Device Device::metal(int index) {
+    return Device{DeviceType::Metal, index};
+}
+
 Device Device::cuda(int index) {
     return Device{DeviceType::CUDA, index};
 }
