@@ -4,6 +4,7 @@
 
 #include <cuda_runtime.h>
 
+#include <algorithm>
 #include <stdexcept>
 #include <string>
 #include <utility>
@@ -29,13 +30,55 @@ void require_2d_matmul_shapes(const Tensor& a, const Tensor& b) {
     if (a.shape()[1] != b.shape()[0]) throw std::invalid_argument("matmul inner dimensions must match");
 }
 
+// CUDA execution hierarchy:
+//
+//   kernel launch = grid
+//   grid
+//   +-- block 0 -- warp 0: threads 0..31, warp 1: threads 32..63, ...
+//   +-- block 1 -- warp 0: threads 0..31, warp 1: threads 32..63, ...
+//   +-- ...
+//
+// A thread is one logical execution of this function. A block is a cooperating
+// group of threads with shared memory and block-level synchronization. Hardware
+// executes threads from a block in warps of 32; a warp never crosses a block.
+// The grid contains every block in this kernel launch. Blocks are scheduled
+// onto the GPU's streaming multiprocessors (SMs), which execute their warps.
+// A thread's unique 1D grid index is blockIdx.x * blockDim.x + threadIdx.x.
+//
+// Grid-stride element assignment, illustrated with two blocks of four threads
+// and 21 elements (grid width/stride = 8):
+//
+//   Grid
+//   +---------------- Block 0 ----------------+  +---------------- Block 1 ----------------+
+//   |  local thread:   0     1     2     3   |  |  local thread:   0     1     2     3   |
+//   |  global thread: T0    T1    T2    T3   |  |  global thread: T4    T5    T6    T7   |
+//   +-----------------------------------------+  +-----------------------------------------+
+//
+//                  Pass 1     Pass 2     Pass 3
+//                +----------+----------+----------+
+//   Thread T0    |    0     |    8     |   16     |
+//   Thread T1    |    1     |    9     |   17     |
+//   Thread T2    |    2     |   10     |   18     |
+//   Thread T3    |    3     |   11     |   19     |
+//   Thread T4    |    4     |   12     |   20     |
+//   Thread T5    |    5     |   13     |  stop    |
+//   Thread T6    |    6     |   14     |  stop    |
+//   Thread T7    |    7     |   15     |  stop    |
+//                +----------+----------+----------+
+//
+// Each thread starts at its global index, processes that element, then advances
+// by the full grid width. Adjacent threads access adjacent elements on every
+// pass, preserving coalesced memory access. The i < count condition handles the
+// uneven final pass without a separate tail kernel.
 __global__ void add_f32(const float* a, const float* b, float* out, std::int64_t count) {
-    const auto i = static_cast<std::int64_t>(blockIdx.x) * blockDim.x + threadIdx.x;
-    if (i < count) out[i] = a[i] + b[i];
+    const auto first = static_cast<std::int64_t>(blockIdx.x) * blockDim.x + threadIdx.x;
+    const auto stride = static_cast<std::int64_t>(blockDim.x) * gridDim.x;
+    for (auto i = first; i < count; i += stride) out[i] = a[i] + b[i];
 }
 __global__ void sub_f32(const float* a, const float* b, float* out, std::int64_t count) {
-    const auto i = static_cast<std::int64_t>(blockIdx.x) * blockDim.x + threadIdx.x;
-    if (i < count) out[i] = a[i] - b[i];
+    const auto first = static_cast<std::int64_t>(blockIdx.x) * blockDim.x + threadIdx.x;
+    const auto stride = static_cast<std::int64_t>(blockDim.x) * gridDim.x;
+    for (auto i = first; i < count; i += stride) out[i] = a[i] - b[i];
 }
 __global__ void matmul_f32(const float* a, const float* b, float* out, std::int64_t m, std::int64_t k, std::int64_t n) {
     const auto row = static_cast<std::int64_t>(blockIdx.y) * blockDim.y + threadIdx.y;
@@ -50,11 +93,19 @@ float* data(CudaMemTensorStorageImpl& storage) { return static_cast<float*>(stor
 
 } // namespace
 
-CudaDeviceImpl::CudaDeviceImpl(int device_index) : device_index_(device_index) {
+CudaDeviceImpl::CudaDeviceImpl(int device_index) : device_index_(device_index), max_elementwise_blocks_(0) {
     int count = 0;
     check_cuda(cudaGetDeviceCount(&count), "failed to query CUDA devices");
     if (device_index < 0 || device_index >= count) throw std::runtime_error("CUDA device index is not available");
     check_cuda(cudaSetDevice(device_index_), "failed to select CUDA device");
+    int multiprocessor_count = 0;
+    check_cuda(
+        cudaDeviceGetAttribute(&multiprocessor_count, cudaDevAttrMultiProcessorCount, device_index_),
+        "failed to query CUDA multiprocessor count");
+    // A bounded grid avoids launching one thread per element for very large
+    // tensors. Thirty-two blocks per SM provides ample work for scheduling;
+    // each thread advances by the full grid width until all elements are done.
+    max_elementwise_blocks_ = multiprocessor_count * 32;
 }
 
 DeviceType CudaDeviceImpl::type() const { return DeviceType::CUDA; }
@@ -82,7 +133,13 @@ void CudaDeviceImpl::add_out(const Tensor& a, const Tensor& b, Tensor& out) cons
     auto ap = ensure_storage(a.storage(), ConversionPolicy::CopyToDevice);
     auto bp = ensure_storage(b.storage(), ConversionPolicy::CopyToDevice);
     const auto count = a.numel();
-    if (count != 0) add_f32<<<static_cast<unsigned>((count + 255) / 256), 256>>>(data(require_cuda_storage(*ap)), data(require_cuda_storage(*bp)), data(require_cuda_storage(*out.storage())), count);
+    if (count != 0) {
+        const auto required_blocks = (count + 255) / 256;
+        const auto blocks = static_cast<unsigned>(
+            std::min<std::int64_t>(required_blocks, max_elementwise_blocks_));
+        // <<<blocks, 256>>> launches a grid of `blocks` blocks, each containing 256 threads.
+        add_f32<<<blocks, 256>>>(data(require_cuda_storage(*ap)), data(require_cuda_storage(*bp)), data(require_cuda_storage(*out.storage())), count);
+    }
     check_cuda(cudaGetLastError(), "failed to launch CUDA add kernel");
     check_cuda(cudaDeviceSynchronize(), "CUDA add kernel failed");
 }
@@ -102,7 +159,13 @@ void CudaDeviceImpl::sub_out(const Tensor& a, const Tensor& b, Tensor& out) cons
     auto ap = ensure_storage(a.storage(), ConversionPolicy::CopyToDevice);
     auto bp = ensure_storage(b.storage(), ConversionPolicy::CopyToDevice);
     const auto count = a.numel();
-    if (count != 0) sub_f32<<<static_cast<unsigned>((count + 255) / 256), 256>>>(data(require_cuda_storage(*ap)), data(require_cuda_storage(*bp)), data(require_cuda_storage(*out.storage())), count);
+    if (count != 0) {
+        const auto required_blocks = (count + 255) / 256;
+        const auto blocks = static_cast<unsigned>(
+            std::min<std::int64_t>(required_blocks, max_elementwise_blocks_));
+        // <<<blocks, 256>>> launches a grid of `blocks` blocks, each containing 256 threads.
+        sub_f32<<<blocks, 256>>>(data(require_cuda_storage(*ap)), data(require_cuda_storage(*bp)), data(require_cuda_storage(*out.storage())), count);
+    }
     check_cuda(cudaGetLastError(), "failed to launch CUDA sub kernel");
     check_cuda(cudaDeviceSynchronize(), "CUDA sub kernel failed");
 }

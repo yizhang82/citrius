@@ -69,6 +69,23 @@ TEST(CudaDeviceTest, TensorCopyCreatesDeepCopy) {
     std::static_pointer_cast<citrius::impl::CudaMemTensorStorageImpl>(tensor.storage())->copy_from_host(changed.data(), changed.size() * sizeof(float));
     EXPECT_NE(tensor.storage(), copied.storage()); EXPECT_EQ(values(copied), std::vector<float>({1, 2}));
 }
+TEST(CudaDeviceTest, GridStrideAddAndSubCoverLargeTensorAndTail) {
+    std::string error; auto device = make_cuda_device(&error); if (!device) GTEST_SKIP() << error;
+    constexpr std::size_t count = 4'000'003;
+    std::vector<float> a_values(count), b_values(count);
+    for (std::size_t i = 0; i < count; ++i) {
+        a_values[i] = static_cast<float>(i % 31);
+        b_values[i] = static_cast<float>(i % 17);
+    }
+    auto a = make_cuda_tensor(*device, {static_cast<std::int64_t>(count)}, a_values);
+    auto b = make_cuda_tensor(*device, {static_cast<std::int64_t>(count)}, b_values);
+    const auto sums = values(device->add(a, b));
+    const auto differences = values(device->sub(a, b));
+    for (std::size_t i = 0; i < count; ++i) {
+        ASSERT_EQ(sums[i], a_values[i] + b_values[i]);
+        ASSERT_EQ(differences[i], a_values[i] - b_values[i]);
+    }
+}
 
 TEST(CudaDeviceTest, CublasMatmulMatchesReferenceForNonSquareMatrices) {
     std::string error; auto baseline = make_cuda_device(&error); if (!baseline) GTEST_SKIP() << error;

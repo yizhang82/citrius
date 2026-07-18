@@ -24,6 +24,7 @@ public:
 
 private:
     int device_index_;
+    int max_elementwise_blocks_;
 
     const CudaMemTensorStorageImpl& require_cuda_storage(const ITensorStorage& storage) const;
     CudaMemTensorStorageImpl& require_cuda_storage(ITensorStorage& storage) const;
