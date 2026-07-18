@@ -5,7 +5,7 @@ BUILD_DIR="build"
 CLEAN=0
 
 usage() {
-    echo "Usage: ./build.sh [--clean]"
+    echo "Usage: ./test.sh [--clean]"
 }
 
 while [[ $# -gt 0 ]]; do
@@ -31,3 +31,4 @@ fi
 
 cmake -S . -B "$BUILD_DIR"
 cmake --build "$BUILD_DIR"
+ctest --test-dir "$BUILD_DIR" --output-on-failure
