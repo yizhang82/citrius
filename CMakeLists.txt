@@ -17,6 +17,7 @@ add_library(citrius
     src/devices/cpu/cpu_device.cpp
     src/devices/cpu/cpu_storage.cpp
     src/devices/cpu/multi_thread_cpu_device.cpp
+    src/nn/module.cpp
     src/operations.cpp
     src/tensor.cpp
     src/tensor_factory.cpp
@@ -127,6 +128,7 @@ include(GoogleTest)
 
 add_executable(tensor_test
     tests/devices/cpu/cpu_device_test.cpp
+    tests/nn/module_test.cpp
     tests/operations_test.cpp
     tests/tensor_test.cpp
 )
