@@ -28,6 +28,7 @@ public:
     virtual std::size_t nbytes() const = 0;
     virtual StorageHandle handle() = 0;
     virtual StorageHandle handle() const = 0;
+    virtual std::shared_ptr<ITensorStorage> clone() const = 0;
 };
 
 using TensorStoragePtr = std::shared_ptr<ITensorStorage>;

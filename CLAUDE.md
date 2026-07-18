@@ -27,6 +27,14 @@ Storage is abstracted through `ITensorStorage` in `include/storage.h`. Concrete 
 
 Tensor copies are shallow with respect to storage: tensor metadata is copied by value, while the underlying `ITensorStorage` is shared through `std::shared_ptr`.
 
+Explicit deep copy is available through:
+
+```cpp
+Tensor copied = tensor.copy();
+```
+
+`Tensor::copy()` preserves metadata and calls `ITensorStorage::clone()` to allocate distinct backend storage with copied contents.
+
 Current storage implementations:
 
 - `CpuMemTensorStorageImpl` in `include/cpu_storage.h` and `src/cpu_storage.cpp`
@@ -190,3 +198,5 @@ Tensor tests cover:
 
 - default undefined tensor
 - constructed tensor metadata
+- shallow copy sharing storage
+- explicit deep copy cloning storage

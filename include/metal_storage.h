@@ -20,6 +20,7 @@ public:
     std::size_t nbytes() const override;
     StorageHandle handle() override;
     StorageHandle handle() const override;
+    std::shared_ptr<ITensorStorage> clone() const override;
 
     void copy_from_host(const void* data, std::size_t nbytes);
     void copy_to_host(void* data, std::size_t nbytes) const;

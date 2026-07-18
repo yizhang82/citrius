@@ -132,6 +132,27 @@ TEST(MetalDeviceTest, CopiesCpuStorageToMetalForOps) {
     EXPECT_EQ(tensor_values(result), std::vector<float>({11.0f, 22.0f, 33.0f, 44.0f}));
 }
 
+TEST(MetalDeviceTest, TensorCopyCreatesDeepCopyOfMetalStorage) {
+    std::string error_message;
+    auto device = make_metal_device(&error_message);
+    if (!device) {
+        GTEST_SKIP() << error_message;
+    }
+    auto tensor = make_metal_tensor(*device, {2, 2}, {1.0f, 2.0f, 3.0f, 4.0f});
+
+    auto copied = tensor.copy();
+    auto original_storage =
+        std::static_pointer_cast<citrius::MetalMemTensorStorageImpl>(tensor.storage());
+
+    const std::vector<float> updated_values = {100.0f, 2.0f, 3.0f, 4.0f};
+    original_storage->copy_from_host(updated_values.data(), updated_values.size() * sizeof(float));
+
+    EXPECT_EQ(copied.storage()->type(), citrius::TensorStorageType::MetalMemory);
+    EXPECT_NE(copied.storage(), tensor.storage());
+    EXPECT_EQ(tensor_values(tensor), std::vector<float>({100.0f, 2.0f, 3.0f, 4.0f}));
+    EXPECT_EQ(tensor_values(copied), std::vector<float>({1.0f, 2.0f, 3.0f, 4.0f}));
+}
+
 TEST(MetalDeviceTest, RejectsCpuStorageWhenConversionPolicyIsError) {
     const citrius::CpuDeviceImpl cpu_device;
     std::string error_message;

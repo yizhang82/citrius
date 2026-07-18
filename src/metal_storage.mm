@@ -58,6 +58,12 @@ StorageHandle MetalMemTensorStorageImpl::handle() const {
     return StorageHandle{(__bridge void*)impl_->buffer, impl_->nbytes};
 }
 
+std::shared_ptr<ITensorStorage> MetalMemTensorStorageImpl::clone() const {
+    auto copied = std::make_shared<MetalMemTensorStorageImpl>(nbytes(), dtype());
+    copied->copy_from_host([impl_->buffer contents], nbytes());
+    return copied;
+}
+
 void MetalMemTensorStorageImpl::copy_from_host(const void* data, std::size_t nbytes) {
     if (nbytes > impl_->nbytes) {
         throw std::invalid_argument("host data is larger than Metal storage");

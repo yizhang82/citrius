@@ -17,6 +17,7 @@ public:
     std::size_t nbytes() const override;
     StorageHandle handle() override;
     StorageHandle handle() const override;
+    std::shared_ptr<ITensorStorage> clone() const override;
 
     void* data();
     const void* data() const;

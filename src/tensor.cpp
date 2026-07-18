@@ -1,6 +1,7 @@
 #include "tensor.h"
 
 #include "cpu_storage.h"
+#include "storage.h"
 
 #include <numeric>
 #include <stdexcept>
@@ -73,6 +74,14 @@ std::int64_t Tensor::numel() const {
 
 bool Tensor::defined() const {
     return defined_;
+}
+
+Tensor Tensor::copy() const {
+    if (!defined()) {
+        throw std::invalid_argument("cannot copy an undefined tensor");
+    }
+
+    return Tensor(shape_, dtype_, device_, storage_->clone());
 }
 
 } // namespace citrius

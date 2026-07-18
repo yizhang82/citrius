@@ -23,6 +23,7 @@ public:
     std::size_t ndim() const;
     std::int64_t numel() const;
     bool defined() const;
+    Tensor copy() const;
 
 private:
     Shape shape_;
