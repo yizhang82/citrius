@@ -6,6 +6,18 @@ Citrius is a small C++ tensor library skeleton inspired by PyTorch, currently fo
 
 The public tensor API is in `include/tensor.h`.
 
+Tensors can be allocated directly on an enabled backend or initialized from Float32 data:
+
+```cpp
+Tensor empty({2, 2}, DType::Float32, Device::cuda());
+Tensor values(std::vector<float>{1, 2, 3, 4}, {2, 2}, Device::cuda());
+auto cpu_values = values.to(Device::cpu());
+```
+
+`TensorFactory` in `include/tensor_factory.h` provides matching `empty` and
+`from_vector` entry points. `Tensor::to` returns a shallow copy when the requested
+device already matches and transfers through host memory otherwise.
+
 `Tensor` stores metadata directly:
 
 - `Shape`

@@ -1,6 +1,6 @@
 #include "tensor.h"
 
-#include "cpu_storage.h"
+#include "tensor_factory.h"
 #include "storage.h"
 
 #include <numeric>
@@ -12,27 +12,13 @@ namespace citrius {
 Tensor::Tensor() = default;
 
 Tensor::Tensor(Shape shape, DType dtype, Device device)
-    : Tensor(
-          shape,
-          dtype,
-          device,
-          device.type == DeviceType::CPU
-              ? std::make_shared<CpuMemTensorStorageImpl>(
-                    static_cast<std::size_t>(
-                        std::accumulate(
-                            shape.begin(),
-                            shape.end(),
-                            std::int64_t{1},
-                            [](std::int64_t total, std::int64_t dim) {
-                                return total * dim;
-                            })) *
-                        dtype_size(dtype),
-                    dtype)
-              : nullptr) {
-    if (device.type != DeviceType::CPU) {
-        throw std::invalid_argument("only CPU tensor allocation is implemented");
-    }
-}
+    : Tensor(TensorFactory::empty(std::move(shape), dtype, device)) {}
+
+Tensor::Tensor(const std::vector<float>& values, Device device)
+    : Tensor(TensorFactory::from_vector(values, device)) {}
+
+Tensor::Tensor(const std::vector<float>& values, Shape shape, Device device)
+    : Tensor(TensorFactory::from_vector(values, std::move(shape), device)) {}
 
 Tensor::Tensor(Shape shape, DType dtype, Device device, std::shared_ptr<ITensorStorage> storage)
     : shape_(std::move(shape)),
@@ -82,6 +68,10 @@ Tensor Tensor::copy() const {
     }
 
     return Tensor(shape_, dtype_, device_, storage_->clone());
+}
+
+Tensor Tensor::to(Device device) const {
+    return TensorFactory::to(*this, device);
 }
 
 } // namespace citrius

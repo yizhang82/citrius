@@ -1,4 +1,5 @@
 #include "tensor.h"
+#include "tensor_factory.h"
 
 #include "cpu_storage.h"
 
@@ -35,6 +36,40 @@ TEST(TensorTest, ConstructedTensorExposesMetadata) {
     EXPECT_EQ(tensor.device(), citrius::Device::cpu());
     EXPECT_EQ(tensor.ndim(), 2);
     EXPECT_EQ(tensor.numel(), 6);
+}
+
+TEST(TensorTest, ConstructsFromVectorWithInferredShape) {
+    const std::vector<float> values = {1.0f, 2.0f, 3.0f};
+    const citrius::Tensor tensor(values);
+
+    EXPECT_EQ(tensor.shape(), citrius::Shape({3}));
+    EXPECT_EQ(tensor.dtype(), citrius::DType::Float32);
+    EXPECT_EQ(cpu_tensor_values(tensor), values);
+}
+
+TEST(TensorTest, FactoryConstructsVectorWithExplicitShape) {
+    const std::vector<float> values = {1.0f, 2.0f, 3.0f, 4.0f};
+    const auto tensor = citrius::TensorFactory::from_vector(values, {2, 2});
+
+    EXPECT_EQ(tensor.shape(), citrius::Shape({2, 2}));
+    EXPECT_EQ(cpu_tensor_values(tensor), values);
+}
+
+TEST(TensorTest, RejectsVectorWhoseSizeDoesNotMatchShape) {
+    EXPECT_THROW(
+        citrius::Tensor(std::vector<float>{1.0f, 2.0f}, {2, 2}),
+        std::invalid_argument);
+}
+
+TEST(TensorTest, ToSameDeviceReturnsShallowCopy) {
+    const citrius::Tensor tensor(std::vector<float>{1.0f, 2.0f});
+    const auto moved = tensor.to(citrius::Device::cpu());
+
+    EXPECT_EQ(moved.storage(), tensor.storage());
+}
+
+TEST(TensorTest, ToRejectsUndefinedTensor) {
+    EXPECT_THROW(citrius::Tensor().to(citrius::Device::cpu()), std::invalid_argument);
 }
 
 TEST(TensorTest, CopiesShareStorage) {

@@ -66,3 +66,15 @@ TEST(CudaDeviceTest, TensorCopyCreatesDeepCopy) {
     std::static_pointer_cast<citrius::CudaMemTensorStorageImpl>(tensor.storage())->copy_from_host(changed.data(), changed.size() * sizeof(float));
     EXPECT_NE(tensor.storage(), copied.storage()); EXPECT_EQ(values(copied), std::vector<float>({1, 2}));
 }
+
+TEST(CudaDeviceTest, TensorConstructorAndToTransferValues) {
+    std::string error; auto device = make_cuda_device(&error); if (!device) GTEST_SKIP() << error;
+    const std::vector<float> input = {1, 2, 3, 4};
+    const citrius::Tensor cuda_tensor(input, {2, 2}, citrius::Device::cuda());
+
+    EXPECT_EQ(cuda_tensor.device(), citrius::Device::cuda());
+    EXPECT_EQ(cuda_tensor.storage()->type(), citrius::TensorStorageType::CudaMemory);
+    const auto cpu_tensor = cuda_tensor.to(citrius::Device::cpu());
+    auto storage = std::static_pointer_cast<citrius::CpuMemTensorStorageImpl>(cpu_tensor.storage());
+    EXPECT_EQ(std::vector<float>(storage->data_as<float>(), storage->data_as<float>() + 4), input);
+}

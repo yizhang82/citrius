@@ -1,9 +1,9 @@
 #include "cpu_device.h"
 #include "cpu_storage.h"
+#include "tensor_factory.h"
 
 #ifdef CITRIUS_HAS_CUDA
 #include "cuda_device.h"
-#include "cuda_storage.h"
 #endif
 
 #include <algorithm>
@@ -37,22 +37,13 @@ std::vector<float> input_values(std::int64_t count, int seed) {
     return values;
 }
 
-citrius::Tensor cpu_tensor(
-    const citrius::CpuDeviceImpl& device,
-    std::int64_t size,
-    const std::vector<float>& values) {
-    auto tensor = device.empty({size, size}, citrius::DType::Float32);
-    auto storage = std::static_pointer_cast<citrius::CpuMemTensorStorageImpl>(tensor.storage());
-    std::copy(values.begin(), values.end(), storage->data_as<float>());
-    return tensor;
-}
-
 float cpu_checksum(const citrius::Tensor& tensor) {
+    const auto cpu_tensor = tensor.to(citrius::Device::cpu());
     const auto storage =
-        std::static_pointer_cast<citrius::CpuMemTensorStorageImpl>(tensor.storage());
+        std::static_pointer_cast<citrius::CpuMemTensorStorageImpl>(cpu_tensor.storage());
     const float* values = storage->data_as<float>();
     float checksum = 0.0f;
-    for (std::int64_t i = 0; i < tensor.numel(); ++i) checksum += values[i];
+    for (std::int64_t i = 0; i < cpu_tensor.numel(); ++i) checksum += values[i];
     return checksum;
 }
 
@@ -83,29 +74,23 @@ Result benchmark_cpu(std::int64_t size, int iterations) {
     const auto a_values = input_values(size * size, 3);
     const auto b_values = input_values(size * size, 7);
     return measure(size, iterations, [&] {
-        auto a = cpu_tensor(device, size, a_values);
-        auto b = cpu_tensor(device, size, b_values);
+        citrius::Tensor a(a_values, {size, size});
+        auto b = citrius::TensorFactory::from_vector(b_values, {size, size});
         return cpu_checksum(device.matmul(a, b));
     });
 }
 
 #ifdef CITRIUS_HAS_CUDA
 Result benchmark_cuda(std::int64_t size, int iterations) {
-    const citrius::CpuDeviceImpl cpu;
     const citrius::CudaDeviceImpl cuda;
     const auto a_values = input_values(size * size, 3);
     const auto b_values = input_values(size * size, 7);
     return measure(size, iterations, [&] {
-        auto a = cpu_tensor(cpu, size, a_values);
-        auto b = cpu_tensor(cpu, size, b_values);
+        citrius::Tensor a(a_values, {size, size}, citrius::Device::cuda());
+        auto b = citrius::TensorFactory::from_vector(
+            b_values, {size, size}, citrius::Device::cuda());
         auto output = cuda.matmul(a, b);
-        auto storage =
-            std::static_pointer_cast<citrius::CudaMemTensorStorageImpl>(output.storage());
-        std::vector<float> values(static_cast<std::size_t>(output.numel()));
-        storage->copy_to_host(values.data(), values.size() * sizeof(float));
-        float checksum = 0.0f;
-        for (float value : values) checksum += value;
-        return checksum;
+        return cpu_checksum(output);
     });
 }
 #endif

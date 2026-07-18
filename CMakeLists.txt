@@ -16,6 +16,7 @@ add_library(citrius
     src/cpu_device.cpp
     src/cpu_storage.cpp
     src/tensor.cpp
+    src/tensor_factory.cpp
     src/types.cpp
 )
 
@@ -33,6 +34,7 @@ if(CITRIUS_ENABLE_METAL)
             "-framework Foundation"
             "-framework Metal"
     )
+    target_compile_definitions(citrius PRIVATE CITRIUS_HAS_METAL=1)
 endif()
 
 if(CITRIUS_ENABLE_CUDA)
@@ -40,6 +42,7 @@ if(CITRIUS_ENABLE_CUDA)
     find_package(CUDAToolkit REQUIRED)
     target_sources(citrius PRIVATE src/cuda_device.cu src/cuda_storage.cu)
     target_link_libraries(citrius PUBLIC CUDA::cudart)
+    target_compile_definitions(citrius PRIVATE CITRIUS_HAS_CUDA=1)
     set_target_properties(citrius PROPERTIES
         CUDA_ARCHITECTURES native
         CUDA_STANDARD 20

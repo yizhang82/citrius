@@ -1,0 +1,96 @@
+#include "tensor_factory.h"
+#include "cpu_device.h"
+#include "cpu_storage.h"
+#ifdef CITRIUS_HAS_CUDA
+#include "cuda_device.h"
+#include "cuda_storage.h"
+#endif
+#ifdef CITRIUS_HAS_METAL
+#include "metal_device.h"
+#include "metal_storage.h"
+#endif
+#include <algorithm>
+#include <memory>
+#include <numeric>
+#include <stdexcept>
+#include <utility>
+
+namespace citrius {
+namespace {
+Tensor copy_to_cpu(const Tensor& tensor) {
+    if (tensor.device().type == DeviceType::CPU) return tensor;
+    auto output = CpuDeviceImpl().empty(tensor.shape(), tensor.dtype());
+    auto destination = std::static_pointer_cast<CpuMemTensorStorageImpl>(output.storage());
+    switch (tensor.device().type) {
+#ifdef CITRIUS_HAS_CUDA
+        case DeviceType::CUDA:
+            std::static_pointer_cast<CudaMemTensorStorageImpl>(tensor.storage())->copy_to_host(destination->data(), destination->nbytes());
+            return output;
+#endif
+#ifdef CITRIUS_HAS_METAL
+        case DeviceType::Metal:
+            std::static_pointer_cast<MetalMemTensorStorageImpl>(tensor.storage())->copy_to_host(destination->data(), destination->nbytes());
+            return output;
+#endif
+        default: throw std::invalid_argument("source tensor backend is not enabled");
+    }
+}
+} // namespace
+
+Tensor TensorFactory::empty(Shape shape, DType dtype, Device device) {
+    switch (device.type) {
+        case DeviceType::CPU: {
+            const auto count = std::accumulate(
+                shape.begin(), shape.end(), std::int64_t{1},
+                [](std::int64_t total, std::int64_t dimension) { return total * dimension; });
+            auto storage = std::make_shared<CpuMemTensorStorageImpl>(
+                static_cast<std::size_t>(count) * dtype_size(dtype), dtype);
+            return Tensor(std::move(shape), dtype, device, std::move(storage));
+        }
+#ifdef CITRIUS_HAS_CUDA
+        case DeviceType::CUDA: return CudaDeviceImpl(device.index).empty(std::move(shape), dtype);
+#endif
+#ifdef CITRIUS_HAS_METAL
+        case DeviceType::Metal:
+            if (device.index != 0) throw std::invalid_argument("Metal device index is not available");
+            return MetalDeviceImpl().empty(std::move(shape), dtype);
+#endif
+        default: throw std::invalid_argument("requested tensor backend is not enabled");
+    }
+}
+
+Tensor TensorFactory::from_vector(const std::vector<float>& values, Device device) {
+    const auto size = static_cast<std::int64_t>(values.size());
+    return from_vector(values, {size}, device);
+}
+
+Tensor TensorFactory::from_vector(const std::vector<float>& values, Shape shape, Device device) {
+    auto cpu = empty(std::move(shape), DType::Float32, Device::cpu());
+    if (cpu.numel() != static_cast<std::int64_t>(values.size())) throw std::invalid_argument("tensor shape does not match vector size");
+    auto storage = std::static_pointer_cast<CpuMemTensorStorageImpl>(cpu.storage());
+    std::copy(values.begin(), values.end(), storage->data_as<float>());
+    return to(cpu, device);
+}
+
+Tensor TensorFactory::to(const Tensor& tensor, Device device) {
+    if (!tensor.defined()) throw std::invalid_argument("cannot move an undefined tensor");
+    if (tensor.device() == device) return tensor;
+    auto cpu = copy_to_cpu(tensor);
+    if (device.type == DeviceType::CPU) return cpu;
+    auto output = empty(tensor.shape(), tensor.dtype(), device);
+    const auto source = std::static_pointer_cast<CpuMemTensorStorageImpl>(cpu.storage());
+    switch (device.type) {
+#ifdef CITRIUS_HAS_CUDA
+        case DeviceType::CUDA:
+            std::static_pointer_cast<CudaMemTensorStorageImpl>(output.storage())->copy_from_host(source->data(), source->nbytes());
+            return output;
+#endif
+#ifdef CITRIUS_HAS_METAL
+        case DeviceType::Metal:
+            std::static_pointer_cast<MetalMemTensorStorageImpl>(output.storage())->copy_from_host(source->data(), source->nbytes());
+            return output;
+#endif
+        default: throw std::invalid_argument("requested tensor backend is not enabled");
+    }
+}
+} // namespace citrius
