@@ -8,6 +8,11 @@ set "BACKEND="
 set "CUDA_ARG="
 set "BENCH_ARGS="
 
+if not exist "%BUILD_DIR%\CMakeCache.txt" (
+    echo Build directory is not configured. Run build.bat first.
+    exit /B 1
+)
+
 if /I "%TEST%"=="operations" goto parse_operations
 if /I "%TEST%"=="add-kernel" goto parse_add_kernel
 if /I "%TEST%"=="matmul-kernel" goto parse_matmul_kernel
@@ -26,7 +31,10 @@ if /I "%~2"=="--all" (
 if not "%~3"=="" goto usage_error
 if not defined BACKEND goto usage_error
 
-call "%ROOT_DIR%\build.bat" %CUDA_ARG% --config Release
+if defined CUDA_ARG call :require_cuda
+if errorlevel 1 exit /B %errorlevel%
+
+cmake --build "%BUILD_DIR%" --config Release --target operations_benchmark
 if errorlevel 1 exit /B %errorlevel%
 
 "%BUILD_DIR%\Release\operations_benchmark.exe" %BACKEND%
@@ -50,7 +58,10 @@ shift
 goto parse_add_kernel_args
 
 :run_add_kernel
-call "%ROOT_DIR%\build.bat" --cuda --config Release
+call :require_cuda
+if errorlevel 1 exit /B %errorlevel%
+
+cmake --build "%BUILD_DIR%" --config Release --target cuda_elementwise_benchmark
 if errorlevel 1 exit /B %errorlevel%
 
 "%BUILD_DIR%\Release\cuda_elementwise_benchmark.exe" %BENCH_ARGS%
@@ -74,11 +85,22 @@ shift
 goto parse_matmul_kernel_args
 
 :run_matmul_kernel
-call "%ROOT_DIR%\build.bat" --cuda --config Release
+call :require_cuda
+if errorlevel 1 exit /B %errorlevel%
+
+cmake --build "%BUILD_DIR%" --config Release --target cuda_matmul_benchmark
 if errorlevel 1 exit /B %errorlevel%
 
 "%BUILD_DIR%\Release\cuda_matmul_benchmark.exe" %BENCH_ARGS%
 exit /B %errorlevel%
+
+:require_cuda
+findstr /X /C:"CITRIUS_ENABLE_CUDA:BOOL=ON" "%BUILD_DIR%\CMakeCache.txt" >nul
+if errorlevel 1 (
+    echo Existing build is not configured with CUDA. Run build.bat --cuda first.
+    exit /B 1
+)
+exit /B 0
 
 :usage_error
 echo Usage:

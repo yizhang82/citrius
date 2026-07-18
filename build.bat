@@ -58,7 +58,28 @@ echo --config requires a value, such as Debug or Release.
 goto usage_error
 
 :usage_ok
-echo Usage: build.bat [--clean] [--cuda^|--cuda-reference] [--config Debug^|Release^|RelWithDebInfo^|MinSizeRel]
+echo Usage: build.bat [options]
+echo.
+echo Options:
+echo   --cuda              Enable CUDA and use cuBLAS as the default top-level
+echo                       CUDA matmul backend.
+echo   --cuda-reference    Enable CUDA and use the Citrius reference CUDA kernel
+echo                       as the default top-level matmul backend.
+echo   --clean             Remove the build directory before configuring.
+echo   --config CONFIG     Build Debug, Release, RelWithDebInfo, or MinSizeRel.
+echo   -h, --help          Show this help.
+echo.
+echo With neither CUDA option, CUDA is disabled. The corresponding CMake values are:
+echo.
+echo   build.bat                    CITRIUS_ENABLE_CUDA=OFF
+echo   build.bat --cuda             CITRIUS_ENABLE_CUDA=ON
+echo                                CITRIUS_CUDA_USE_CUBLAS=ON
+echo   build.bat --cuda-reference   CITRIUS_ENABLE_CUDA=ON
+echo                                CITRIUS_CUDA_USE_CUBLAS=OFF
+echo.
+echo CITRIUS_CUDA_USE_CUBLAS only selects the compiled default for top-level CUDA
+echo matmul. It does not enable or disable CUDA. At runtime, CITRIUS_CUDA_BACKEND
+echo can override the default with cublas, cutlass, or reference.
 exit /B 0
 
 :usage_error

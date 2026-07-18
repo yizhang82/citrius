@@ -238,14 +238,20 @@ Run CPU-only tests from a clean build:
 On Windows, run the tests with:
 
 ```bat
+build.bat
 test.bat
-test.bat --clean --config Debug
-test.bat --clean --cuda
+test.bat --config Debug
+build.bat --cuda
+test.bat
 ```
+
+Only `build.bat` configures CMake. `test.bat` incrementally builds the test target
+from the existing configuration before running it.
 
 Run the end-to-end Float32 matmul benchmark on Windows with:
 
 ```bat
+build.bat --cuda
 benchmark.bat operations --cpu
 benchmark.bat operations --cuda
 benchmark.bat operations --all
@@ -264,6 +270,10 @@ Run the isolated CUDA matmul kernel tuning benchmark with:
 benchmark.bat matmul-kernel
 benchmark.bat matmul-kernel --size 2048 --iterations 20 --samples 5
 ```
+
+`benchmark.bat` incrementally builds only the selected benchmark target and never
+configures CMake. CUDA benchmarks require an existing build configured with
+`build.bat --cuda`.
 
 The `examples` directory contains one program that runs add, sub, and matmul. It is built
 with the library and selects a backend at runtime:
