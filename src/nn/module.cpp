@@ -32,7 +32,10 @@ std::vector<Tensor> Module::parameters(bool recurse) const {
 }
 
 std::vector<Module::NamedParameter> Module::named_parameters(bool recurse) const {
-    std::vector<NamedParameter> result = parameters_;
+    std::vector<NamedParameter> result;
+    for (const auto& parameter : parameters_) {
+        if (parameter.second.defined()) result.push_back(parameter);
+    }
     if (!recurse) return result;
 
     for (const auto& [child_name, child] : children_) {
