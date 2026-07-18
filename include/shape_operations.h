@@ -14,7 +14,7 @@ namespace citrius {
 /// @throws std::invalid_argument If `tensor` is undefined, dimensions are invalid, or
 ///         the requested shape does not preserve the element count.
 /// @code
-/// Tensor matrix = reshape(from_vector({1, 2, 3, 4, 5, 6}), {2, -1}); // [2, 3]
+/// Tensor matrix = reshape(from_vector(std::vector<float>{1, 2, 3, 4, 5, 6}), {2, -1});
 /// @endcode
 Tensor reshape(const Tensor& tensor, Shape shape);
 

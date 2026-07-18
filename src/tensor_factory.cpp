@@ -84,6 +84,23 @@ Tensor TensorFactory::from_vector(const std::vector<float>& values, Shape shape,
     return to(cpu, device);
 }
 
+Tensor TensorFactory::from_vector(const std::vector<bool>& values, Device device) {
+    return from_vector(values, {static_cast<std::int64_t>(values.size())}, device);
+}
+
+Tensor TensorFactory::from_vector(const std::vector<bool>& values, Shape shape, Device device) {
+    auto cpu = empty(std::move(shape), DType::Bool, Device::cpu());
+    if (cpu.numel() != static_cast<std::int64_t>(values.size())) {
+        throw std::invalid_argument("tensor shape does not match vector size");
+    }
+    auto storage = std::static_pointer_cast<CpuMemTensorStorageImpl>(cpu.storage());
+    auto* destination = storage->data_as<std::uint8_t>();
+    for (std::size_t index = 0; index < values.size(); ++index) {
+        destination[index] = values[index] ? 1 : 0;
+    }
+    return to(cpu, device);
+}
+
 Tensor TensorFactory::to(const Tensor& tensor, Device device) {
     if (!tensor.defined()) throw std::invalid_argument("cannot move an undefined tensor");
     if (tensor.device() == device) return tensor;
@@ -118,6 +135,14 @@ Tensor from_vector(const std::vector<float>& values, Device device) {
 }
 
 Tensor from_vector(const std::vector<float>& values, Shape shape, Device device) {
+    return impl::TensorFactory::from_vector(values, std::move(shape), device);
+}
+
+Tensor from_vector(const std::vector<bool>& values, Device device) {
+    return impl::TensorFactory::from_vector(values, device);
+}
+
+Tensor from_vector(const std::vector<bool>& values, Shape shape, Device device) {
     return impl::TensorFactory::from_vector(values, std::move(shape), device);
 }
 

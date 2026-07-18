@@ -17,6 +17,13 @@ Tensor from_vector(
     const std::vector<float>& values,
     Shape shape,
     Device device = Device::cpu());
+Tensor from_vector(
+    const std::vector<bool>& values,
+    Device device = Device::cpu());
+Tensor from_vector(
+    const std::vector<bool>& values,
+    Shape shape,
+    Device device = Device::cpu());
 Tensor to(const Tensor& tensor, Device device);
 
 } // namespace citrius

@@ -78,6 +78,12 @@ Acceptance criteria:
 
 ## Phase 2: Broadcasting and elementwise math
 
+Status: CPU reference implementation complete. Broadcasted add, subtract,
+multiply, divide, maximum, scalar overloads, exponential, square root, power,
+Bool tensor construction, and masked fill are available. Operations without a
+native backend kernel currently stage through CPU while preserving the requested
+output device.
+
 Extend elementwise dispatch with NumPy/PyTorch-style trailing-dimension
 broadcasting. Add:
 

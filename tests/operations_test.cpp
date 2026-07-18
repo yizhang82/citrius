@@ -1,11 +1,13 @@
 #include "exceptions.h"
 #include "operations.h"
+#include "tensor_factory.h"
 
 #include "impl/cpu_storage.h"
 
 #include <gtest/gtest.h>
 
 #include <memory>
+#include <cmath>
 #include <vector>
 
 namespace {
@@ -62,4 +64,67 @@ TEST(OperationsTest, OperatorsDelegateToTopLevelOperations) {
     EXPECT_EQ(values(left + right), std::vector<float>({6, 8, 10, 12}));
     EXPECT_EQ(values(left - right), std::vector<float>({-4, -4, -4, -4}));
     EXPECT_EQ(values(left * right), std::vector<float>({19, 22, 43, 50}));
+}
+
+TEST(OperationsTest, BroadcastsTrailingDimensions) {
+    const citrius::Tensor matrix(
+        std::vector<float>{1, 2, 3, 4, 5, 6},
+        {2, 3});
+    const citrius::Tensor row(std::vector<float>{10, 20, 30});
+
+    const auto result = citrius::add(matrix, row);
+
+    EXPECT_EQ(result.shape(), citrius::Shape({2, 3}));
+    EXPECT_EQ(values(result), std::vector<float>({11, 22, 33, 14, 25, 36}));
+    EXPECT_EQ(
+        values(citrius::mul(matrix, row)),
+        std::vector<float>({10, 40, 90, 40, 100, 180}));
+    EXPECT_EQ(
+        values(citrius::div(matrix, row)),
+        std::vector<float>({0.1f, 0.1f, 0.1f, 0.4f, 0.25f, 0.2f}));
+}
+
+TEST(OperationsTest, SupportsScalarAndMaximumOperations) {
+    const citrius::Tensor input(std::vector<float>{1, 2, 4});
+
+    EXPECT_EQ(values(input + 2.0f), std::vector<float>({3, 4, 6}));
+    EXPECT_EQ(values(10.0f - input), std::vector<float>({9, 8, 6}));
+    EXPECT_EQ(values(input * 3.0f), std::vector<float>({3, 6, 12}));
+    EXPECT_EQ(values(8.0f / input), std::vector<float>({8, 4, 2}));
+    EXPECT_EQ(
+        values(citrius::maximum(input, citrius::from_vector(std::vector<float>{2.0f}))),
+        std::vector<float>({2, 2, 4}));
+}
+
+TEST(OperationsTest, ComputesUnaryMath) {
+    const citrius::Tensor input(std::vector<float>{0, 1, 4});
+
+    const auto exponentials = values(citrius::exp(input));
+    EXPECT_FLOAT_EQ(exponentials[0], 1.0f);
+    EXPECT_NEAR(exponentials[1], std::exp(1.0f), 1e-6f);
+    EXPECT_EQ(values(citrius::sqrt(input)), std::vector<float>({0, 1, 2}));
+    EXPECT_EQ(values(citrius::pow(input, 2.0f)), std::vector<float>({0, 1, 16}));
+}
+
+TEST(OperationsTest, BroadcastsBooleanMask) {
+    const citrius::Tensor input(
+        std::vector<float>{1, 2, 3, 4, 5, 6},
+        {2, 3});
+    const citrius::Tensor mask = citrius::from_vector(
+        std::vector<bool>{false, true, false},
+        {1, 3});
+
+    const auto result = citrius::masked_fill(input, mask, -100.0f);
+
+    EXPECT_EQ(values(result), std::vector<float>({1, -100, 3, 4, -100, 6}));
+}
+
+TEST(OperationsTest, RejectsIncompatibleBroadcastShapes) {
+    const citrius::Tensor left(std::vector<float>{1, 2, 3, 4}, {2, 2});
+    const citrius::Tensor right(std::vector<float>{1, 2, 3});
+
+    EXPECT_THROW(citrius::add(left, right), std::invalid_argument);
+    EXPECT_THROW(
+        citrius::masked_fill(left, citrius::from_vector(std::vector<bool>{true, false, true}), 0),
+        std::invalid_argument);
 }
