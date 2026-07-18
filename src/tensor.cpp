@@ -50,13 +50,13 @@ void append_values(std::ostringstream& stream, const T* values, std::int64_t cou
 Tensor::Tensor() = default;
 
 Tensor::Tensor(Shape shape, DType dtype, Device device)
-    : Tensor(TensorFactory::empty(std::move(shape), dtype, device)) {}
+    : Tensor(citrius::empty(std::move(shape), dtype, device)) {}
 
 Tensor::Tensor(const std::vector<float>& values, Device device)
-    : Tensor(TensorFactory::from_vector(values, device)) {}
+    : Tensor(citrius::from_vector(values, device)) {}
 
 Tensor::Tensor(const std::vector<float>& values, Shape shape, Device device)
-    : Tensor(TensorFactory::from_vector(values, std::move(shape), device)) {}
+    : Tensor(citrius::from_vector(values, std::move(shape), device)) {}
 
 Tensor::Tensor(
     Shape shape,
@@ -113,7 +113,7 @@ Tensor Tensor::copy() const {
 }
 
 Tensor Tensor::to(Device device) const {
-    return TensorFactory::to(*this, device);
+    return citrius::to(*this, device);
 }
 
 std::string Tensor::to_string() const {

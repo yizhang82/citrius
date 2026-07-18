@@ -105,7 +105,7 @@ Result benchmark_cpu(
     const auto a_values = input_values(size * size, 3);
     const auto b_values = input_values(size * size, 7);
     citrius::Tensor a(a_values, {size, size});
-    auto b = citrius::TensorFactory::from_vector(b_values, {size, size});
+    auto b = citrius::from_vector(b_values, {size, size});
     auto out = device.empty({size, size}, citrius::DType::Float32);
     auto result = measure(operation_count(operation, size), iterations, [&] {
         switch (operation) {
@@ -133,7 +133,7 @@ Result benchmark_cuda(
     const auto a_values = input_values(size * size, 3);
     const auto b_values = input_values(size * size, 7);
     citrius::Tensor a(a_values, {size, size}, citrius::Device::cuda());
-    auto b = citrius::TensorFactory::from_vector(
+    auto b = citrius::from_vector(
         b_values, {size, size}, citrius::Device::cuda());
     auto out = device.empty({size, size}, citrius::DType::Float32);
     const auto run = [&] {

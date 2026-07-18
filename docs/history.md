@@ -272,7 +272,7 @@ CUDA (cuBLAS)
 Operation        N    Runs      Best ms       Avg ms     Total ms      GFLOP/s       Checksum
 add            128      50        0.010        0.017        0.865        1.668          3.375
 sub            128      50        0.007        0.014        0.700        2.236         -0.125
-matmul         128      50        0.016        0.024        1.181      258.016          8.594
+matmul         128    j 50        0.016        0.024        1.181      258.016          8.594
 add            256      50        0.008        0.014        0.688        8.192         -0.750
 sub            256      50        0.009        0.017        0.871        7.670         -0.500
 matmul         256      50        0.017        0.021        1.037     1967.310         -7.891
@@ -298,3 +298,7 @@ add           1024      50        0.012        0.016        0.804       90.519  
 sub           1024      50        0.010        0.017        0.865      100.515          0.500
 matmul        1024      50        0.081        0.083        4.136    26535.732         66.406
 ```
+
+* nn::Module + nn::Linear support
+* PLAN.md
+* shape operations like transpose / permute / etc

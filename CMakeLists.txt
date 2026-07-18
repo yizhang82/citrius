@@ -20,6 +20,7 @@ add_library(citrius
     src/nn/linear.cpp
     src/nn/module.cpp
     src/operations.cpp
+    src/shape_operations.cpp
     src/tensor.cpp
     src/tensor_factory.cpp
     src/types.cpp
@@ -135,6 +136,7 @@ add_executable(tensor_test
     tests/nn/linear_test.cpp
     tests/nn/module_test.cpp
     tests/operations_test.cpp
+    tests/shape_operations_test.cpp
     tests/tensor_test.cpp
 )
 

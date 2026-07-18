@@ -2,6 +2,7 @@
 
 #include "impl/cpu_storage.h"
 #include "operations.h"
+#include "shape_operations.h"
 
 #include <cmath>
 #include <memory>
@@ -19,24 +20,6 @@ std::vector<float> random_values(std::int64_t count, float bound) {
     std::vector<float> values(static_cast<std::size_t>(count));
     for (float& value : values) value = distribution(generator);
     return values;
-}
-
-Tensor transpose_weight(const Tensor& weight) {
-    const Tensor cpu_weight = weight.to(Device::cpu());
-    const auto storage = std::static_pointer_cast<impl::CpuMemTensorStorageImpl>(
-        cpu_weight.storage());
-    const float* source = storage->data_as<float>();
-    const std::int64_t out_features = weight.shape()[0];
-    const std::int64_t in_features = weight.shape()[1];
-    std::vector<float> values(static_cast<std::size_t>(weight.numel()));
-
-    for (std::int64_t output = 0; output < out_features; ++output) {
-        for (std::int64_t input = 0; input < in_features; ++input) {
-            values[static_cast<std::size_t>(input * out_features + output)] =
-                source[output * in_features + input];
-        }
-    }
-    return Tensor(values, {in_features, out_features}, weight.device());
 }
 
 Tensor expanded_bias(const Tensor& bias, std::int64_t rows) {
@@ -101,7 +84,7 @@ Tensor Linear::forward(const Tensor& input) {
         input.dtype(),
         input.device(),
         input.storage());
-    Tensor output = matmul(matrix_input, transpose_weight(weight()));
+    Tensor output = matmul(matrix_input, transpose(weight(), 0, 1));
     if (has_bias_) output = add(output, expanded_bias(bias(), rows));
 
     Shape output_shape = input.shape();

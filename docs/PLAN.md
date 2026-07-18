@@ -45,6 +45,12 @@ The initial milestone does not include:
 
 ## Phase 1: Tensor shape and view operations
 
+Status: CPU reference implementation complete. Reshape, view, flatten, squeeze,
+and unsqueeze share storage. Because tensors do not yet carry stride metadata,
+transpose, permute, split, chunk, and concat currently materialize contiguous
+results. CUDA and Metal use host staging for these layout-changing operations
+until native backend kernels or stride-aware views are added.
+
 Implement the metadata and data-layout operations needed to form attention
 heads:
 
@@ -57,8 +63,9 @@ heads:
 - `split` or `chunk`;
 - `concat`.
 
-Views should share storage whenever their strides permit it. Operations that
-require a new layout should make that copy explicit through `contiguous`.
+Views share storage whenever the current contiguous layout permits it.
+Operations that require a different physical layout currently return a
+materialized contiguous tensor.
 Shape, stride, device, dtype, and invalid-dimension behavior need unit tests.
 
 Acceptance criteria:

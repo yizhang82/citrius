@@ -1,4 +1,5 @@
 #include "tensor_factory.h"
+#include "impl/tensor_factory.h"
 #include "impl/cpu_device.h"
 #include "impl/cpu_storage.h"
 #ifdef CITRIUS_HAS_CUDA
@@ -15,17 +16,17 @@
 #include <stdexcept>
 #include <utility>
 
-namespace citrius {
+namespace citrius::impl {
 namespace {
-using impl::CpuDeviceImpl;
-using impl::CpuMemTensorStorageImpl;
+using CpuDeviceImpl = citrius::impl::CpuDeviceImpl;
+using CpuMemTensorStorageImpl = citrius::impl::CpuMemTensorStorageImpl;
 #ifdef CITRIUS_HAS_CUDA
-using impl::CudaDeviceImpl;
-using impl::CudaMemTensorStorageImpl;
+using CudaDeviceImpl = citrius::impl::CudaDeviceImpl;
+using CudaMemTensorStorageImpl = citrius::impl::CudaMemTensorStorageImpl;
 #endif
 #ifdef CITRIUS_HAS_METAL
-using impl::MetalDeviceImpl;
-using impl::MetalMemTensorStorageImpl;
+using MetalDeviceImpl = citrius::impl::MetalDeviceImpl;
+using MetalMemTensorStorageImpl = citrius::impl::MetalMemTensorStorageImpl;
 #endif
 
 Tensor copy_to_cpu(const Tensor& tensor) {
@@ -104,4 +105,24 @@ Tensor TensorFactory::to(const Tensor& tensor, Device device) {
         default: throw std::invalid_argument("requested tensor backend is not enabled");
     }
 }
+} // namespace citrius::impl
+
+namespace citrius {
+
+Tensor empty(Shape shape, DType dtype, Device device) {
+    return impl::TensorFactory::empty(std::move(shape), dtype, device);
+}
+
+Tensor from_vector(const std::vector<float>& values, Device device) {
+    return impl::TensorFactory::from_vector(values, device);
+}
+
+Tensor from_vector(const std::vector<float>& values, Shape shape, Device device) {
+    return impl::TensorFactory::from_vector(values, std::move(shape), device);
+}
+
+Tensor to(const Tensor& tensor, Device device) {
+    return impl::TensorFactory::to(tensor, device);
+}
+
 } // namespace citrius

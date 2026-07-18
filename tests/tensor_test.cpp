@@ -50,10 +50,23 @@ TEST(TensorTest, ConstructsFromVectorWithInferredShape) {
 
 TEST(TensorTest, FactoryConstructsVectorWithExplicitShape) {
     const std::vector<float> values = {1.0f, 2.0f, 3.0f, 4.0f};
-    const auto tensor = citrius::TensorFactory::from_vector(values, {2, 2});
+    const auto tensor = citrius::from_vector(values, {2, 2});
 
     EXPECT_EQ(tensor.shape(), citrius::Shape({2, 2}));
     EXPECT_EQ(cpu_tensor_values(tensor), values);
+}
+
+TEST(TensorTest, FreeFactoryFunctionsCreateAndTransferTensors) {
+    const auto allocated = citrius::empty({2, 3});
+    const auto values = citrius::from_vector(
+        std::vector<float>{1.0f, 2.0f, 3.0f, 4.0f},
+        {2, 2});
+    const auto transferred = citrius::to(values, citrius::Device::cpu());
+
+    EXPECT_EQ(allocated.shape(), citrius::Shape({2, 3}));
+    EXPECT_EQ(allocated.dtype(), citrius::DType::Float32);
+    EXPECT_EQ(cpu_tensor_values(values), std::vector<float>({1.0f, 2.0f, 3.0f, 4.0f}));
+    EXPECT_EQ(transferred.storage(), values.storage());
 }
 
 TEST(TensorTest, RejectsVectorWhoseSizeDoesNotMatchShape) {
