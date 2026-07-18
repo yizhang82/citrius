@@ -34,7 +34,7 @@ if not defined BACKEND goto usage_error
 if defined CUDA_ARG call :require_cuda
 if errorlevel 1 exit /B %errorlevel%
 
-cmake --build "%BUILD_DIR%" --config Release --target operations_benchmark
+cmake --build "%BUILD_DIR%" -j --config Release --target operations_benchmark
 if errorlevel 1 exit /B %errorlevel%
 
 "%BUILD_DIR%\Release\operations_benchmark.exe" %BACKEND%
@@ -61,7 +61,7 @@ goto parse_add_kernel_args
 call :require_cuda
 if errorlevel 1 exit /B %errorlevel%
 
-cmake --build "%BUILD_DIR%" --config Release --target cuda_elementwise_benchmark
+cmake --build "%BUILD_DIR%" -j --config Release --target cuda_elementwise_benchmark
 if errorlevel 1 exit /B %errorlevel%
 
 "%BUILD_DIR%\Release\cuda_elementwise_benchmark.exe" %BENCH_ARGS%
@@ -88,7 +88,7 @@ goto parse_matmul_kernel_args
 call :require_cuda
 if errorlevel 1 exit /B %errorlevel%
 
-cmake --build "%BUILD_DIR%" --config Release --target cuda_matmul_benchmark
+cmake --build "%BUILD_DIR%" -j --config Release --target cuda_matmul_benchmark
 if errorlevel 1 exit /B %errorlevel%
 
 "%BUILD_DIR%\Release\cuda_matmul_benchmark.exe" %BENCH_ARGS%

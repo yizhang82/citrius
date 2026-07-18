@@ -43,5 +43,5 @@ cmake -S . -B "$BUILD_DIR" \
     -DCITRIUS_ENABLE_METAL=$([[ "$METAL" -eq 1 ]] && echo ON || echo OFF) \
     -DCITRIUS_ENABLE_CUDA=$([[ "$CUDA" -eq 1 ]] && echo ON || echo OFF)
 
-cmake --build "$BUILD_DIR"
+cmake --build "$BUILD_DIR" -j
 ctest --test-dir "$BUILD_DIR" --output-on-failure

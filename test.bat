@@ -25,7 +25,7 @@ if not exist "%BUILD_DIR%\CMakeCache.txt" (
     exit /B 1
 )
 
-cmake --build "%BUILD_DIR%" --config "%CONFIG%" --target tensor_test
+cmake --build "%BUILD_DIR%" -j --config "%CONFIG%" --target tensor_test
 if errorlevel 1 exit /B %errorlevel%
 
 ctest --test-dir "%BUILD_DIR%" --build-config "%CONFIG%" --output-on-failure

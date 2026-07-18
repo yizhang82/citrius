@@ -50,7 +50,7 @@ if "%CLEAN%"=="1" if exist "%BUILD_DIR%" rmdir /S /Q "%BUILD_DIR%"
 cmake -S "%ROOT_DIR%" -B "%BUILD_DIR%" -DCITRIUS_ENABLE_METAL=OFF -DCITRIUS_ENABLE_CUDA=%CUDA% -DCITRIUS_CUDA_USE_CUBLAS=%CUDA_CUBLAS%
 if errorlevel 1 exit /B %errorlevel%
 
-cmake --build "%BUILD_DIR%" --config "%CONFIG%"
+cmake --build "%BUILD_DIR%" -j --config "%CONFIG%"
 exit /B %errorlevel%
 
 :missing_config
