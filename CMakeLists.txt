@@ -42,7 +42,23 @@ endif()
 if(CITRIUS_ENABLE_CUDA)
     enable_language(CUDA)
     find_package(CUDAToolkit REQUIRED)
-    target_sources(citrius PRIVATE src/cuda_device.cu src/cuda_storage.cu src/cublas_cuda_device.cu)
+    set(CITRIUS_CUTLASS_ROOT "${PROJECT_SOURCE_DIR}/third_party/cutlass")
+    if(NOT EXISTS "${CITRIUS_CUTLASS_ROOT}/include/cutlass/cutlass.h")
+        message(FATAL_ERROR
+            "CUTLASS submodule is missing. Run: git submodule update --init --recursive")
+    endif()
+    target_sources(citrius PRIVATE
+        src/cuda_device.cu
+        src/cuda_storage.cu
+        src/cublas_cuda_device.cu
+        src/cutlass_cuda_device.cu
+    )
+    target_include_directories(citrius PRIVATE ${CITRIUS_CUTLASS_ROOT}/include)
+    if(MSVC)
+        target_compile_options(citrius PRIVATE
+            $<$<COMPILE_LANGUAGE:CUDA>:-Xcompiler=/Zc:preprocessor>
+        )
+    endif()
     target_link_libraries(citrius PUBLIC CUDA::cudart CUDA::cublas)
     target_compile_definitions(citrius PRIVATE CITRIUS_HAS_CUDA=1)
     if(CITRIUS_CUDA_USE_CUBLAS)

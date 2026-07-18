@@ -6,6 +6,7 @@
 #ifdef CITRIUS_HAS_CUDA
 #include "impl/cuda_device.h"
 #include "impl/cublas_cuda_device.h"
+#include "impl/cutlass_cuda_device.h"
 #endif
 
 #ifdef CITRIUS_HAS_METAL
@@ -24,6 +25,7 @@ using impl::CpuDeviceImpl;
 #ifdef CITRIUS_HAS_CUDA
 using impl::CudaDeviceImpl;
 using impl::CublasCudaDeviceImpl;
+using impl::CutlassCudaDeviceImpl;
 #endif
 #ifdef CITRIUS_HAS_METAL
 using impl::MetalDeviceImpl;
@@ -43,8 +45,9 @@ std::unique_ptr<impl::IDevice> cuda_device(int device_index) {
         const std::string_view backend(configured_backend);
         if (backend == "cublas") return std::make_unique<CublasCudaDeviceImpl>(device_index);
         if (backend == "reference") return std::make_unique<CudaDeviceImpl>(device_index);
+        if (backend == "cutlass") return std::make_unique<CutlassCudaDeviceImpl>(device_index);
         throw CitriusException(
-            "CITRIUS_CUDA_BACKEND must be 'cublas' or 'reference', got '" +
+            "CITRIUS_CUDA_BACKEND must be 'cublas', 'cutlass', or 'reference', got '" +
             std::string(backend) + "'");
     }
 #ifdef CITRIUS_CUDA_DEFAULT_CUBLAS

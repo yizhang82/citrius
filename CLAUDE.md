@@ -157,6 +157,12 @@ Build with CUDA Toolkit support:
 ./build.sh --cuda
 ```
 
+CUTLASS is pinned as a Git submodule. Initialize dependencies after cloning with:
+
+```bash
+git submodule update --init --recursive
+```
+
 cuBLAS is the default implementation for top-level CUDA matmul. Build with the
 reference CUDA kernel as the default instead using:
 
@@ -168,12 +174,14 @@ The build default can be overridden at runtime without rebuilding:
 
 ```bash
 CITRIUS_CUDA_BACKEND=cublas ./build/matmul_benchmark --cuda
+CITRIUS_CUDA_BACKEND=cutlass ./build/matmul_benchmark --cuda
 CITRIUS_CUDA_BACKEND=reference ./build/matmul_benchmark --cuda
 ```
 
-On Windows PowerShell, set `$env:CITRIUS_CUDA_BACKEND` to `cublas` or `reference`
-before running the program. Explicit `CublasCudaDeviceImpl` and `CudaDeviceImpl`
-instances continue to select cuBLAS and the reference kernel respectively.
+On Windows PowerShell, set `$env:CITRIUS_CUDA_BACKEND` to `cublas`, `cutlass`, or
+`reference` before running the program. Explicit `CublasCudaDeviceImpl`,
+`CutlassCudaDeviceImpl`, and `CudaDeviceImpl` instances select their corresponding
+implementations directly.
 
 Metal and CUDA may be enabled together with `./build.sh --metal --cuda` on a platform
 that provides both toolchains.

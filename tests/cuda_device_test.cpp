@@ -2,6 +2,7 @@
 #include "impl/cpu_storage.h"
 #include "impl/cuda_device.h"
 #include "impl/cublas_cuda_device.h"
+#include "impl/cutlass_cuda_device.h"
 #include "impl/cuda_storage.h"
 #include "operations.h"
 
@@ -87,6 +88,28 @@ TEST(CudaDeviceTest, CublasMatmulMatchesReferenceForNonSquareMatrices) {
 
     const auto expected = values(baseline->matmul(a, b));
     const auto actual = values(cublas.matmul(a, b));
+    ASSERT_EQ(actual.size(), expected.size());
+    for (std::size_t i = 0; i < actual.size(); ++i) EXPECT_NEAR(actual[i], expected[i], 1e-5f);
+}
+
+TEST(CudaDeviceTest, CutlassMatmulMatchesReferenceForNonSquareMatrices) {
+    std::string error; auto reference = make_cuda_device(&error); if (!reference) GTEST_SKIP() << error;
+    citrius::impl::CutlassCudaDeviceImpl cutlass;
+    auto a = make_cuda_tensor(*reference, {3, 5}, {
+        1, 2, 3, 4, 5,
+        -1, 0, 2, -3, 4,
+        0.5f, 1.5f, -2, 3, 0,
+    });
+    auto b = make_cuda_tensor(*reference, {5, 2}, {
+        2, -1,
+        0, 3,
+        4, 0.5f,
+        -2, 1,
+        1.5f, -4,
+    });
+
+    const auto expected = values(reference->matmul(a, b));
+    const auto actual = values(cutlass.matmul(a, b));
     ASSERT_EQ(actual.size(), expected.size());
     for (std::size_t i = 0; i < actual.size(); ++i) EXPECT_NEAR(actual[i], expected[i], 1e-5f);
 }
