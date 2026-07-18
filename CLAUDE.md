@@ -56,15 +56,15 @@ Tensor copied = tensor.copy();
 
 Current storage implementations:
 
-- `impl::CpuMemTensorStorageImpl` in `include/impl/cpu_storage.h` and `src/cpu_storage.cpp`
-- `impl::MetalMemTensorStorageImpl` in `include/impl/metal_storage.h` and `src/metal_storage.mm`
-- `impl::CudaMemTensorStorageImpl` in `include/impl/cuda_storage.h` and `src/cuda_storage.cu`
+- `impl::CpuMemTensorStorageImpl` in `include/impl/cpu_storage.h` and `src/devices/cpu/cpu_storage.cpp`
+- `impl::MetalMemTensorStorageImpl` in `include/impl/metal_storage.h` and `src/devices/metal/metal_storage.mm`
+- `impl::CudaMemTensorStorageImpl` in `include/impl/cuda_storage.h` and `src/devices/cuda/cuda_storage.cu`
 
 Current device implementations:
 
-- `impl::CpuDeviceImpl` in `include/impl/cpu_device.h` and `src/cpu_device.cpp`
-- `impl::MetalDeviceImpl` in `include/impl/metal_device.h` and `src/metal_device.mm`
-- `impl::CudaDeviceImpl` in `include/impl/cuda_device.h` and `src/cuda_device.cu`
+- `impl::CpuDeviceImpl` in `include/impl/cpu_device.h` and `src/devices/cpu/cpu_device.cpp`
+- `impl::MetalDeviceImpl` in `include/impl/metal_device.h` and `src/devices/metal/metal_device.mm`
+- `impl::CudaDeviceImpl` in `include/impl/cuda_device.h` and `src/devices/cuda/cuda_device.cu`
 
 The device layer owns execution. Storage owns memory only. Arithmetic should live on `IDevice` implementations, not in storage.
 
