@@ -104,6 +104,11 @@ Acceptance criteria:
 
 ## Phase 3: Reductions and softmax
 
+Status: CPU reference implementation complete. Sum, mean, maximum, and
+population variance support full, single-dimension, and multi-dimension
+reductions with negative dimensions and optional `keepdim`. Numerically stable
+softmax is available through `nn::functional::softmax`.
+
 Implement dimension-aware reductions:
 
 - `sum`;
