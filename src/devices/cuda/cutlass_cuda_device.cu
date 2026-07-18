@@ -62,20 +62,36 @@ Tensor CutlassCudaDeviceImpl::matmul(const Tensor& a, const Tensor& b) const {
 
     auto ap = ensure_storage(a.storage(), ConversionPolicy::CopyToDevice);
     auto bp = ensure_storage(b.storage(), ConversionPolicy::CopyToDevice);
+
+    // Unlike the traditional cuBLAS API, CUTLASS lets us declare the physical
+    // layout of every operand explicitly. All three layouts are RowMajor, so
+    // CUTLASS computes C[m x n] = A[m x k] * B[k x n] directly; no operand
+    // reversal or transpose reinterpretation is required.
     using RowMajor = cutlass::layout::RowMajor;
+    // Template arguments describe the element type and layout of A, B, and C.
+    // The accumulator defaults to float for this Float32 GEMM specialization.
     using Gemm = cutlass::gemm::device::Gemm<float, RowMajor, float, RowMajor, float, RowMajor>;
 
+    // CUTLASS represents each matrix as {device pointer, leading dimension}.
+    // For packed row-major storage, the leading dimension is the number of
+    // columns: k for A and n for B, the source C, and destination D.
     typename Gemm::Arguments arguments(
-        {static_cast<int>(m), static_cast<int>(n), static_cast<int>(k)},
-        {data(*ap), static_cast<int>(k)},
-        {data(*bp), static_cast<int>(n)},
-        {data(*out.storage()), static_cast<int>(n)},
-        {data(*out.storage()), static_cast<int>(n)},
-        {1.0f, 0.0f});
+        {static_cast<int>(m), static_cast<int>(n), static_cast<int>(k)}, // GEMM problem size {m, n, k}
+        {data(*ap), static_cast<int>(k)},                               // A[m x k], row stride k
+        {data(*bp), static_cast<int>(n)},                               // B[k x n], row stride n
+        {data(*out.storage()), static_cast<int>(n)},                    // source C[m x n], row stride n
+        {data(*out.storage()), static_cast<int>(n)},                    // destination D[m x n], row stride n
+        {1.0f, 0.0f});                                                  // D = 1 * (A * B) + 0 * C
 
     Gemm gemm;
+    // Reject shapes, alignments, or device capabilities unsupported by this
+    // generated kernel before attempting to launch it.
     check_cutlass(gemm.can_implement(arguments), "CUTLASS cannot implement matmul");
+    // Initialize and launch the selected CUTLASS GEMM kernel on the default
+    // stream. The call reports setup/launch errors through cutlass::Status.
     check_cutlass(gemm(arguments), "CUTLASS matmul failed");
+    // Citrius operations are currently eager and synchronous, so do not return
+    // until the kernel has completed and asynchronous CUDA errors are visible.
     check_cuda(cudaDeviceSynchronize(), "CUDA CUTLASS matmul failed");
     return out;
 }
