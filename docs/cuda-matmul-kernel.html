@@ -1,0 +1,513 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Citrius CUDA 16×16 Tiled Matmul</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg: #09111f;
+      --panel: #111d30;
+      --panel-2: #17263d;
+      --line: #304561;
+      --text: #e8f0fa;
+      --muted: #9db0c8;
+      --a: #45c7f1;
+      --b: #ffae57;
+      --c: #71df9b;
+      --accent: #ad8cff;
+      --warning: #ffd166;
+    }
+
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body {
+      margin: 0;
+      background:
+        radial-gradient(circle at 15% -10%, #173d61 0, transparent 33rem),
+        radial-gradient(circle at 90% 10%, #302154 0, transparent 28rem),
+        var(--bg);
+      color: var(--text);
+      font: 16px/1.65 system-ui, -apple-system, "Segoe UI", sans-serif;
+    }
+
+    main { width: min(1120px, calc(100% - 32px)); margin: 0 auto; padding: 64px 0 96px; }
+    h1, h2, h3 { line-height: 1.15; letter-spacing: -0.025em; }
+    h1 { max-width: 850px; margin: 0 0 20px; font-size: clamp(2.5rem, 7vw, 5.5rem); }
+    h2 { margin: 0 0 18px; font-size: clamp(1.7rem, 4vw, 2.5rem); }
+    h3 { margin: 0 0 10px; font-size: 1.15rem; }
+    p { margin: 0 0 16px; }
+    code, pre { font-family: "Cascadia Code", "SFMono-Regular", Consolas, monospace; }
+    code { color: #d5c9ff; }
+    a { color: var(--a); }
+
+    .eyebrow {
+      color: var(--a);
+      font-weight: 750;
+      letter-spacing: .12em;
+      text-transform: uppercase;
+    }
+    .lede { max-width: 760px; color: var(--muted); font-size: 1.2rem; }
+    .equation { margin: 32px 0 0; font-size: clamp(1.4rem, 4vw, 2.2rem); font-weight: 700; }
+    .a { color: var(--a); }
+    .b { color: var(--b); }
+    .c { color: var(--c); }
+
+    section {
+      margin-top: 72px;
+      padding: 30px;
+      border: 1px solid var(--line);
+      border-radius: 20px;
+      background: color-mix(in srgb, var(--panel) 92%, transparent);
+      box-shadow: 0 20px 70px #0005;
+    }
+    .grid-2 { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 22px; }
+    .grid-3 { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 18px; }
+    .card { padding: 20px; border: 1px solid var(--line); border-radius: 14px; background: var(--panel-2); }
+    .number { color: var(--accent); font-size: 2rem; font-weight: 800; }
+    .muted { color: var(--muted); }
+
+    .matrix-stage {
+      display: grid;
+      grid-template-columns: 1fr auto 1fr auto 1fr;
+      gap: 16px;
+      align-items: center;
+      margin-top: 28px;
+    }
+    .operator { color: var(--muted); font-size: 2.3rem; font-weight: 300; }
+    .matrix-wrap { min-width: 0; text-align: center; }
+    .matrix-label { margin-bottom: 10px; font-weight: 750; }
+    .matrix {
+      aspect-ratio: 1;
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 3px;
+      padding: 7px;
+      border: 2px solid currentColor;
+      border-left-width: 5px;
+      border-right-width: 5px;
+      border-radius: 8px;
+    }
+    .matrix.a-matrix { color: var(--a); }
+    .matrix.b-matrix { color: var(--b); }
+    .matrix.c-matrix { color: var(--c); }
+    .cell { border-radius: 3px; background: currentColor; opacity: .16; transition: opacity .2s, transform .2s; }
+    .cell.hot { opacity: .95; transform: scale(.93); }
+
+    .controls { display: flex; gap: 16px; align-items: center; margin: 26px 0; }
+    .controls input { width: min(480px, 70%); accent-color: var(--accent); }
+    .pass-badge { min-width: 110px; padding: 6px 12px; border-radius: 999px; background: var(--accent); color: #0b1020; text-align: center; font-weight: 800; }
+    .readout { padding: 18px; border-left: 4px solid var(--accent); background: #0b1628; border-radius: 4px 12px 12px 4px; }
+
+    .flow { display: grid; grid-template-columns: 1fr auto 1fr auto 1fr auto 1fr; gap: 10px; align-items: stretch; margin-top: 22px; }
+    .flow-step { display: grid; place-items: center; min-height: 95px; padding: 14px; border-radius: 12px; background: var(--panel-2); text-align: center; font-weight: 700; }
+    .arrow { display: grid; place-items: center; color: var(--muted); font-size: 1.5rem; }
+
+    pre {
+      overflow-x: auto;
+      margin: 20px 0 0;
+      padding: 22px;
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      background: #07101d;
+      color: #dce9f8;
+      font-size: .88rem;
+      line-height: 1.55;
+      tab-size: 4;
+    }
+    .comment { color: #7f98b5; }
+    .keyword { color: #d4a7ff; }
+    .type { color: #76d7ff; }
+
+    table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+    th, td { padding: 12px 14px; border-bottom: 1px solid var(--line); text-align: left; }
+    th { color: var(--muted); font-size: .85rem; letter-spacing: .06em; text-transform: uppercase; }
+    .good { color: var(--c); font-weight: 750; }
+    .note { padding: 18px; border: 1px solid #806d2a; border-radius: 12px; background: #2a2413; color: #f7e5a8; }
+
+    .focus-stage { display: grid; grid-template-columns: 1fr auto 1fr auto 1fr; gap: 16px; align-items: center; margin-top: 28px; }
+    .focus-matrix {
+      display: grid;
+      grid-template-columns: repeat(6, 1fr);
+      gap: 4px;
+      padding: 8px;
+      border: 2px solid currentColor;
+      border-left-width: 5px;
+      border-right-width: 5px;
+      border-radius: 8px;
+      background: #08111f;
+    }
+    .focus-cell {
+      aspect-ratio: 1;
+      display: grid;
+      place-items: center;
+      border-radius: 4px;
+      color: #07101d;
+      opacity: .1;
+      font-size: clamp(.42rem, .8vw, .68rem);
+      font-weight: 850;
+    }
+    .focus-matrix.a .focus-cell { background: var(--a); }
+    .focus-matrix.b .focus-cell { background: var(--b); }
+    .focus-matrix.c .focus-cell { background: var(--c); }
+    .focus-cell.source, .focus-cell.partner, .focus-cell.result { opacity: 1; }
+    .focus-cell.context { opacity: .48; }
+    .focus-matrix.b .focus-cell.reuse { opacity: .48; outline: 1px solid #ffae5799; }
+    .focus-cell.source { box-shadow: 0 0 0 2px white, 0 0 20px var(--a); transform: scale(1.08); }
+    .focus-matrix.b .focus-cell.partner { opacity: 1; background: var(--b); box-shadow: 0 0 10px #ffae5788; }
+    .focus-cell.result { background: var(--c); box-shadow: 0 0 0 2px white, 0 0 20px var(--c); transform: scale(1.08); }
+    .focus-equations { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; margin-top: 24px; }
+    .focus-equation { padding: 12px; border-radius: 10px; background: #0b1628; text-align: center; font-family: "Cascadia Code", Consolas, monospace; }
+    .legend { display: flex; flex-wrap: wrap; gap: 18px; margin-top: 20px; color: var(--muted); }
+    .legend span::before { content: ""; display: inline-block; width: 11px; height: 11px; margin-right: 7px; border-radius: 2px; background: currentColor; }
+
+    .sharing-demo { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 22px; margin: 28px 0; }
+    .sharing-demo.single { grid-template-columns: minmax(0, 680px); justify-content: center; }
+    .sharing-card { padding: 22px; border: 1px solid var(--line); border-radius: 16px; background: #0b1628; text-align: center; }
+    .global-value { display: inline-block; padding: 8px 13px; border: 1px solid currentColor; border-radius: 999px; font-family: "Cascadia Code", Consolas, monospace; font-weight: 750; }
+    .memory-arrow { position: relative; height: 48px; color: var(--muted); }
+    .memory-arrow::before { content: ""; position: absolute; top: 7px; bottom: 9px; left: 50%; border-left: 2px solid currentColor; }
+    .memory-arrow::after { content: "▼"; position: absolute; bottom: -6px; left: calc(50% - 7px); }
+    .memory-arrow span { position: absolute; left: calc(50% + 12px); top: 7px; white-space: nowrap; font-size: .78rem; }
+    .shared-tile {
+      width: min(256px, 100%);
+      aspect-ratio: 1;
+      display: grid;
+      grid-template-columns: repeat(16, 1fr);
+      gap: 1px;
+      margin: 8px auto;
+      padding: 5px;
+      border: 2px solid currentColor;
+      border-radius: 8px;
+      background: #08111f;
+    }
+    .shared-cell { min-width: 0; border-radius: 1px; background: currentColor; opacity: .1; }
+    .shared-cell.source { opacity: 1; box-shadow: 0 0 0 2px #fff, 0 0 18px currentColor; transform: scale(1.35); z-index: 1; }
+    .shared-cell.partner { opacity: .9; box-shadow: 0 0 8px currentColor; }
+    .partner-caption { margin-top: 24px; color: var(--muted); }
+    .fanout { display: grid; grid-template-columns: repeat(16, 1fr); gap: 3px; margin-top: 8px; }
+    .consumer { aspect-ratio: 1; display: grid; place-items: center; border-radius: 3px; background: var(--c); color: #07150d; font-size: clamp(.42rem, .8vw, .65rem); font-weight: 850; }
+    .fan-label { color: var(--muted); font-size: .86rem; }
+    .sharing-summary { margin-top: 18px; padding: 12px; border-radius: 10px; background: var(--panel-2); }
+
+    @media (max-width: 760px) {
+      main { padding-top: 36px; }
+      section { margin-top: 42px; padding: 20px; }
+      .grid-2, .grid-3, .sharing-demo { grid-template-columns: 1fr; }
+      .matrix-stage, .focus-stage { grid-template-columns: 1fr; }
+      .operator { transform: rotate(90deg); }
+      .matrix { max-width: 280px; margin: 0 auto; }
+      .focus-matrix { width: min(320px, 100%); margin: 0 auto; }
+      .focus-equations { grid-template-columns: 1fr; }
+      .flow { grid-template-columns: 1fr; }
+      .arrow { transform: rotate(90deg); }
+    }
+  </style>
+</head>
+<body>
+<main>
+  <header>
+    <div class="eyebrow">Citrius · CUDA reference backend</div>
+    <h1>How the 16×16 tiled matmul kernel works</h1>
+    <p class="lede">A thread still computes one output value. The speedup comes from 256 threads cooperating: they load small pieces of A and B once into shared memory, then reuse those values sixteen times.</p>
+    <div class="equation"><span class="c">C[M×N]</span> = <span class="a">A[M×K]</span> × <span class="b">B[K×N]</span></div>
+  </header>
+
+  <section>
+    <div class="eyebrow">Start with the math</div>
+    <h2>Find A[3,4] inside one dot product</h2>
+    <p>To calculate <code>C[3,2]</code>, take row 3 of A and column 2 of B. Pair their positions along K and sum the products. The emphasized pair at <code>k=4</code> is <code>A[3,4] × B[4,2]</code>.</p>
+    <div class="focus-stage">
+      <div class="matrix-wrap">
+        <div class="matrix-label a">A: participating row 3</div>
+        <div id="focusA" class="focus-matrix a" aria-label="Matrix A with row 3 highlighted and A 3 4 emphasized"></div>
+      </div>
+      <div class="operator">×</div>
+      <div class="matrix-wrap">
+        <div class="matrix-label b">B: column 2 dot product + row 4 reuse</div>
+        <div id="focusB" class="focus-matrix b" aria-label="Matrix B with column 2 and row 4 highlighted and B 4 2 emphasized"></div>
+      </div>
+      <div class="operator">→</div>
+      <div class="matrix-wrap">
+        <div class="matrix-label c">C: one output C[3,2]</div>
+        <div id="focusC" class="focus-matrix c" aria-label="Matrix C with C 3 2 highlighted"></div>
+      </div>
+    </div>
+    <div class="focus-equations">
+      <div class="focus-equation"><span class="a">A[3,0]</span> × <span class="b">B[0,2]</span><br>the k=0 term</div>
+      <div class="focus-equation"><span class="a">A[3,4]</span> × <span class="b">B[4,2]</span><br>the highlighted k=4 term</div>
+      <div class="focus-equation">Σ over every k<br>= <span class="c">C[3,2]</span></div>
+    </div>
+    <div class="legend">
+      <span class="a">A row used by the dot product</span>
+      <span class="b">B column 2 for the dot product; row 4 for A[3,4] reuse</span>
+      <span class="c">resulting C element</span>
+    </div>
+    <p class="note"><strong>A[3,4] is still reusable:</strong> this diagram isolates <code>C[3,2]</code>. When calculating another output column <code>C[3,j]</code>, the same A value pairs with <code>B[4,j]</code>. Section 4 visualizes those sixteen consumers inside one CUDA block.</p>
+  </section>
+
+  <section>
+    <h2>1. Map one block to one output tile</h2>
+    <p>A two-dimensional block contains <code>16 × 16 = 256</code> threads. Block <code>(blockIdx.x, blockIdx.y)</code> owns one 16×16 region of C, and thread <code>(threadIdx.x, threadIdx.y)</code> owns one element inside it.</p>
+    <div class="grid-3">
+      <div class="card"><div class="number">1</div><h3>Grid</h3><p class="muted">Contains every block required to cover the M×N output.</p></div>
+      <div class="card"><div class="number">16×16</div><h3>Block</h3><p class="muted">Produces one 16×16 output tile using 256 threads.</p></div>
+      <div class="card"><div class="number">1</div><h3>Thread</h3><p class="muted">Accumulates one scalar <code>C[row, col]</code>.</p></div>
+    </div>
+    <pre><span class="type">row</span> = blockIdx.y * 16 + threadIdx.y;
+<span class="type">col</span> = blockIdx.x * 16 + threadIdx.x;
+
+<span class="comment">// This thread owns C[row, col].</span>
+<span class="type">float</span> total = 0.0f;</pre>
+  </section>
+
+  <section>
+    <h2>2. Walk across K, sixteen values at a time</h2>
+    <p>For this visualization, K is 64, so the block performs four passes. Move the slider to see which A and B slices feed the same output tile in C.</p>
+    <div class="controls">
+      <input id="pass" type="range" min="0" max="3" value="0" aria-label="K tile pass">
+      <output id="passBadge" class="pass-badge">Pass 1 / 4</output>
+    </div>
+    <div class="matrix-stage">
+      <div class="matrix-wrap">
+        <div class="matrix-label a">A: one tile moves right across K</div>
+        <div id="matrixA" class="matrix a-matrix" aria-label="Matrix A tile illustration"></div>
+      </div>
+      <div class="operator">×</div>
+      <div class="matrix-wrap">
+        <div class="matrix-label b">B: one tile moves down across K</div>
+        <div id="matrixB" class="matrix b-matrix" aria-label="Matrix B tile illustration"></div>
+      </div>
+      <div class="operator">→</div>
+      <div class="matrix-wrap">
+        <div class="matrix-label c">C: one fixed 16×16 output tile</div>
+        <div id="matrixC" class="matrix c-matrix" aria-label="Matrix C tile illustration"></div>
+      </div>
+    </div>
+    <div id="readout" class="readout"></div>
+  </section>
+
+  <section>
+    <h2>3. Cooperatively load shared memory</h2>
+    <p>Each of the 256 threads loads one A value and one B value. Together they fill two complete 16×16 arrays in shared memory.</p>
+    <div class="grid-2">
+      <div class="card">
+        <h3 class="a">A tile load</h3>
+        <p><code>a_tile[ty][tx] = A[row][start + tx]</code></p>
+        <p class="muted">Adjacent x threads read adjacent A columns, giving coalesced global-memory access.</p>
+      </div>
+      <div class="card">
+        <h3 class="b">B tile load</h3>
+        <p><code>b_tile[ty][tx] = B[start + ty][col]</code></p>
+        <p class="muted">Adjacent x threads read adjacent B columns, also giving coalesced access.</p>
+      </div>
+    </div>
+    <div class="flow">
+      <div class="flow-step">Load one A and one B value per thread</div><div class="arrow">→</div>
+      <div class="flow-step"><code>__syncthreads()</code><br>tile is complete</div><div class="arrow">→</div>
+      <div class="flow-step">Perform 16 multiply-adds per thread</div><div class="arrow">→</div>
+      <div class="flow-step"><code>__syncthreads()</code><br>safe to overwrite</div>
+    </div>
+  </section>
+
+  <section>
+    <h2>4. Reuse each loaded value sixteen times</h2>
+    <p>Thread <code>(tx, ty)</code> reads row <code>ty</code> from the shared A tile and column <code>tx</code> from the shared B tile. That creates sixteen contributions to its private accumulator.</p>
+    <p>The diagram follows CUDA block <code>(0,0)</code>, K pass 0, and the input value <code>A[3,4]</code>. Non-zero coordinates make the loader and consumer roles easier to distinguish.</p>
+    <pre><span class="keyword">#pragma</span> unroll
+<span class="keyword">for</span> (<span class="type">int</span> inner = 0; inner &lt; 16; ++inner) {
+    total += a_tile[threadIdx.y][inner]
+           * b_tile[inner][threadIdx.x];
+}</pre>
+    <div class="sharing-demo single">
+      <div class="sharing-card">
+        <h3 class="a">Follow one value: A[3,4]</h3>
+        <div class="global-value a">global memory: A[3][4]</div>
+        <div class="memory-arrow"><span>one global load</span></div>
+        <div id="sharedA" class="shared-tile a" aria-label="A shared tile with cell row 3 column 4 selected"></div>
+        <div><code>a_tile[3][4]</code></div>
+        <div class="partner-caption">Each consumer pairs that same A value with one value from row 4 of the shared B tile:</div>
+        <div id="sharedBPartners" class="shared-tile b" aria-label="B shared tile with row 4 highlighted"></div>
+        <div><code>b_tile[4][0…15]</code></div>
+        <div class="memory-arrow"><span>16 shared reads</span></div>
+        <div id="aConsumers" class="fanout" aria-label="Sixteen output threads consuming the A value"></div>
+        <div class="fan-label">threads <code>(tx=0…15, ty=3)</code> → C[3,0] through C[3,15]</div>
+        <div class="sharing-summary"><strong>Loader:</strong> thread <code>(4,3)</code> reads A[3,4] once from global memory.<br><strong>Consumers:</strong> all 16 threads in output row 3 read <code>a_tile[3][4]</code> from shared memory.</div>
+      </div>
+    </div>
+    <table>
+      <thead><tr><th>Within one output block</th><th>Naive kernel</th><th>Tiled kernel</th></tr></thead>
+      <tbody>
+        <tr><td>Output values</td><td>256</td><td>256</td></tr>
+        <tr><td>Threads</td><td>256</td><td>256</td></tr>
+        <tr><td>Global loads across K</td><td>512K floats</td><td class="good">32K floats</td></tr>
+        <tr><td>Ideal load reduction</td><td>1×</td><td class="good">16×</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <section>
+    <h2>5. Handle matrices that are not multiples of 16</h2>
+    <p>The grid uses ceiling division, so it may create blocks that extend beyond a matrix edge. Invalid input positions load zero; invalid output threads still participate in both barriers but skip their final store.</p>
+    <div class="grid-2">
+      <pre><span class="comment">// Partial A or B tile:</span>
+a_tile[ty][tx] = valid_a
+    ? A[row * K + a_col]
+    : 0.0f;
+
+b_tile[ty][tx] = valid_b
+    ? B[b_row * N + col]
+    : 0.0f;</pre>
+      <pre><span class="comment">// Partial C tile:</span>
+<span class="keyword">if</span> (row &lt; M &amp;&amp; col &lt; N) {
+    C[row * N + col] = total;
+}</pre>
+    </div>
+    <p class="note"><strong>Why there is no early return:</strong> every thread in a block must reach both <code>__syncthreads()</code> barriers. Returning only the out-of-range threads could leave the remaining threads waiting forever.</p>
+  </section>
+
+  <section>
+    <h2>The complete algorithm</h2>
+    <pre><span class="keyword">constexpr</span> <span class="type">int</span> tile = 16;
+
+<span class="keyword">__global__</span> <span class="type">void</span> matmul_f32(A, B, C, M, K, N) {
+    <span class="keyword">__shared__</span> <span class="type">float</span> a_tile[tile][tile];
+    <span class="keyword">__shared__</span> <span class="type">float</span> b_tile[tile][tile];
+
+    row = blockIdx.y * tile + threadIdx.y;
+    col = blockIdx.x * tile + threadIdx.x;
+    <span class="type">float</span> total = 0;
+
+    <span class="keyword">for</span> (start = 0; start &lt; K; start += tile) {
+        <span class="comment">// All threads cooperatively stage the next tiles.</span>
+        a_tile[ty][tx] = valid A value or zero;
+        b_tile[ty][tx] = valid B value or zero;
+        __syncthreads();
+
+        <span class="comment">// Each thread updates its one output accumulator.</span>
+        <span class="keyword">for</span> (inner = 0; inner &lt; tile; ++inner)
+            total += a_tile[ty][inner] * b_tile[inner][tx];
+        __syncthreads();
+    }
+
+    <span class="keyword">if</span> (row &lt; M &amp;&amp; col &lt; N)
+        C[row * N + col] = total;
+}</pre>
+    <p class="muted">Production source: <code>src/devices/cuda/cuda_device.cu</code>. This remains a readable reference kernel; cuBLAS and CUTLASS use deeper register tiling, pipelining, architecture-specific instructions, and runtime kernel selection.</p>
+  </section>
+</main>
+
+<script>
+  const makeMatrix = (element) => {
+    for (let i = 0; i < 16; ++i) {
+      const cell = document.createElement('span');
+      cell.className = 'cell';
+      element.appendChild(cell);
+    }
+  };
+
+  const matrixA = document.querySelector('#matrixA');
+  const matrixB = document.querySelector('#matrixB');
+  const matrixC = document.querySelector('#matrixC');
+  [matrixA, matrixB, matrixC].forEach(makeMatrix);
+
+  const makeFocusMatrix = (element, role) => {
+    for (let row = 0; row < 6; ++row) {
+      for (let column = 0; column < 6; ++column) {
+        const cell = document.createElement('span');
+        cell.className = 'focus-cell';
+        cell.textContent = `${row},${column}`;
+        if (role === 'a' && row === 3) cell.classList.add('context');
+        if (role === 'a' && row === 3 && column === 4) cell.classList.add('source');
+        if (role === 'b' && column === 2) cell.classList.add('context');
+        if (role === 'b' && row === 4) {
+          cell.classList.add('reuse');
+          cell.title = `B[4,${column}] reuses A[3,4] when calculating C[3,${column}]`;
+        }
+        if (role === 'b' && row === 4 && column === 2) {
+          cell.classList.add('partner');
+          cell.style.opacity = '1';
+          cell.title = 'B[4,2] pairs with A[3,4] for the k=4 term';
+        }
+        if (role === 'c' && row === 3 && column === 2) cell.classList.add('result');
+        element.appendChild(cell);
+      }
+    }
+  };
+
+  makeFocusMatrix(document.querySelector('#focusA'), 'a');
+  makeFocusMatrix(document.querySelector('#focusB'), 'b');
+  makeFocusMatrix(document.querySelector('#focusC'), 'c');
+
+  const makeSharedTile = (element, selectedRow, selectedColumn) => {
+    for (let row = 0; row < 16; ++row) {
+      for (let column = 0; column < 16; ++column) {
+        const cell = document.createElement('span');
+        cell.className = 'shared-cell';
+        if (row === selectedRow && column === selectedColumn) cell.classList.add('source');
+        element.appendChild(cell);
+      }
+    }
+  };
+
+  const makePartnerTile = (element, selectedRow) => {
+    for (let row = 0; row < 16; ++row) {
+      for (let column = 0; column < 16; ++column) {
+        const cell = document.createElement('span');
+        cell.className = 'shared-cell';
+        if (row === selectedRow) cell.classList.add('partner');
+        cell.title = row === selectedRow
+          ? `B[4,${column}] pairs with A[3,4] to contribute to C[3,${column}]`
+          : '';
+        element.appendChild(cell);
+      }
+    }
+  };
+
+  const makeConsumers = (element) => {
+    for (let varying = 0; varying < 16; ++varying) {
+      const thread = document.createElement('span');
+      thread.className = 'consumer';
+      thread.textContent = varying;
+      thread.title = `thread (${varying}, 3) reads a_tile[3][4] for C[3,${varying}]`;
+      element.appendChild(thread);
+    }
+  };
+
+  makeSharedTile(document.querySelector('#sharedA'), 3, 4);
+  makePartnerTile(document.querySelector('#sharedBPartners'), 4);
+  makeConsumers(document.querySelector('#aConsumers'));
+
+  const slider = document.querySelector('#pass');
+  const badge = document.querySelector('#passBadge');
+  const readout = document.querySelector('#readout');
+
+  function renderPass() {
+    const pass = Number(slider.value);
+    const start = pass * 16;
+    const outputTileRow = 1;
+    const outputTileColumn = 1;
+    badge.value = `Pass ${pass + 1} / 4`;
+    badge.textContent = badge.value;
+    matrixA.querySelectorAll('.cell').forEach((cell, index) => {
+      const tileRow = Math.floor(index / 4);
+      const tileColumn = index % 4;
+      cell.classList.toggle('hot', tileRow === outputTileRow && tileColumn === pass);
+    });
+    matrixB.querySelectorAll('.cell').forEach((cell, index) => {
+      const tileRow = Math.floor(index / 4);
+      const tileColumn = index % 4;
+      cell.classList.toggle('hot', tileRow === pass && tileColumn === outputTileColumn);
+    });
+    matrixC.querySelectorAll('.cell').forEach((cell, index) => {
+      cell.classList.toggle('hot', index === outputTileRow * 4 + outputTileColumn);
+    });
+    readout.innerHTML = `<strong>start = ${start}</strong> — load A columns <code>${start}…${start + 15}</code> and B rows <code>${start}…${start + 15}</code>, then add sixteen products to every accumulator in this C tile.`;
+  }
+
+  slider.addEventListener('input', renderPass);
+  renderPass();
+</script>
+</body>
+</html>
