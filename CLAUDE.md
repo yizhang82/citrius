@@ -173,9 +173,9 @@ reference CUDA kernel as the default instead using:
 The build default can be overridden at runtime without rebuilding:
 
 ```bash
-CITRIUS_CUDA_BACKEND=cublas ./build/matmul_benchmark --cuda
-CITRIUS_CUDA_BACKEND=cutlass ./build/matmul_benchmark --cuda
-CITRIUS_CUDA_BACKEND=reference ./build/matmul_benchmark --cuda
+CITRIUS_CUDA_BACKEND=cublas ./build/operations_benchmark --cuda
+CITRIUS_CUDA_BACKEND=cutlass ./build/operations_benchmark --cuda
+CITRIUS_CUDA_BACKEND=reference ./build/operations_benchmark --cuda
 ```
 
 On Windows PowerShell, set `$env:CITRIUS_CUDA_BACKEND` to `cublas`, `cutlass`, or
@@ -242,6 +242,7 @@ Run the end-to-end Float32 matmul benchmark on Windows with:
 ```bat
 benchmark.bat --cpu
 benchmark.bat --cuda
+benchmark.bat --all
 ```
 
 The `examples` directory contains one program that runs add, sub, and matmul. It is built

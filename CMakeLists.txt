@@ -81,10 +81,10 @@ target_compile_features(citrius PUBLIC cxx_std_20)
 add_executable(example_operations examples/operations.cpp)
 target_link_libraries(example_operations PRIVATE citrius)
 
-add_executable(matmul_benchmark benchmarks/matmul_benchmark.cpp)
-target_link_libraries(matmul_benchmark PRIVATE citrius)
+add_executable(operations_benchmark benchmarks/operations_benchmark.cpp)
+target_link_libraries(operations_benchmark PRIVATE citrius)
 if(CITRIUS_ENABLE_CUDA)
-    target_compile_definitions(matmul_benchmark PRIVATE CITRIUS_HAS_CUDA=1)
+    target_compile_definitions(operations_benchmark PRIVATE CITRIUS_HAS_CUDA=1)
 endif()
 
 enable_testing()
