@@ -246,9 +246,16 @@ test.bat --clean --cuda
 Run the end-to-end Float32 matmul benchmark on Windows with:
 
 ```bat
-benchmark.bat --cpu
-benchmark.bat --cuda
-benchmark.bat --all
+benchmark.bat operations --cpu
+benchmark.bat operations --cuda
+benchmark.bat operations --all
+```
+
+Run the isolated CUDA add/sub kernel tuning benchmark with:
+
+```bat
+benchmark.bat add-kernel
+benchmark.bat add-kernel --size 4096 --iterations 100 --samples 5
 ```
 
 The `examples` directory contains one program that runs add, sub, and matmul. It is built

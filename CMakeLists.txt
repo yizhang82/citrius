@@ -86,6 +86,16 @@ add_executable(operations_benchmark benchmarks/operations_benchmark.cpp)
 target_link_libraries(operations_benchmark PRIVATE citrius)
 if(CITRIUS_ENABLE_CUDA)
     target_compile_definitions(operations_benchmark PRIVATE CITRIUS_HAS_CUDA=1)
+
+    add_executable(cuda_elementwise_benchmark
+        benchmarks/cuda_elementwise_benchmark.cu
+    )
+    target_link_libraries(cuda_elementwise_benchmark PRIVATE CUDA::cudart)
+    set_target_properties(cuda_elementwise_benchmark PROPERTIES
+        CUDA_ARCHITECTURES native
+        CUDA_STANDARD 20
+        CUDA_STANDARD_REQUIRED ON
+    )
 endif()
 
 enable_testing()

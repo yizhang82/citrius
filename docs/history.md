@@ -145,3 +145,71 @@ sub            512      50        0.010        0.030        1.522       25.680  
 add           1024      50        0.011        0.017        0.838       95.256          1.000
 sub           1024      50        0.010        0.017        0.849      101.764          0.500
 ```
+
+* Added different stragies
+
+```
+CUDA elementwise kernel benchmark
+Device: NVIDIA GeForce RTX 5070 Ti (70 SMs)
+Tensor: 1024 x 1024 (1048576 Float32 elements)
+Timing: 7 samples x 1000 launches; allocations, copies, and synchronization excluded
+Bandwidth counts two reads plus one write (12 bytes/element).
+
+Op      Configuration            Blocks      Threads   Elem/thr     Best us      Avg us         GB/s
+add     exact grid                 4096      1048576       1.00        8.42        9.04      1494.08
+add     grid-stride 1xSM             70        17920      58.51       10.40       10.64      1210.39
+add     grid-stride 2xSM            140        35840      29.26        8.20        8.93      1534.63
+add     grid-stride 4xSM            280        71680      14.63       11.37       12.07      1106.79
+add     grid-stride 8xSM            560       143360       7.31        7.77        8.12      1620.26
+add     grid-stride 16xSM          1120       286720       3.66        7.89        8.23      1595.12
+add     grid-stride 32xSM          2240       573440       1.83        7.55        8.05      1665.58
+add     fixed 2 elem/thread        2048       524288       2.00        7.83        8.20      1606.64
+add     fixed 4 elem/thread        1024       262144       4.00        7.69        8.15      1635.83
+add     fixed 8 elem/thread         512       131072       8.00        7.15        7.81      1760.59
+add     fixed 16 elem/thread        256        65536      16.00        7.03        7.64      1790.73
+add     fixed 32 elem/thread        128        32768      32.00       12.39       12.61      1015.51
+sub     exact grid                 4096      1048576       1.00        8.97        9.53      1402.89
+sub     grid-stride 1xSM             70        17920      58.51       10.40       10.75      1209.41
+sub     grid-stride 2xSM            140        35840      29.26        8.49        9.04      1482.78
+sub     grid-stride 4xSM            280        71680      14.63        8.01        8.50      1570.53
+sub     grid-stride 8xSM            560       143360       7.31        7.22        7.98      1741.77
+sub     grid-stride 16xSM          1120       286720       3.66        8.28       11.38      1519.79
+sub     grid-stride 32xSM          2240       573440       1.83        7.37        7.80      1706.63
+sub     fixed 2 elem/thread        2048       524288       2.00        7.51        8.06      1676.12
+sub     fixed 4 elem/thread        1024       262144       4.00        7.52        7.92      1673.28
+sub     fixed 8 elem/thread         512       131072       8.00       11.19       11.54      1124.73
+sub     fixed 16 elem/thread        256        65536      16.00        7.33        7.80      1716.76
+sub     fixed 32 elem/thread        128        32768      32.00        8.79        9.15      1431.34
+
+CUDA elementwise kernel benchmark
+Device: NVIDIA GeForce RTX 5070 Ti (70 SMs)
+Tensor: 2048 x 2048 (4194304 Float32 elements)
+Timing: 7 samples x 1000 launches; allocations, copies, and synchronization excluded
+Bandwidth counts two reads plus one write (12 bytes/element).
+
+Op      Configuration            Blocks      Threads   Elem/thr     Best us      Avg us         GB/s
+add     exact grid                16384      4194304       1.00       32.70       33.00      1539.26
+add     grid-stride 1xSM             70        17920     234.06       67.52       67.72       745.48
+add     grid-stride 2xSM            140        35840     117.03       38.30       38.60      1314.08
+add     grid-stride 4xSM            280        71680      58.51       24.65       24.84      2042.25
+add     grid-stride 8xSM            560       143360      29.26       24.68       24.76      2039.78
+add     grid-stride 16xSM          1120       286720      14.63       22.74       23.03      2213.74
+add     grid-stride 32xSM          2240       573440       7.31       22.90       23.36      2197.70
+add     fixed 2 elem/thread        8192      2097152       2.00       24.50       24.84      2054.27
+add     fixed 4 elem/thread        4096      1048576       4.00       22.88       24.60      2199.53
+add     fixed 8 elem/thread        2048       524288       8.00       22.85       23.30      2202.83
+add     fixed 16 elem/thread       1024       262144      16.00       22.90       23.42      2198.09
+add     fixed 32 elem/thread        512       131072      32.00       26.46       26.85      1902.33
+sub     exact grid                16384      4194304       1.00       32.74       33.01      1537.33
+sub     grid-stride 1xSM             70        17920     234.06       67.52       68.08       745.46
+sub     grid-stride 2xSM            140        35840     117.03       38.28       38.70      1314.90
+sub     grid-stride 4xSM            280        71680      58.51       24.65       24.74      2041.81
+sub     grid-stride 8xSM            560       143360      29.26       24.69       24.74      2038.69
+sub     grid-stride 16xSM          1120       286720      14.63       22.70       22.95      2216.97
+sub     grid-stride 32xSM          2240       573440       7.31       23.25       23.35      2164.59
+sub     fixed 2 elem/thread        8192      2097152       2.00       24.60       24.67      2046.31
+sub     fixed 4 elem/thread        4096      1048576       4.00       22.78       23.28      2209.03
+sub     fixed 8 elem/thread        2048       524288       8.00       23.02       23.98      2186.62
+sub     fixed 16 elem/thread       1024       262144      16.00       23.60       24.01      2133.10
+sub     fixed 32 elem/thread        512       131072      32.00       26.70       27.10      1885.03
+```
