@@ -15,6 +15,7 @@ option(CITRIUS_ENABLE_CUDA "Build Citrius with NVIDIA CUDA support" OFF)
 add_library(citrius
     src/cpu_device.cpp
     src/cpu_storage.cpp
+    src/operations.cpp
     src/tensor.cpp
     src/tensor_factory.cpp
     src/types.cpp
@@ -82,6 +83,7 @@ include(GoogleTest)
 
 add_executable(tensor_test
     tests/cpu_device_test.cpp
+    tests/operations_test.cpp
     tests/tensor_test.cpp
 )
 

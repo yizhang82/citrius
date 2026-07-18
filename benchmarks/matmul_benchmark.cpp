@@ -1,10 +1,6 @@
-#include "cpu_device.h"
 #include "cpu_storage.h"
+#include "operations.h"
 #include "tensor_factory.h"
-
-#ifdef CITRIUS_HAS_CUDA
-#include "cuda_device.h"
-#endif
 
 #include <algorithm>
 #include <chrono>
@@ -70,26 +66,24 @@ Result measure(std::int64_t size, int iterations, Operation operation) {
 }
 
 Result benchmark_cpu(std::int64_t size, int iterations) {
-    const citrius::CpuDeviceImpl device;
     const auto a_values = input_values(size * size, 3);
     const auto b_values = input_values(size * size, 7);
     return measure(size, iterations, [&] {
         citrius::Tensor a(a_values, {size, size});
         auto b = citrius::TensorFactory::from_vector(b_values, {size, size});
-        return cpu_checksum(device.matmul(a, b));
+        return cpu_checksum(citrius::matmul(a, b));
     });
 }
 
 #ifdef CITRIUS_HAS_CUDA
 Result benchmark_cuda(std::int64_t size, int iterations) {
-    const citrius::CudaDeviceImpl cuda;
     const auto a_values = input_values(size * size, 3);
     const auto b_values = input_values(size * size, 7);
     return measure(size, iterations, [&] {
         citrius::Tensor a(a_values, {size, size}, citrius::Device::cuda());
         auto b = citrius::TensorFactory::from_vector(
             b_values, {size, size}, citrius::Device::cuda());
-        auto output = cuda.matmul(a, b);
+        auto output = citrius::matmul(a, b);
         return cpu_checksum(output);
     });
 }

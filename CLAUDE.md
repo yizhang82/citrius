@@ -18,6 +18,10 @@ auto cpu_values = values.to(Device::cpu());
 `from_vector` entry points. `Tensor::to` returns a shallow copy when the requested
 device already matches and transfers through host memory otherwise.
 
+Top-level `citrius::add`, `citrius::sub`, and `citrius::matmul` dispatch through the
+input tensors' device and reject device mismatches. Tensor `+`, `-`, and `*` delegate
+to those functions; `*` means matrix multiplication.
+
 `Tensor` stores metadata directly:
 
 - `Shape`

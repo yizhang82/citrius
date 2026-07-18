@@ -2,6 +2,7 @@
 #include "cpu_storage.h"
 #include "cuda_device.h"
 #include "cuda_storage.h"
+#include "operations.h"
 
 #include <gtest/gtest.h>
 
@@ -77,4 +78,12 @@ TEST(CudaDeviceTest, TensorConstructorAndToTransferValues) {
     const auto cpu_tensor = cuda_tensor.to(citrius::Device::cpu());
     auto storage = std::static_pointer_cast<citrius::CpuMemTensorStorageImpl>(cpu_tensor.storage());
     EXPECT_EQ(std::vector<float>(storage->data_as<float>(), storage->data_as<float>() + 4), input);
+}
+
+TEST(CudaDeviceTest, TopLevelOperationsDispatchToCuda) {
+    std::string error; auto device = make_cuda_device(&error); if (!device) GTEST_SKIP() << error;
+    const citrius::Tensor left(std::vector<float>{1, 2}, citrius::Device::cuda());
+    const citrius::Tensor right(std::vector<float>{10, 20}, citrius::Device::cuda());
+
+    EXPECT_EQ(values(citrius::add(left, right)), std::vector<float>({11, 22}));
 }
