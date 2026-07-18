@@ -39,11 +39,13 @@ Current storage implementations:
 
 - `CpuMemTensorStorageImpl` in `include/cpu_storage.h` and `src/cpu_storage.cpp`
 - `MetalMemTensorStorageImpl` in `include/metal_storage.h` and `src/metal_storage.mm`
+- `CudaMemTensorStorageImpl` in `include/cuda_storage.h` and `src/cuda_storage.cu`
 
 Current device implementations:
 
 - `CpuDeviceImpl` in `include/cpu_device.h` and `src/cpu_device.cpp`
 - `MetalDeviceImpl` in `include/metal_device.h` and `src/metal_device.mm`
+- `CudaDeviceImpl` in `include/cuda_device.h` and `src/cuda_device.cu`
 
 The device layer owns execution. Storage owns memory only. Arithmetic should live on `IDevice` implementations, not in storage.
 
@@ -57,6 +59,9 @@ The device layer owns execution. Storage owns memory only. Arithmetic should liv
 - `matmul`
 
 `MetalDeviceImpl` supports the same operations when Metal is enabled.
+
+`CudaDeviceImpl` supports the same operations when CUDA is enabled. It accepts a CUDA
+device index in its constructor and preserves that index in tensors and storage.
 
 Current operation constraints:
 
@@ -79,6 +84,10 @@ Metal expects:
 ```cpp
 TensorStorageType::MetalMemory
 ```
+
+CUDA expects `TensorStorageType::CudaMemory`. CUDA operations copy CPU inputs to the
+selected CUDA device; explicit `ensure_storage` calls reject incompatible storage unless
+`ConversionPolicy::CopyToDevice` is requested.
 
 `MetalDeviceImpl::ensure_storage` can copy CPU storage to Metal storage when called with:
 
@@ -123,6 +132,15 @@ Build with Metal support:
 ./build.sh --metal
 ```
 
+Build with CUDA Toolkit support:
+
+```bash
+./build.sh --cuda
+```
+
+Metal and CUDA may be enabled together with `./build.sh --metal --cuda` on a platform
+that provides both toolchains.
+
 Clean Metal build:
 
 ```bash
@@ -134,6 +152,7 @@ On Windows, build with MSVC using:
 ```bat
 build.bat
 build.bat --clean --config Debug
+build.bat --clean --cuda
 ```
 
 The default Windows configuration is `Release`. If GoogleTest is not already installed,
@@ -170,12 +189,19 @@ On Windows, run the tests with:
 ```bat
 test.bat
 test.bat --clean --config Debug
+test.bat --clean --cuda
 ```
 
 Run tests with Metal enabled:
 
 ```bash
 ./test.sh --metal
+```
+
+Run tests with CUDA enabled:
+
+```bash
+./test.sh --cuda
 ```
 
 Run tests with Metal enabled from a clean build:

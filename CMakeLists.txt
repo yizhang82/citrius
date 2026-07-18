@@ -10,6 +10,7 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
 option(CITRIUS_ENABLE_METAL "Build Citrius with Apple Metal support" OFF)
+option(CITRIUS_ENABLE_CUDA "Build Citrius with NVIDIA CUDA support" OFF)
 
 add_library(citrius
     src/cpu_device.cpp
@@ -31,6 +32,18 @@ if(CITRIUS_ENABLE_METAL)
         PUBLIC
             "-framework Foundation"
             "-framework Metal"
+    )
+endif()
+
+if(CITRIUS_ENABLE_CUDA)
+    enable_language(CUDA)
+    find_package(CUDAToolkit REQUIRED)
+    target_sources(citrius PRIVATE src/cuda_device.cu src/cuda_storage.cu)
+    target_link_libraries(citrius PUBLIC CUDA::cudart)
+    set_target_properties(citrius PROPERTIES
+        CUDA_ARCHITECTURES native
+        CUDA_STANDARD 20
+        CUDA_STANDARD_REQUIRED ON
     )
 endif()
 
@@ -68,6 +81,10 @@ if(CITRIUS_ENABLE_METAL)
         PRIVATE
             tests/metal_device_test.cpp
     )
+endif()
+
+if(CITRIUS_ENABLE_CUDA)
+    target_sources(tensor_test PRIVATE tests/cuda_device_test.cpp)
 endif()
 
 target_link_libraries(tensor_test

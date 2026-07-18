@@ -4,9 +4,10 @@ set -euo pipefail
 BUILD_DIR="build"
 CLEAN=0
 METAL=0
+CUDA=0
 
 usage() {
-    echo "Usage: ./build.sh [--clean] [--metal]"
+    echo "Usage: ./build.sh [--clean] [--metal] [--cuda]"
 }
 
 while [[ $# -gt 0 ]]; do
@@ -17,6 +18,10 @@ while [[ $# -gt 0 ]]; do
             ;;
         --metal)
             METAL=1
+            shift
+            ;;
+        --cuda)
+            CUDA=1
             shift
             ;;
         -h|--help)
@@ -34,10 +39,8 @@ if [[ "$CLEAN" -eq 1 ]]; then
     rm -rf "$BUILD_DIR"
 fi
 
-if [[ "$METAL" -eq 1 ]]; then
-    cmake -S . -B "$BUILD_DIR" -DCITRIUS_ENABLE_METAL=ON
-else
-    cmake -S . -B "$BUILD_DIR" -DCITRIUS_ENABLE_METAL=OFF
-fi
+cmake -S . -B "$BUILD_DIR" \
+    -DCITRIUS_ENABLE_METAL=$([[ "$METAL" -eq 1 ]] && echo ON || echo OFF) \
+    -DCITRIUS_ENABLE_CUDA=$([[ "$CUDA" -eq 1 ]] && echo ON || echo OFF)
 
 cmake --build "$BUILD_DIR"
