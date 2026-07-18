@@ -8,37 +8,6 @@
 
 namespace citrius {
 
-class TensorImpl {
-public:
-    TensorImpl(Shape shape, DType dtype, Device device, std::shared_ptr<ITensorStorage> storage)
-        : shape_(std::move(shape)),
-          dtype_(dtype),
-          device_(device),
-          storage_(std::move(storage)) {}
-
-    const Shape& shape() const {
-        return shape_;
-    }
-
-    DType dtype() const {
-        return dtype_;
-    }
-
-    Device device() const {
-        return device_;
-    }
-
-    std::shared_ptr<ITensorStorage> storage() const {
-        return storage_;
-    }
-
-private:
-    Shape shape_;
-    DType dtype_;
-    Device device_;
-    std::shared_ptr<ITensorStorage> storage_;
-};
-
 Tensor::Tensor() = default;
 
 Tensor::Tensor(Shape shape, DType dtype, Device device)
@@ -65,22 +34,26 @@ Tensor::Tensor(Shape shape, DType dtype, Device device)
 }
 
 Tensor::Tensor(Shape shape, DType dtype, Device device, std::shared_ptr<ITensorStorage> storage)
-    : impl_(std::make_shared<TensorImpl>(std::move(shape), dtype, device, std::move(storage))) {}
+    : shape_(std::move(shape)),
+      dtype_(dtype),
+      device_(device),
+      storage_(std::move(storage)),
+      defined_(true) {}
 
 const Shape& Tensor::shape() const {
-    return impl_->shape();
+    return shape_;
 }
 
 DType Tensor::dtype() const {
-    return impl_->dtype();
+    return dtype_;
 }
 
 Device Tensor::device() const {
-    return impl_->device();
+    return device_;
 }
 
 std::shared_ptr<ITensorStorage> Tensor::storage() const {
-    return impl_->storage();
+    return storage_;
 }
 
 std::size_t Tensor::ndim() const {
@@ -99,7 +72,7 @@ std::int64_t Tensor::numel() const {
 }
 
 bool Tensor::defined() const {
-    return impl_ != nullptr;
+    return defined_;
 }
 
 } // namespace citrius

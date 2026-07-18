@@ -6,12 +6,13 @@ Citrius is a small C++ tensor library skeleton inspired by PyTorch, currently fo
 
 The public tensor API is in `include/tensor.h`.
 
-`Tensor` is a lightweight handle around `TensorImpl`. It stores:
+`Tensor` stores metadata directly:
 
 - `Shape`
 - `DType`
 - `Device`
 - `std::shared_ptr<ITensorStorage>`
+- a `defined_` flag
 
 Common types live in `include/types.h`:
 
@@ -23,6 +24,8 @@ Common types live in `include/types.h`:
 - `dtype_size`
 
 Storage is abstracted through `ITensorStorage` in `include/storage.h`. Concrete storage implementations advertise their backend through `ITensorStorage::type()`, then compatible devices check the type before casting to the concrete implementation.
+
+Tensor copies are shallow with respect to storage: tensor metadata is copied by value, while the underlying `ITensorStorage` is shared through `std::shared_ptr`.
 
 Current storage implementations:
 

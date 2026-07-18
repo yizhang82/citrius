@@ -17,3 +17,15 @@ TEST(TensorTest, ConstructedTensorExposesMetadata) {
     EXPECT_EQ(tensor.ndim(), 2);
     EXPECT_EQ(tensor.numel(), 6);
 }
+
+TEST(TensorTest, CopiesShareStorage) {
+    citrius::Tensor tensor({2, 3}, citrius::DType::Float32, citrius::Device::cpu());
+
+    citrius::Tensor copy = tensor;
+
+    EXPECT_TRUE(copy.defined());
+    EXPECT_EQ(copy.shape(), tensor.shape());
+    EXPECT_EQ(copy.dtype(), tensor.dtype());
+    EXPECT_EQ(copy.device(), tensor.device());
+    EXPECT_EQ(copy.storage(), tensor.storage());
+}

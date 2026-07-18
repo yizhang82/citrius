@@ -8,7 +8,6 @@
 namespace citrius {
 
 class ITensorStorage;
-class TensorImpl;
 
 class Tensor {
 public:
@@ -26,7 +25,11 @@ public:
     bool defined() const;
 
 private:
-    std::shared_ptr<TensorImpl> impl_;
+    Shape shape_;
+    DType dtype_ = DType::Float32;
+    Device device_ = Device::cpu();
+    std::shared_ptr<ITensorStorage> storage_;
+    bool defined_ = false;
 };
 
 } // namespace citrius
