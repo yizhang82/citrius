@@ -213,3 +213,88 @@ sub     fixed 8 elem/thread        2048       524288       8.00       23.02     
 sub     fixed 16 elem/thread       1024       262144      16.00       23.60       24.01      2133.10
 sub     fixed 32 elem/thread        512       131072      32.00       26.70       27.10      1885.03
 ```
+
+* matmul kernel benchmark
+
+```
+CUDA square Float32 matmul kernel benchmark
+Device: NVIDIA GeForce RTX 5070 Ti (70 SMs)
+Matrices: 1024 x 1024
+Timing: 5 samples x 20 launches; allocations, copies, and synchronization excluded
+
+Configuration                 Blocks   Thr/block      Best ms       Avg ms      TFLOP/s
+naive 8x8                      16384          64        0.864        0.869        2.487
+naive 16x16 (current)           4096         256        0.717        0.733        2.995
+naive 32x8                      4096         256        0.693        0.697        3.097
+naive 8x32                      4096         256        0.885        0.889        2.427
+naive 32x16                     2048         512        0.717        0.723        2.996
+naive 16x32                     2048         512        0.779        0.783        2.755
+tiled 8x8                      16384          64        0.689        0.693        3.119
+tiled 16x16                     4096         256        0.533        0.537        4.029
+tiled 32x32                     1024        1024        0.569        0.569        3.773
+
+CUDA square Float32 matmul kernel benchmark
+Device: NVIDIA GeForce RTX 5070 Ti (70 SMs)
+Matrices: 2048 x 2048
+Timing: 5 samples x 20 launches; allocations, copies, and synchronization excluded
+
+Configuration                 Blocks   Thr/block      Best ms       Avg ms      TFLOP/s
+naive 8x8                      65536          64        6.776        6.795        2.535
+naive 16x16 (current)          16384         256        5.617        5.634        3.059
+naive 32x8                     16384         256        5.457        5.473        3.148
+naive 8x32                     16384         256        6.966        6.971        2.466
+naive 32x16                     8192         512        5.578        5.587        3.080
+naive 16x32                     8192         512        6.020        6.034        2.854
+tiled 8x8                      65536          64        5.641        5.649        3.046
+tiled 16x16                    16384         256        4.180        4.185        4.110
+tiled 32x32                     4096        1024        4.466        4.484        3.847
+```
+
+* optimize matmul kernel using tiles
+
+```
+CUDA (reference)
+Operation        N    Runs      Best ms       Avg ms     Total ms      GFLOP/s       Checksum
+add            128      50        0.008        0.017        0.831        2.090          3.375
+sub            128      50        0.008        0.015        0.772        2.098         -0.125
+matmul         128      50        0.010        0.016        0.799      407.056          8.594
+add            256      50        0.009        0.016        0.803        7.613         -0.750
+sub            256      50        0.008        0.016        0.786        7.969         -0.500
+matmul         256      50        0.018        0.021        1.026     1836.385         -7.891
+add            512      50        0.010        0.017        0.835       27.036         -1.500
+sub            512      50        0.009        0.015        0.747       30.682         -2.000
+matmul         512      50        0.078        0.080        3.995     3447.846        151.250
+add           1024      50        0.011        0.020        0.989       96.661          1.000
+sub           1024      50        0.014        0.020        1.022       74.984          0.500
+matmul        1024      50        0.535        0.570       28.497     4013.208         66.406
+
+CUDA (cuBLAS)
+Operation        N    Runs      Best ms       Avg ms     Total ms      GFLOP/s       Checksum
+add            128      50        0.010        0.017        0.865        1.668          3.375
+sub            128      50        0.007        0.014        0.700        2.236         -0.125
+matmul         128      50        0.016        0.024        1.181      258.016          8.594
+add            256      50        0.008        0.014        0.688        8.192         -0.750
+sub            256      50        0.009        0.017        0.871        7.670         -0.500
+matmul         256      50        0.017        0.021        1.037     1967.310         -7.891
+add            512      50        0.011        0.019        0.969       23.745         -1.500
+sub            512      50        0.008        0.015        0.734       32.000         -2.000
+matmul         512      50        0.031        0.037        1.850     8630.255        151.250
+add           1024      50        0.011        0.018        0.882       98.997          1.000
+sub           1024      50        0.011        0.018        0.914       93.623          0.500
+matmul        1024      50        0.092        0.099        4.957    23285.518         66.406
+
+CUDA (CUTLASS)
+Operation        N    Runs      Best ms       Avg ms     Total ms      GFLOP/s       Checksum
+add            128      50        0.009        0.018        0.877        1.855          3.375
+sub            128      50        0.009        0.015        0.751        1.842         -0.125
+matmul         128      50        0.019        0.020        1.015      224.055          8.594
+add            256      50        0.008        0.021        1.046        7.728         -0.750
+sub            256      50        0.008        0.016        0.794        8.095         -0.500
+matmul         256      50        0.028        0.029        1.474     1187.515         -7.891
+add            512      50        0.010        0.021        1.037       25.600         -1.500
+sub            512      50        0.009        0.023        1.162       30.454         -2.000
+matmul         512      50        0.045        0.046        2.310     5970.540        151.250
+add           1024      50        0.012        0.016        0.804       90.519          1.000
+sub           1024      50        0.010        0.017        0.865      100.515          0.500
+matmul        1024      50        0.081        0.083        4.136    26535.732         66.406
+```

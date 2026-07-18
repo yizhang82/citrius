@@ -80,13 +80,56 @@ __global__ void sub_f32(const float* a, const float* b, float* out, std::int64_t
     const auto stride = static_cast<std::int64_t>(blockDim.x) * gridDim.x;
     for (auto i = first; i < count; i += stride) out[i] = a[i] - b[i];
 }
-__global__ void matmul_f32(const float* a, const float* b, float* out, std::int64_t m, std::int64_t k, std::int64_t n) {
-    const auto row = static_cast<std::int64_t>(blockIdx.y) * blockDim.y + threadIdx.y;
-    const auto col = static_cast<std::int64_t>(blockIdx.x) * blockDim.x + threadIdx.x;
-    if (row >= m || col >= n) return;
+constexpr int matmul_tile_size = 16;
+
+__global__ void matmul_f32(
+    const float* a,
+    const float* b,
+    float* out,
+    std::int64_t m,
+    std::int64_t k,
+    std::int64_t n) {
+    // These tiles are shared by all 256 threads in the block. Staging input
+    // values here lets 16 output threads reuse each value loaded from global
+    // memory instead of fetching it independently.
+    __shared__ float a_tile[matmul_tile_size][matmul_tile_size];
+    __shared__ float b_tile[matmul_tile_size][matmul_tile_size];
+
+    // The block selects a 16x16 output tile; the thread selects one element
+    // within that tile and owns its accumulator for the entire K dimension.
+    const auto row = static_cast<std::int64_t>(blockIdx.y) * matmul_tile_size + threadIdx.y;
+    const auto col = static_cast<std::int64_t>(blockIdx.x) * matmul_tile_size + threadIdx.x;
     float total = 0.0f;
-    for (std::int64_t inner = 0; inner < k; ++inner) total += a[row * k + inner] * b[inner * n + col];
-    out[row * n + col] = total;
+
+    // Traverse K in 16-element slices. In each pass, every thread loads one A
+    // value and one B value, cooperatively filling both shared-memory tiles.
+    for (std::int64_t start = 0; start < k; start += matmul_tile_size) {
+        const auto a_col = start + threadIdx.x;
+        const auto b_row = start + threadIdx.y;
+        // Zero padding keeps every thread participating in synchronization and
+        // makes partial tiles behave as though the matrices were padded with 0.
+        a_tile[threadIdx.y][threadIdx.x] = row < m && a_col < k
+            ? a[row * k + a_col]
+            : 0.0f;
+        b_tile[threadIdx.y][threadIdx.x] = b_row < k && col < n
+            ? b[b_row * n + col]
+            : 0.0f;
+        // Do not read a tile until every thread has finished loading it.
+        __syncthreads();
+
+        // Multiply this thread's row of A's tile by its column of B's tile.
+#pragma unroll
+        for (int inner = 0; inner < matmul_tile_size; ++inner) {
+            total += a_tile[threadIdx.y][inner] * b_tile[inner][threadIdx.x];
+        }
+        // Do not overwrite the shared tiles for the next pass until every
+        // thread has finished consuming the current values.
+        __syncthreads();
+    }
+
+    // Threads in partial right/bottom blocks still reach both barriers above,
+    // but only threads mapped to valid output elements write a result.
+    if (row < m && col < n) out[row * n + col] = total;
 }
 
 float* data(CudaMemTensorStorageImpl& storage) { return static_cast<float*>(storage.handle().ptr); }
@@ -188,8 +231,17 @@ void CudaDeviceImpl::matmul_out(const Tensor& a, const Tensor& b, Tensor& out) c
     auto ap = ensure_storage(a.storage(), ConversionPolicy::CopyToDevice);
     auto bp = ensure_storage(b.storage(), ConversionPolicy::CopyToDevice);
     if (m != 0 && n != 0) {
-        const dim3 threads(16, 16);
-        const dim3 blocks(static_cast<unsigned>((n + 15) / 16), static_cast<unsigned>((m + 15) / 16));
+        // One 16x16 thread block computes one 16x16 tile of the [m, n]
+        // output. Each thread accumulates one output element while all threads
+        // in the block cooperate through shared memory to reuse input tiles.
+        const dim3 threads(matmul_tile_size, matmul_tile_size);
+
+        // Ceiling division launches enough blocks to cover partial tiles at
+        // the right and bottom edges. The kernel zero-pads out-of-range input
+        // loads and suppresses out-of-range output stores.
+        const dim3 blocks(
+            static_cast<unsigned>((n + matmul_tile_size - 1) / matmul_tile_size),
+            static_cast<unsigned>((m + matmul_tile_size - 1) / matmul_tile_size));
         matmul_f32<<<blocks, threads>>>(data(require_cuda_storage(*ap)), data(require_cuda_storage(*bp)), data(require_cuda_storage(*out.storage())), m, k, n);
     }
     check_cuda(cudaGetLastError(), "failed to launch CUDA matmul kernel");
