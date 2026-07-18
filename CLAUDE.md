@@ -258,6 +258,13 @@ benchmark.bat add-kernel
 benchmark.bat add-kernel --size 4096 --iterations 100 --samples 5
 ```
 
+Run the isolated CUDA matmul kernel tuning benchmark with:
+
+```bat
+benchmark.bat matmul-kernel
+benchmark.bat matmul-kernel --size 2048 --iterations 20 --samples 5
+```
+
 The `examples` directory contains one program that runs add, sub, and matmul. It is built
 with the library and selects a backend at runtime:
 

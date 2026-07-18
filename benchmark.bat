@@ -10,6 +10,7 @@ set "BENCH_ARGS="
 
 if /I "%TEST%"=="operations" goto parse_operations
 if /I "%TEST%"=="add-kernel" goto parse_add_kernel
+if /I "%TEST%"=="matmul-kernel" goto parse_matmul_kernel
 goto usage_error
 
 :parse_operations
@@ -55,8 +56,33 @@ if errorlevel 1 exit /B %errorlevel%
 "%BUILD_DIR%\Release\cuda_elementwise_benchmark.exe" %BENCH_ARGS%
 exit /B %errorlevel%
 
+:parse_matmul_kernel
+shift
+
+:parse_matmul_kernel_args
+if "%~1"=="" goto run_matmul_kernel
+if /I "%~1"=="--size" goto matmul_kernel_value
+if /I "%~1"=="--iterations" goto matmul_kernel_value
+if /I "%~1"=="--samples" goto matmul_kernel_value
+goto usage_error
+
+:matmul_kernel_value
+if "%~2"=="" goto usage_error
+set "BENCH_ARGS=%BENCH_ARGS% %~1 %~2"
+shift
+shift
+goto parse_matmul_kernel_args
+
+:run_matmul_kernel
+call "%ROOT_DIR%\build.bat" --cuda --config Release
+if errorlevel 1 exit /B %errorlevel%
+
+"%BUILD_DIR%\Release\cuda_matmul_benchmark.exe" %BENCH_ARGS%
+exit /B %errorlevel%
+
 :usage_error
 echo Usage:
 echo   benchmark.bat operations --cpu^|--cuda^|--all
 echo   benchmark.bat add-kernel [--size N] [--iterations N] [--samples N]
+echo   benchmark.bat matmul-kernel [--size N] [--iterations N] [--samples N]
 exit /B 1

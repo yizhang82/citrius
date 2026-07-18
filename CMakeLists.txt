@@ -96,6 +96,16 @@ if(CITRIUS_ENABLE_CUDA)
         CUDA_STANDARD 20
         CUDA_STANDARD_REQUIRED ON
     )
+
+    add_executable(cuda_matmul_benchmark
+        benchmarks/cuda_matmul_benchmark.cu
+    )
+    target_link_libraries(cuda_matmul_benchmark PRIVATE CUDA::cudart)
+    set_target_properties(cuda_matmul_benchmark PROPERTIES
+        CUDA_ARCHITECTURES native
+        CUDA_STANDARD 20
+        CUDA_STANDARD_REQUIRED ON
+    )
 endif()
 
 enable_testing()
