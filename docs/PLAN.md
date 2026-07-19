@@ -194,6 +194,11 @@ Acceptance criteria:
 
 ## Phase 6: Multi-head self-attention
 
+Readiness: The CPU reference primitives and modules required by this phase are
+complete. CUDA is functionally capable of executing the same composition, but
+transpose, permute, and indexed Embedding lookup still stage through CPU. Those
+performance gaps do not block implementation of the reference Transformer.
+
 Implement `nn::MultiHeadAttention` from existing primitives:
 
 1. project input through query, key, and value `Linear` modules;
@@ -274,6 +279,21 @@ After the reference model is correct:
 - consider fused scaled dot-product attention;
 - add lower-precision dtypes only with numerical tests;
 - add key/value caching for token-by-token generation.
+
+Current CUDA optimization order:
+
+1. specialize contiguous last-dimension sum, mean, and maximum using one block
+   per output row with warp shuffles and shared-memory reduction;
+2. add a numerically stable cooperative variance kernel, retaining the current
+   general arbitrary-dimension reduction kernel as a fallback;
+3. fuse softmax's maximum, exponential, sum, and division sequence;
+4. fuse LayerNorm's mean, variance, normalization, and affine sequence;
+5. implement native transpose and permute to remove layout host staging from
+   Linear and attention;
+6. implement native indexed gather to remove Embedding host staging.
+
+Each optimization step must add or extend `operations_benchmark` CPU/CUDA
+comparisons and retain parity tests against the composable CPU reference.
 
 Optimizations must preserve the composable reference implementation so that
 backend kernels can always be checked against it.
