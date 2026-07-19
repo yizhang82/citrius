@@ -262,6 +262,32 @@ __global__ void unary_f32(
         }
     }
 }
+
+__global__ void masked_fill_f32(
+    const float* input,
+    const std::uint8_t* mask,
+    float* output,
+    std::int64_t count,
+    const std::int64_t* metadata,
+    std::int64_t rank,
+    float fill_value) {
+    const auto* output_shape = metadata;
+    const auto* output_strides = metadata + rank;
+    const auto* mask_shape = metadata + 2 * rank;
+    const auto* mask_strides = metadata + 3 * rank;
+    const auto first = static_cast<std::int64_t>(blockIdx.x) * blockDim.x + threadIdx.x;
+    const auto stride = static_cast<std::int64_t>(blockDim.x) * gridDim.x;
+    for (auto index = first; index < count; index += stride) {
+        std::int64_t mask_index = 0;
+        for (std::int64_t axis = 0; axis < rank; ++axis) {
+            const auto coordinate =
+                (index / output_strides[axis]) % output_shape[axis];
+            if (mask_shape[axis] != 1)
+                mask_index += coordinate * mask_strides[axis];
+        }
+        output[index] = mask[mask_index] != 0 ? fill_value : input[index];
+    }
+}
 constexpr int matmul_tile_size = 16;
 
 __global__ void matmul_f32(const float* a, const float* b, float* out, std::int64_t m,
@@ -640,6 +666,61 @@ Tensor CudaDeviceImpl::unary(
         data(require_cuda_storage(*output.storage())), output.numel(), operation, argument);
     check_cuda(cudaGetLastError(), "failed to launch CUDA unary kernel");
     check_cuda(cudaDeviceSynchronize(), "CUDA unary kernel failed");
+    return output;
+}
+
+Tensor CudaDeviceImpl::masked_fill(
+    const Tensor& tensor,
+    const Tensor& mask,
+    float value) const {
+    require_defined(tensor, "masked_fill input");
+    require_float32(tensor, "masked_fill input");
+    require_defined(mask, "masked_fill mask");
+    if (mask.dtype() != DType::Bool)
+        throw std::invalid_argument("masked_fill mask must be Bool");
+    if (tensor.device() != mask.device())
+        throw std::invalid_argument("masked_fill input and mask must be on the same device");
+    if (broadcast_shape(tensor.shape(), mask.shape()) != tensor.shape())
+        throw std::invalid_argument("masked_fill mask must broadcast to the input shape");
+
+    Tensor output = empty(tensor.shape(), DType::Float32);
+    if (output.numel() == 0) return output;
+    auto input = ensure_storage(tensor.storage(), ConversionPolicy::CopyToDevice);
+    auto mask_storage = ensure_storage(mask.storage(), ConversionPolicy::CopyToDevice);
+    const std::size_t rank = tensor.ndim();
+    const Strides output_strides = contiguous_strides(tensor.shape());
+    const Strides mask_strides = contiguous_strides(mask.shape());
+    std::vector<std::int64_t> metadata(std::max<std::size_t>(rank * 4, 1), 0);
+    std::copy(tensor.shape().begin(), tensor.shape().end(), metadata.begin());
+    std::copy(output_strides.begin(), output_strides.end(), metadata.begin() + rank);
+    std::fill(metadata.begin() + 2 * rank, metadata.begin() + 3 * rank, 1);
+    const std::size_t padding = rank - mask.ndim();
+    std::copy(mask.shape().begin(), mask.shape().end(), metadata.begin() + 2 * rank + padding);
+    std::copy(mask_strides.begin(), mask_strides.end(), metadata.begin() + 3 * rank + padding);
+
+    std::int64_t* device_metadata = nullptr;
+    const std::size_t metadata_bytes = metadata.size() * sizeof(std::int64_t);
+    check_cuda(cudaMalloc(&device_metadata, metadata_bytes),
+               "failed to allocate CUDA masked_fill metadata");
+    try {
+        check_cuda(cudaMemcpy(device_metadata, metadata.data(), metadata_bytes,
+                              cudaMemcpyHostToDevice),
+                   "failed to copy CUDA masked_fill metadata");
+        const auto required_blocks = (output.numel() + 255) / 256;
+        const auto blocks = static_cast<unsigned>(
+            std::min<std::int64_t>(required_blocks, max_elementwise_blocks_));
+        masked_fill_f32<<<blocks, 256>>>(
+            data(require_cuda_storage(*input)),
+            static_cast<const std::uint8_t*>(require_cuda_storage(*mask_storage).handle().ptr),
+            data(require_cuda_storage(*output.storage())), output.numel(), device_metadata,
+            static_cast<std::int64_t>(rank), value);
+        check_cuda(cudaGetLastError(), "failed to launch CUDA masked_fill kernel");
+        check_cuda(cudaDeviceSynchronize(), "CUDA masked_fill kernel failed");
+    } catch (...) {
+        cudaFree(device_metadata);
+        throw;
+    }
+    cudaFree(device_metadata);
     return output;
 }
 

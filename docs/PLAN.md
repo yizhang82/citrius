@@ -82,9 +82,9 @@ Status: CPU reference implementation complete. Broadcasted add, subtract,
 multiply, divide, maximum, scalar overloads, exponential, square root, power,
 Bool tensor construction, and masked fill are available. CUDA has native
 broadcasted add, subtract, multiply, divide, maximum, scalar arithmetic,
-exponential, square root, and scalar-exponent power. Other operations without a
-native backend kernel currently stage through CPU while preserving the requested
-output device.
+exponential, square root, scalar-exponent power, and broadcasted masked fill.
+Other operations without a native backend kernel currently stage through CPU
+while preserving the requested output device.
 
 Extend elementwise dispatch with NumPy/PyTorch-style trailing-dimension
 broadcasting. Add:

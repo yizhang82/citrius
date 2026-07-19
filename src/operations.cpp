@@ -309,6 +309,12 @@ Tensor masked_fill(const Tensor& tensor, const Tensor& mask, float value) {
     if (broadcast_shape(tensor.shape(), mask.shape()) != tensor.shape()) {
         throw std::invalid_argument("masked_fill mask must broadcast to the input shape");
     }
+#ifdef CITRIUS_HAS_CUDA
+    if (tensor.device().type == DeviceType::CUDA) {
+        auto device = cuda_device(tensor.device().index);
+        return static_cast<impl::CudaDeviceImpl&>(*device).masked_fill(tensor, mask, value);
+    }
+#endif
     const Tensor cpu_tensor = tensor.to(Device::cpu());
     const Tensor cpu_mask = mask.to(Device::cpu());
     const auto tensor_storage = std::static_pointer_cast<impl::CpuMemTensorStorageImpl>(cpu_tensor.storage());

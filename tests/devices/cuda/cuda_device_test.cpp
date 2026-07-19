@@ -6,6 +6,7 @@
 #include "impl/cutlass_cuda_device.h"
 #include "operations.h"
 #include "reduction_operations.h"
+#include "tensor_factory.h"
 
 #include <gtest/gtest.h>
 
@@ -374,6 +375,31 @@ TEST(CudaDeviceTest, UnaryMathOperationsStayOnCuda) {
     EXPECT_NEAR(exponential_values[2], std::exp(1.0f), 1e-6f);
     EXPECT_EQ(values(roots), std::vector<float>({0, 1, 2, 3}));
     EXPECT_EQ(values(powers), std::vector<float>({-8, 27, 0.125f}));
+}
+
+TEST(CudaDeviceTest, MaskedFillBroadcastsBoolMaskOnCuda) {
+    std::string error;
+    auto device = make_cuda_device(&error);
+    if (!device)
+        GTEST_SKIP() << error;
+    const citrius::Tensor input(
+        std::vector<float>{1, 2, 3, 4, 5, 6}, {2, 3}, citrius::Device::cuda());
+    const citrius::Tensor mask = citrius::from_vector(
+        std::vector<bool>{false, true, false}, {1, 3}, citrius::Device::cuda());
+
+    const auto output = citrius::masked_fill(input, mask, -100.0f);
+
+    EXPECT_EQ(output.device(), citrius::Device::cuda());
+    EXPECT_EQ(output.shape(), input.shape());
+    EXPECT_EQ(values(output), std::vector<float>({1, -100, 3, 4, -100, 6}));
+    EXPECT_THROW(
+        citrius::masked_fill(
+            input,
+            citrius::from_vector(
+                std::vector<bool>{true, false, true, false}, {2, 2},
+                citrius::Device::cuda()),
+            0.0f),
+        std::invalid_argument);
 }
 
 TEST(CudaDeviceTest, TopLevelMatmulUsesConfiguredCudaBackend) {

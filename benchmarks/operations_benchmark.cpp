@@ -48,6 +48,7 @@ enum class Operation {
     Exp,
     Sqrt,
     Power,
+    MaskedFill,
     Matmul,
     BatchedMatmul,
 };
@@ -80,6 +81,8 @@ const char* operation_name(Operation operation) {
         return "sqrt";
     case Operation::Power:
         return "pow";
+    case Operation::MaskedFill:
+        return "masked-fill";
     case Operation::Matmul:
         return "matmul";
     case Operation::BatchedMatmul:
@@ -196,6 +199,7 @@ Result benchmark_cpu(const citrius::impl::CpuDeviceImpl& device, Operation opera
         case Operation::Exp:
         case Operation::Sqrt:
         case Operation::Power:
+        case Operation::MaskedFill:
         case Operation::BatchedMatmul:
             break;
         }
@@ -307,6 +311,22 @@ Result benchmark_cuda(const CudaDevice& device, Operation operation, std::int64_
         result.checksum = cpu_checksum(output);
         return result;
     }
+    if (operation == Operation::MaskedFill) {
+        const auto values = input_values(size * size, 3);
+        std::vector<bool> mask_values(static_cast<std::size_t>(size));
+        for (std::int64_t index = 0; index < size; ++index)
+            mask_values[static_cast<std::size_t>(index)] = index % 3 == 0;
+        const citrius::Tensor input(values, {size, size}, citrius::Device::cuda());
+        const citrius::Tensor mask =
+            citrius::from_vector(mask_values, {size}, citrius::Device::cuda());
+        citrius::Tensor output;
+        auto result = measure(operation_count(operation, size), iterations, [&] {
+            output = device.masked_fill(input, mask, -100.0f);
+            return 0.0f;
+        });
+        result.checksum = cpu_checksum(output);
+        return result;
+    }
     const auto a_values = input_values(size * size, 3);
     const auto b_values = input_values(size * size, 7);
     citrius::Tensor a(a_values, {size, size}, citrius::Device::cuda());
@@ -333,6 +353,7 @@ Result benchmark_cuda(const CudaDevice& device, Operation operation, std::int64_
         case Operation::Exp:
         case Operation::Sqrt:
         case Operation::Power:
+        case Operation::MaskedFill:
         case Operation::BatchedMatmul:
             return;
         }
@@ -453,7 +474,8 @@ int main(int argc, char** argv) {
                              Operation::ScalarMul, Operation::ReduceSum,
                              Operation::ReduceMean, Operation::ReduceMax,
                              Operation::ReduceVariance, Operation::Exp,
-                             Operation::Sqrt, Operation::Power});
+                             Operation::Sqrt, Operation::Power,
+                             Operation::MaskedFill});
                     }
                     operations.insert(
                         operations.end(), {Operation::Matmul, Operation::BatchedMatmul});
