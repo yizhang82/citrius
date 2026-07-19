@@ -1,5 +1,7 @@
 #include "impl/batched_matmul_layout.h"
 #include "impl/cublas_cuda_device.h"
+#include "impl/cuda_allocation.h"
+#include "impl/cuda_context.h"
 
 #include <cublas_v2.h>
 #include <cuda_runtime.h>
@@ -44,13 +46,18 @@ float* data(ITensorStorage& storage) {
     return static_cast<float*>(storage.handle().ptr);
 }
 
+cudaStream_t stream(const std::shared_ptr<CudaExecutionContext>& context) {
+    return static_cast<cudaStream_t>(context->stream());
+}
+
 } // namespace
 
 class CublasCudaDeviceImpl::Impl {
   public:
-    explicit Impl(int device_index) {
-        check_cuda(cudaSetDevice(device_index), "failed to select CUDA device");
+    explicit Impl(const std::shared_ptr<CudaExecutionContext>& context) {
+        check_cuda(cudaSetDevice(context->device_index()), "failed to select CUDA device");
         check_cublas(cublasCreate(&handle), "failed to create cuBLAS handle");
+        check_cublas(cublasSetStream(handle, stream(context)), "failed to set cuBLAS stream");
     }
 
     ~Impl() {
@@ -62,7 +69,7 @@ class CublasCudaDeviceImpl::Impl {
 };
 
 CublasCudaDeviceImpl::CublasCudaDeviceImpl(int device_index)
-    : CudaDeviceImpl(device_index), impl_(std::make_unique<Impl>(device_index)) {}
+    : CudaDeviceImpl(device_index), impl_(std::make_unique<Impl>(execution_context())) {}
 
 CublasCudaDeviceImpl::~CublasCudaDeviceImpl() = default;
 
@@ -83,8 +90,11 @@ void CublasCudaDeviceImpl::matmul_out(const Tensor& a, const Tensor& b, Tensor& 
 
     check_cuda(cudaSetDevice(device_index()), "failed to select CUDA device");
     if (k == 0) {
-        check_cuda(cudaMemset(data(*out.storage()), 0, out.storage()->nbytes()),
+        check_cuda(cudaMemsetAsync(data(*out.storage()), 0, out.storage()->nbytes(),
+                                   stream(execution_context())),
                    "failed to clear CUDA matmul output");
+        check_cuda(cudaStreamSynchronize(stream(execution_context())),
+                   "CUDA cuBLAS output clear failed");
         return;
     }
 
@@ -119,7 +129,7 @@ void CublasCudaDeviceImpl::matmul_out(const Tensor& a, const Tensor& b, Tensor& 
                                                    // row-major C
                              static_cast<int>(n)), // leading dimension of C^T
                  "cuBLAS matmul failed");
-    check_cuda(cudaDeviceSynchronize(), "CUDA cuBLAS matmul failed");
+    check_cuda(cudaStreamSynchronize(stream(execution_context())), "CUDA cuBLAS matmul failed");
 }
 
 Tensor CublasCudaDeviceImpl::batched_matmul(const Tensor& a, const Tensor& b) const {
@@ -141,23 +151,26 @@ Tensor CublasCudaDeviceImpl::batched_matmul(const Tensor& a, const Tensor& b) co
         bh[i] = bd + l.b_offsets[i];
         ch[i] = cd + i * m * n;
     }
-    float **da = nullptr, **db = nullptr, **dc = nullptr;
     auto bytes = ah.size() * sizeof(float*);
-    check_cuda(cudaMalloc(&da, bytes), "cuBLAS batch pointers");
-    check_cuda(cudaMalloc(&db, bytes), "cuBLAS batch pointers");
-    check_cuda(cudaMalloc(&dc, bytes), "cuBLAS batch pointers");
-    check_cuda(cudaMemcpy(da, ah.data(), bytes, cudaMemcpyHostToDevice), "cuBLAS batch pointers");
-    check_cuda(cudaMemcpy(db, bh.data(), bytes, cudaMemcpyHostToDevice), "cuBLAS batch pointers");
-    check_cuda(cudaMemcpy(dc, ch.data(), bytes, cudaMemcpyHostToDevice), "cuBLAS batch pointers");
+    CudaAllocation a_pointers(bytes, execution_context());
+    CudaAllocation b_pointers(bytes, execution_context());
+    CudaAllocation c_pointers(bytes, execution_context());
+    auto** da = a_pointers.data_as<float*>();
+    auto** db = b_pointers.data_as<float*>();
+    auto** dc = c_pointers.data_as<float*>();
+    check_cuda(cudaMemcpyAsync(da, ah.data(), bytes, cudaMemcpyHostToDevice,
+                               stream(execution_context())), "cuBLAS batch pointers");
+    check_cuda(cudaMemcpyAsync(db, bh.data(), bytes, cudaMemcpyHostToDevice,
+                               stream(execution_context())), "cuBLAS batch pointers");
+    check_cuda(cudaMemcpyAsync(dc, ch.data(), bytes, cudaMemcpyHostToDevice,
+                               stream(execution_context())), "cuBLAS batch pointers");
     float alpha = 1, beta = 0;
     auto status = cublasSgemmBatched(impl_->handle, CUBLAS_OP_N, CUBLAS_OP_N, (int)n, (int)m,
                                      (int)k, &alpha, (const float**)db, (int)n, (const float**)da,
                                      (int)k, &beta, dc, (int)n, (int)ah.size());
-    cudaFree(da);
-    cudaFree(db);
-    cudaFree(dc);
     check_cublas(status, "cuBLAS batched_matmul failed");
-    check_cuda(cudaDeviceSynchronize(), "CUDA cuBLAS batched_matmul failed");
+    check_cuda(cudaStreamSynchronize(stream(execution_context())),
+               "CUDA cuBLAS batched_matmul failed");
     return out;
 }
 

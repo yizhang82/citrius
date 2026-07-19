@@ -1,4 +1,5 @@
 #include "impl/cuda_device.h"
+#include "impl/cuda_allocation.h"
 #include "impl/cuda_context.h"
 
 #include "impl/cpu_storage.h"
@@ -460,6 +461,10 @@ float* data(CudaMemTensorStorageImpl& storage) {
     return static_cast<float*>(storage.handle().ptr);
 }
 
+cudaStream_t stream(const std::shared_ptr<CudaExecutionContext>& context) {
+    return static_cast<cudaStream_t>(context->stream());
+}
+
 } // namespace
 
 CudaDeviceImpl::CudaDeviceImpl(int device_index)
@@ -523,11 +528,12 @@ void CudaDeviceImpl::add_out(const Tensor& a, const Tensor& b, Tensor& out) cons
             static_cast<unsigned>(std::min<std::int64_t>(required_blocks, max_elementwise_blocks_));
         // <<<blocks, 256>>> launches a grid of `blocks` blocks, each containing 256
         // threads.
-        add_f32<<<blocks, 256>>>(data(require_cuda_storage(*ap)), data(require_cuda_storage(*bp)),
-                                 data(require_cuda_storage(*out.storage())), count);
+        add_f32<<<blocks, 256, 0, stream(context_)>>>(
+            data(require_cuda_storage(*ap)), data(require_cuda_storage(*bp)),
+            data(require_cuda_storage(*out.storage())), count);
     }
     check_cuda(cudaGetLastError(), "failed to launch CUDA add kernel");
-    check_cuda(cudaDeviceSynchronize(), "CUDA add kernel failed");
+    check_cuda(cudaStreamSynchronize(stream(context_)), "CUDA add kernel failed");
 }
 
 Tensor CudaDeviceImpl::sub(const Tensor& a, const Tensor& b) const {
@@ -571,32 +577,26 @@ Tensor CudaDeviceImpl::broadcast_elementwise(
     std::copy(b.shape().begin(), b.shape().end(), metadata.begin() + 4 * rank + b_padding);
     std::copy(b_strides.begin(), b_strides.end(), metadata.begin() + 5 * rank + b_padding);
 
-    std::int64_t* device_metadata = nullptr;
     const std::size_t metadata_bytes = metadata.size() * sizeof(std::int64_t);
-    if (metadata_bytes != 0) {
-        check_cuda(cudaMalloc(&device_metadata, metadata_bytes),
-                   "failed to allocate CUDA broadcast metadata");
-    }
-    try {
+    CudaAllocation metadata_allocation(metadata_bytes, context_);
+    auto* device_metadata = metadata_allocation.data_as<std::int64_t>();
+    {
         if (metadata_bytes != 0) {
-            check_cuda(cudaMemcpy(device_metadata, metadata.data(), metadata_bytes,
-                                  cudaMemcpyHostToDevice),
+            check_cuda(cudaMemcpyAsync(device_metadata, metadata.data(), metadata_bytes,
+                                       cudaMemcpyHostToDevice, stream(context_)),
                        "failed to copy CUDA broadcast metadata");
         }
         const auto required_blocks = (out.numel() + 255) / 256;
         const auto blocks = static_cast<unsigned>(
             std::min<std::int64_t>(required_blocks, max_elementwise_blocks_));
-        broadcast_elementwise_f32<<<blocks, 256>>>(
+        broadcast_elementwise_f32<<<blocks, 256, 0, stream(context_)>>>(
             data(require_cuda_storage(*ap)), data(require_cuda_storage(*bp)),
             data(require_cuda_storage(*out.storage())), out.numel(), device_metadata,
             static_cast<std::int64_t>(rank), operation);
         check_cuda(cudaGetLastError(), "failed to launch CUDA broadcast elementwise kernel");
-        check_cuda(cudaDeviceSynchronize(), "CUDA broadcast elementwise kernel failed");
-    } catch (...) {
-        if (device_metadata) cudaFree(device_metadata);
-        throw;
+        check_cuda(cudaStreamSynchronize(stream(context_)),
+                   "CUDA broadcast elementwise kernel failed");
     }
-    if (device_metadata) cudaFree(device_metadata);
     return out;
 }
 
@@ -613,11 +613,11 @@ Tensor CudaDeviceImpl::scalar_elementwise(
     const auto required_blocks = (out.numel() + 255) / 256;
     const auto blocks = static_cast<unsigned>(
         std::min<std::int64_t>(required_blocks, max_elementwise_blocks_));
-    scalar_elementwise_f32<<<blocks, 256>>>(
+    scalar_elementwise_f32<<<blocks, 256, 0, stream(context_)>>>(
         data(require_cuda_storage(*input)), scalar,
         data(require_cuda_storage(*out.storage())), out.numel(), operation, scalar_is_left);
     check_cuda(cudaGetLastError(), "failed to launch CUDA scalar elementwise kernel");
-    check_cuda(cudaDeviceSynchronize(), "CUDA scalar elementwise kernel failed");
+    check_cuda(cudaStreamSynchronize(stream(context_)), "CUDA scalar elementwise kernel failed");
     return out;
 }
 
@@ -660,33 +660,26 @@ Tensor CudaDeviceImpl::reduce(
     for (std::size_t axis = 0; axis < rank; ++axis)
         metadata[2 * rank + axis] = reduced[axis] ? 1 : 0;
 
-    std::int64_t* device_metadata = nullptr;
     const std::size_t metadata_bytes = metadata.size() * sizeof(std::int64_t);
-    if (metadata_bytes != 0) {
-        check_cuda(cudaMalloc(&device_metadata, metadata_bytes),
-                   "failed to allocate CUDA reduction metadata");
-    }
+    CudaAllocation metadata_allocation(metadata_bytes, context_);
+    auto* device_metadata = metadata_allocation.data_as<std::int64_t>();
     auto input = ensure_storage(tensor.storage(), ConversionPolicy::CopyToDevice);
-    try {
+    {
         if (metadata_bytes != 0) {
-            check_cuda(cudaMemcpy(device_metadata, metadata.data(), metadata_bytes,
-                                  cudaMemcpyHostToDevice),
+            check_cuda(cudaMemcpyAsync(device_metadata, metadata.data(), metadata_bytes,
+                                       cudaMemcpyHostToDevice, stream(context_)),
                        "failed to copy CUDA reduction metadata");
         }
         const auto required_blocks = (output.numel() + 255) / 256;
         const auto blocks = static_cast<unsigned>(
             std::min<std::int64_t>(required_blocks, max_elementwise_blocks_));
-        reduce_f32<<<blocks, 256>>>(
+        reduce_f32<<<blocks, 256, 0, stream(context_)>>>(
             data(require_cuda_storage(*input)),
             data(require_cuda_storage(*output.storage())), output.numel(), reduced_count,
             device_metadata, static_cast<std::int64_t>(rank), operation);
         check_cuda(cudaGetLastError(), "failed to launch CUDA reduction kernel");
-        check_cuda(cudaDeviceSynchronize(), "CUDA reduction kernel failed");
-    } catch (...) {
-        if (device_metadata) cudaFree(device_metadata);
-        throw;
+        check_cuda(cudaStreamSynchronize(stream(context_)), "CUDA reduction kernel failed");
     }
-    if (device_metadata) cudaFree(device_metadata);
     return output;
 }
 
@@ -711,10 +704,11 @@ Tensor CudaDeviceImpl::argmax(const Tensor& tensor, std::int64_t dimension, bool
         std::min<std::int64_t>(output.numel(), max_elementwise_blocks_));
     auto* output_data = static_cast<std::int64_t*>(
         require_cuda_storage(*output.storage()).handle().ptr);
-    argmax_f32<<<blocks, 256>>>(data(require_cuda_storage(*input)), output_data, output.numel(),
-                                reduction_size, inner_size);
+    argmax_f32<<<blocks, 256, 0, stream(context_)>>>(
+        data(require_cuda_storage(*input)), output_data, output.numel(), reduction_size,
+        inner_size);
     check_cuda(cudaGetLastError(), "failed to launch CUDA argmax kernel");
-    check_cuda(cudaDeviceSynchronize(), "CUDA argmax kernel failed");
+    check_cuda(cudaStreamSynchronize(stream(context_)), "CUDA argmax kernel failed");
     return output;
 }
 
@@ -738,11 +732,11 @@ Tensor CudaDeviceImpl::unary(
     const auto required_blocks = (output.numel() + 255) / 256;
     const auto blocks = static_cast<unsigned>(
         std::min<std::int64_t>(required_blocks, max_elementwise_blocks_));
-    unary_f32<<<blocks, 256>>>(
+    unary_f32<<<blocks, 256, 0, stream(context_)>>>(
         data(require_cuda_storage(*input)),
         data(require_cuda_storage(*output.storage())), output.numel(), operation, argument);
     check_cuda(cudaGetLastError(), "failed to launch CUDA unary kernel");
-    check_cuda(cudaDeviceSynchronize(), "CUDA unary kernel failed");
+    check_cuda(cudaStreamSynchronize(stream(context_)), "CUDA unary kernel failed");
     return output;
 }
 
@@ -775,29 +769,24 @@ Tensor CudaDeviceImpl::masked_fill(
     std::copy(mask.shape().begin(), mask.shape().end(), metadata.begin() + 2 * rank + padding);
     std::copy(mask_strides.begin(), mask_strides.end(), metadata.begin() + 3 * rank + padding);
 
-    std::int64_t* device_metadata = nullptr;
     const std::size_t metadata_bytes = metadata.size() * sizeof(std::int64_t);
-    check_cuda(cudaMalloc(&device_metadata, metadata_bytes),
-               "failed to allocate CUDA masked_fill metadata");
-    try {
-        check_cuda(cudaMemcpy(device_metadata, metadata.data(), metadata_bytes,
-                              cudaMemcpyHostToDevice),
+    CudaAllocation metadata_allocation(metadata_bytes, context_);
+    auto* device_metadata = metadata_allocation.data_as<std::int64_t>();
+    {
+        check_cuda(cudaMemcpyAsync(device_metadata, metadata.data(), metadata_bytes,
+                                   cudaMemcpyHostToDevice, stream(context_)),
                    "failed to copy CUDA masked_fill metadata");
         const auto required_blocks = (output.numel() + 255) / 256;
         const auto blocks = static_cast<unsigned>(
             std::min<std::int64_t>(required_blocks, max_elementwise_blocks_));
-        masked_fill_f32<<<blocks, 256>>>(
+        masked_fill_f32<<<blocks, 256, 0, stream(context_)>>>(
             data(require_cuda_storage(*input)),
             static_cast<const std::uint8_t*>(require_cuda_storage(*mask_storage).handle().ptr),
             data(require_cuda_storage(*output.storage())), output.numel(), device_metadata,
             static_cast<std::int64_t>(rank), value);
         check_cuda(cudaGetLastError(), "failed to launch CUDA masked_fill kernel");
-        check_cuda(cudaDeviceSynchronize(), "CUDA masked_fill kernel failed");
-    } catch (...) {
-        cudaFree(device_metadata);
-        throw;
+        check_cuda(cudaStreamSynchronize(stream(context_)), "CUDA masked_fill kernel failed");
     }
-    cudaFree(device_metadata);
     return output;
 }
 
@@ -819,11 +808,12 @@ void CudaDeviceImpl::sub_out(const Tensor& a, const Tensor& b, Tensor& out) cons
             static_cast<unsigned>(std::min<std::int64_t>(required_blocks, max_elementwise_blocks_));
         // <<<blocks, 256>>> launches a grid of `blocks` blocks, each containing 256
         // threads.
-        sub_f32<<<blocks, 256>>>(data(require_cuda_storage(*ap)), data(require_cuda_storage(*bp)),
-                                 data(require_cuda_storage(*out.storage())), count);
+        sub_f32<<<blocks, 256, 0, stream(context_)>>>(
+            data(require_cuda_storage(*ap)), data(require_cuda_storage(*bp)),
+            data(require_cuda_storage(*out.storage())), count);
     }
     check_cuda(cudaGetLastError(), "failed to launch CUDA sub kernel");
-    check_cuda(cudaDeviceSynchronize(), "CUDA sub kernel failed");
+    check_cuda(cudaStreamSynchronize(stream(context_)), "CUDA sub kernel failed");
 }
 
 Tensor CudaDeviceImpl::matmul(const Tensor& a, const Tensor& b) const {
@@ -845,34 +835,30 @@ Tensor CudaDeviceImpl::batched_matmul(const Tensor& a, const Tensor& b) const {
         return out;
     auto ap = ensure_storage(a.storage(), ConversionPolicy::CopyToDevice),
          bp = ensure_storage(b.storage(), ConversionPolicy::CopyToDevice);
-    std::int64_t *dao = nullptr, *dbo = nullptr;
     auto bytes = l.ao.size() * sizeof(std::int64_t);
-    check_cuda(cudaMalloc(&dao, bytes), "failed to allocate CUDA batch offsets");
-    try {
-        check_cuda(cudaMalloc(&dbo, bytes), "failed to allocate CUDA batch offsets");
-        check_cuda(cudaMemcpy(dao, l.ao.data(), bytes, cudaMemcpyHostToDevice),
+    CudaAllocation a_offsets(bytes, context_);
+    CudaAllocation b_offsets(bytes, context_);
+    auto* dao = a_offsets.data_as<std::int64_t>();
+    auto* dbo = b_offsets.data_as<std::int64_t>();
+    {
+        check_cuda(cudaMemcpyAsync(dao, l.ao.data(), bytes, cudaMemcpyHostToDevice,
+                                   stream(context_)),
                    "failed to copy CUDA batch offsets");
-        check_cuda(cudaMemcpy(dbo, l.bo.data(), bytes, cudaMemcpyHostToDevice),
+        check_cuda(cudaMemcpyAsync(dbo, l.bo.data(), bytes, cudaMemcpyHostToDevice,
+                                   stream(context_)),
                    "failed to copy CUDA batch offsets");
         auto m = a.shape()[a.ndim() - 2], n = b.shape().back();
         dim3 threads(matmul_tile_size, matmul_tile_size);
         dim3 blocks(static_cast<unsigned>((n + matmul_tile_size - 1) / matmul_tile_size),
                     static_cast<unsigned>((m + matmul_tile_size - 1) / matmul_tile_size),
                     static_cast<unsigned>(l.ao.size()));
-        batched_matmul_f32<<<blocks, threads>>>(data(require_cuda_storage(*ap)),
-                                                data(require_cuda_storage(*bp)),
-                                                data(require_cuda_storage(*out.storage())), dao,
-                                                dbo, l.ao.size(), m, a.shape().back(), n);
+        batched_matmul_f32<<<blocks, threads, 0, stream(context_)>>>(
+            data(require_cuda_storage(*ap)), data(require_cuda_storage(*bp)),
+            data(require_cuda_storage(*out.storage())), dao, dbo, l.ao.size(), m,
+            a.shape().back(), n);
         check_cuda(cudaGetLastError(), "failed to launch CUDA batched_matmul kernel");
-        check_cuda(cudaDeviceSynchronize(), "CUDA batched_matmul failed");
-    } catch (...) {
-        if (dbo)
-            cudaFree(dbo);
-        cudaFree(dao);
-        throw;
+        check_cuda(cudaStreamSynchronize(stream(context_)), "CUDA batched_matmul failed");
     }
-    cudaFree(dbo);
-    cudaFree(dao);
     return out;
 }
 
@@ -900,12 +886,12 @@ void CudaDeviceImpl::matmul_out(const Tensor& a, const Tensor& b, Tensor& out) c
         // loads and suppresses out-of-range output stores.
         const dim3 blocks(static_cast<unsigned>((n + matmul_tile_size - 1) / matmul_tile_size),
                           static_cast<unsigned>((m + matmul_tile_size - 1) / matmul_tile_size));
-        matmul_f32<<<blocks, threads>>>(data(require_cuda_storage(*ap)),
-                                        data(require_cuda_storage(*bp)),
-                                        data(require_cuda_storage(*out.storage())), m, k, n);
+        matmul_f32<<<blocks, threads, 0, stream(context_)>>>(
+            data(require_cuda_storage(*ap)), data(require_cuda_storage(*bp)),
+            data(require_cuda_storage(*out.storage())), m, k, n);
     }
     check_cuda(cudaGetLastError(), "failed to launch CUDA matmul kernel");
-    check_cuda(cudaDeviceSynchronize(), "CUDA matmul kernel failed");
+    check_cuda(cudaStreamSynchronize(stream(context_)), "CUDA matmul kernel failed");
 }
 
 TensorStoragePtr CudaDeviceImpl::ensure_storage(const TensorStoragePtr& storage,

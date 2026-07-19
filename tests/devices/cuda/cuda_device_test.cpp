@@ -1,5 +1,6 @@
 #include "impl/cpu_device.h"
 #include "impl/cpu_storage.h"
+#include "impl/cuda_allocation.h"
 #include "impl/cuda_context.h"
 #include "impl/cublas_cuda_device.h"
 #include "impl/cuda_device.h"
@@ -163,6 +164,21 @@ TEST(CudaDeviceTest, SharesOneExecutionContextPerDevice) {
     const auto storage =
         std::static_pointer_cast<citrius::impl::CudaMemTensorStorageImpl>(tensor.storage());
     EXPECT_EQ(storage->execution_context(), first->execution_context());
+}
+TEST(CudaDeviceTest, CudaAllocationIsMoveOnlyAndRetainsMemory) {
+    std::string error;
+    auto device = make_cuda_device(&error);
+    if (!device)
+        GTEST_SKIP() << error;
+    citrius::impl::CudaAllocation allocation(64, device->execution_context());
+    ASSERT_NE(allocation.data(), nullptr);
+    EXPECT_EQ(allocation.nbytes(), 64);
+
+    citrius::impl::CudaAllocation moved(std::move(allocation));
+    EXPECT_EQ(allocation.data(), nullptr);
+    EXPECT_EQ(allocation.nbytes(), 0);
+    EXPECT_NE(moved.data(), nullptr);
+    EXPECT_EQ(moved.nbytes(), 64);
 }
 
 TEST(CudaDeviceTest, ArgmaxMatchesCpuForTiesNegativesAndIrregularSizes) {

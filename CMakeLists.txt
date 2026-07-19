@@ -65,6 +65,7 @@ if(CITRIUS_ENABLE_CUDA)
             "CUTLASS submodule is missing. Run: git submodule update --init --recursive")
     endif()
     target_sources(citrius PRIVATE
+        src/devices/cuda/cuda_allocation.cu
         src/devices/cuda/cuda_context.cu
         src/devices/cuda/cuda_device.cu
         src/devices/cuda/cuda_storage.cu

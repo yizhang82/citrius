@@ -1,5 +1,6 @@
 #include "impl/batched_matmul_layout.h"
 #include "impl/cutlass_cuda_device.h"
+#include "impl/cuda_context.h"
 
 #include <cutlass/cutlass.h>
 #include <cutlass/gemm/device/gemm.h>
@@ -44,6 +45,10 @@ float* data(ITensorStorage& storage) {
     return static_cast<float*>(storage.handle().ptr);
 }
 
+cudaStream_t stream(const std::shared_ptr<CudaExecutionContext>& context) {
+    return static_cast<cudaStream_t>(context->stream());
+}
+
 } // namespace
 
 CutlassCudaDeviceImpl::CutlassCudaDeviceImpl(int device_index) : CudaDeviceImpl(device_index) {}
@@ -65,8 +70,11 @@ void CutlassCudaDeviceImpl::matmul_out(const Tensor& a, const Tensor& b, Tensor&
 
     check_cuda(cudaSetDevice(device_index()), "failed to select CUDA device");
     if (k == 0) {
-        check_cuda(cudaMemset(data(*out.storage()), 0, out.storage()->nbytes()),
+        check_cuda(cudaMemsetAsync(data(*out.storage()), 0, out.storage()->nbytes(),
+                                   stream(execution_context())),
                    "failed to clear CUDA matmul output");
+        check_cuda(cudaStreamSynchronize(stream(execution_context())),
+                   "CUDA CUTLASS output clear failed");
         return;
     }
 
@@ -98,12 +106,12 @@ void CutlassCudaDeviceImpl::matmul_out(const Tensor& a, const Tensor& b, Tensor&
     // Reject shapes, alignments, or device capabilities unsupported by this
     // generated kernel before attempting to launch it.
     check_cutlass(gemm.can_implement(arguments), "CUTLASS cannot implement matmul");
-    // Initialize and launch the selected CUTLASS GEMM kernel on the default
+    // Initialize and launch the selected CUTLASS GEMM kernel on the context
     // stream. The call reports setup/launch errors through cutlass::Status.
-    check_cutlass(gemm(arguments), "CUTLASS matmul failed");
+    check_cutlass(gemm(arguments, nullptr, stream(execution_context())), "CUTLASS matmul failed");
     // Citrius operations are currently eager and synchronous, so do not return
     // until the kernel has completed and asynchronous CUDA errors are visible.
-    check_cuda(cudaDeviceSynchronize(), "CUDA CUTLASS matmul failed");
+    check_cuda(cudaStreamSynchronize(stream(execution_context())), "CUDA CUTLASS matmul failed");
 }
 
 Tensor CutlassCudaDeviceImpl::batched_matmul(const Tensor& a, const Tensor& b) const {
@@ -125,9 +133,11 @@ Tensor CutlassCudaDeviceImpl::batched_matmul(const Tensor& a, const Tensor& b) c
                                       {cd + i * m * n, (int)n}, {1, 0});
         Gemm gemm;
         check_cutlass(gemm.can_implement(args), "CUTLASS cannot implement batched_matmul");
-        check_cutlass(gemm(args), "CUTLASS batched_matmul failed");
+        check_cutlass(gemm(args, nullptr, stream(execution_context())),
+                      "CUTLASS batched_matmul failed");
     }
-    check_cuda(cudaDeviceSynchronize(), "CUDA CUTLASS batched_matmul failed");
+    check_cuda(cudaStreamSynchronize(stream(execution_context())),
+               "CUDA CUTLASS batched_matmul failed");
     return out;
 }
 

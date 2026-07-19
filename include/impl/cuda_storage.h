@@ -1,5 +1,6 @@
 #pragma once
 
+#include "cuda_allocation.h"
 #include "storage.h"
 
 #include <memory>
@@ -34,11 +35,11 @@ public:
     void copy_to_host(void* data, std::size_t nbytes) const;
 
 private:
-    void* data_ = nullptr;
     std::size_t nbytes_ = 0;
     DType dtype_;
     int device_index_ = 0;
     std::shared_ptr<CudaExecutionContext> context_;
+    CudaAllocation allocation_;
 };
 
 } // namespace citrius::impl
