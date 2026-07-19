@@ -17,10 +17,13 @@
 #include <chrono>
 #include <cmath>
 #include <cstdint>
+#include <fstream>
 #include <iomanip>
 #include <iostream>
 #include <memory>
+#include <set>
 #include <stdexcept>
+#include <sstream>
 #include <string>
 #include <vector>
 
@@ -28,6 +31,173 @@ namespace {
 
 using Clock = std::chrono::steady_clock;
 using citrius::impl::CpuMemTensorStorageImpl;
+
+class TeeBuffer final : public std::streambuf {
+public:
+    TeeBuffer(std::streambuf* first, std::streambuf* second)
+        : first_(first), second_(second) {}
+
+protected:
+    int overflow(int character) override {
+        if (character == traits_type::eof()) return traits_type::not_eof(character);
+        const auto value = static_cast<char>(character);
+        return first_->sputc(value) == traits_type::eof() ||
+                second_->sputc(value) == traits_type::eof()
+            ? traits_type::eof()
+            : character;
+    }
+
+    int sync() override {
+        return first_->pubsync() == 0 && second_->pubsync() == 0 ? 0 : -1;
+    }
+
+private:
+    std::streambuf* first_;
+    std::streambuf* second_;
+};
+
+std::string html_escape(const std::string& text) {
+    std::string escaped;
+    escaped.reserve(text.size());
+    for (const char character : text) {
+        switch (character) {
+        case '&': escaped += "&amp;"; break;
+        case '<': escaped += "&lt;"; break;
+        case '>': escaped += "&gt;"; break;
+        case '"': escaped += "&quot;"; break;
+        default: escaped += character; break;
+        }
+    }
+    return escaped;
+}
+
+struct BenchmarkRecord {
+    std::string backend;
+    std::string operation;
+    std::int64_t size;
+    int iterations;
+    double best_ms;
+    double average_ms;
+    double throughput;
+};
+
+std::vector<BenchmarkRecord> benchmark_records;
+std::string current_backend;
+
+void write_html_report(
+    const std::string& path,
+    const std::string& output,
+    const std::vector<BenchmarkRecord>& records) {
+    std::ofstream report(path, std::ios::binary);
+    if (!report) throw std::runtime_error("failed to open HTML report: " + path);
+    report << "<!doctype html>\n"
+           << "<html lang=\"en\"><head><meta charset=\"utf-8\">\n"
+           << "<meta name=\"viewport\" content=\"width=device-width,initial-scale=1\">\n"
+           << "<title>Citrius Operations Benchmark</title>\n"
+           << "<style>body{margin:0;background:#0b1020;color:#e5e7eb;font-family:system-ui,sans-serif}"
+              "main{max-width:1500px;margin:auto;padding:2rem}h1{margin-bottom:.25rem}"
+              ".subtitle{color:#9ca3af;margin-top:0}.chart{background:#111827;border:1px solid #374151;"
+              "border-radius:.75rem;padding:1rem;margin:1.5rem 0;overflow-x:auto}"
+              "svg{display:block;min-width:100%}.grid{stroke:#374151;stroke-width:1}.axis{fill:#9ca3af;"
+              "font-size:12px}.label{fill:#d1d5db;font-size:12px}.title{fill:#f9fafb;font-size:18px;"
+              "font-weight:600}.legend{fill:#d1d5db;font-size:13px}details{margin-top:2rem}"
+              "summary{cursor:pointer;font-weight:600}pre{overflow:auto;background:#030712;"
+              "border:1px solid #374151;border-radius:.5rem;padding:1.25rem;line-height:1.45;"
+              "color:#d1fae5}</style></head><body><main>\n"
+           << "<h1>Citrius Operations Benchmark</h1>"
+           << "<p class=\"subtitle\">Best latency by operation and backend; logarithmic milliseconds."
+              " Lower is better.</p>\n";
+
+    const std::vector<std::string> colors{
+        "#60a5fa", "#34d399", "#f59e0b", "#f472b6", "#a78bfa", "#fb7185"};
+    std::set<std::int64_t> sizes;
+    for (const auto& record : records) sizes.insert(record.size);
+    for (const std::int64_t size : sizes) {
+        std::vector<std::string> operations;
+        std::vector<std::string> backends;
+        double minimum = std::numeric_limits<double>::infinity();
+        double maximum = 0.0;
+        for (const auto& record : records) {
+            if (record.size != size) continue;
+            if (std::find(operations.begin(), operations.end(), record.operation) == operations.end())
+                operations.push_back(record.operation);
+            if (std::find(backends.begin(), backends.end(), record.backend) == backends.end())
+                backends.push_back(record.backend);
+            if (record.best_ms > 0.0) {
+                minimum = std::min(minimum, record.best_ms);
+                maximum = std::max(maximum, record.best_ms);
+            }
+        }
+        if (operations.empty() || !std::isfinite(minimum)) continue;
+        const int width = std::max(1100, static_cast<int>(operations.size()) * 105);
+        constexpr int height = 620;
+        constexpr int left = 85;
+        constexpr int right = 30;
+        constexpr int top = 75;
+        constexpr int bottom = 150;
+        const double plot_width = width - left - right;
+        const double plot_height = height - top - bottom;
+        double log_min = std::floor(std::log10(minimum));
+        double log_max = std::ceil(std::log10(maximum));
+        if (log_max <= log_min) log_max = log_min + 1.0;
+        const auto y_for = [&](double value) {
+            return top + (log_max - std::log10(value)) / (log_max - log_min) * plot_height;
+        };
+
+        report << "<section class=\"chart\"><svg viewBox=\"0 0 " << width << ' ' << height
+               << "\" role=\"img\" aria-label=\"Performance comparison for size " << size
+               << "\">\n<text class=\"title\" x=\"" << left << "\" y=\"30\">N = "
+               << size << "</text>\n";
+        for (int tick = 0; tick <= 5; ++tick) {
+            const double exponent = log_min + (log_max - log_min) * tick / 5.0;
+            const double value = std::pow(10.0, exponent);
+            const double y = y_for(value);
+            report << "<line class=\"grid\" x1=\"" << left << "\" x2=\""
+                   << width - right << "\" y1=\"" << y << "\" y2=\"" << y << "\"/>"
+                   << "<text class=\"axis\" text-anchor=\"end\" x=\"" << left - 8
+                   << "\" y=\"" << y + 4 << "\">" << std::setprecision(3) << value
+                   << " ms</text>\n";
+        }
+        const double group_width = plot_width / operations.size();
+        const double bar_width = std::max(3.0, group_width * 0.72 / backends.size());
+        for (std::size_t operation_index = 0; operation_index < operations.size(); ++operation_index) {
+            const double group_start = left + operation_index * group_width + group_width * 0.14;
+            for (std::size_t backend_index = 0; backend_index < backends.size(); ++backend_index) {
+                const auto found = std::find_if(records.begin(), records.end(), [&](const auto& record) {
+                    return record.size == size && record.operation == operations[operation_index] &&
+                           record.backend == backends[backend_index];
+                });
+                if (found == records.end() || found->best_ms <= 0.0) continue;
+                const double y = y_for(found->best_ms);
+                const double x = group_start + backend_index * bar_width;
+                report << "<rect x=\"" << x << "\" y=\"" << y << "\" width=\""
+                       << std::max(2.0, bar_width - 1.5) << "\" height=\""
+                       << top + plot_height - y << "\" fill=\""
+                       << colors[backend_index % colors.size()] << "\"><title>"
+                       << html_escape(backends[backend_index]) << " · "
+                       << html_escape(operations[operation_index]) << ": "
+                       << std::setprecision(6) << found->best_ms << " ms</title></rect>\n";
+            }
+            const double label_x = left + (operation_index + 0.5) * group_width;
+            report << "<text class=\"label\" text-anchor=\"end\" transform=\"translate("
+                   << label_x << ',' << height - bottom + 18 << ") rotate(-45)\">"
+                   << html_escape(operations[operation_index]) << "</text>\n";
+        }
+        double legend_x = left;
+        for (std::size_t index = 0; index < backends.size(); ++index) {
+            report << "<rect x=\"" << legend_x << "\" y=\"48\" width=\"12\" height=\"12\" fill=\""
+                   << colors[index % colors.size()] << "\"/><text class=\"legend\" x=\""
+                   << legend_x + 18 << "\" y=\"59\">" << html_escape(backends[index])
+                   << "</text>\n";
+            legend_x += 28 + backends[index].size() * 8;
+        }
+        report << "</svg></section>\n";
+    }
+    report << "<details><summary>Raw benchmark output</summary><pre>"
+           << html_escape(output)
+           << "</pre></details></main></body></html>\n";
+    if (!report) throw std::runtime_error("failed to write HTML report: " + path);
+}
 
 struct Result {
     double minimum_ms;
@@ -525,6 +695,9 @@ Result benchmark_cuda(const CudaDevice& device, Operation operation, std::int64_
 #endif
 
 void print_result(Operation operation, std::int64_t size, int iterations, const Result& result) {
+    benchmark_records.push_back(
+        {current_backend, operation_name(operation), size, iterations,
+         result.minimum_ms, result.average_ms, result.gflops});
     std::cout << std::left << std::setw(14) << operation_name(operation) << std::right
               << std::setw(7) << size << std::setw(8) << iterations << std::fixed
               << std::setprecision(3) << std::setw(13) << result.minimum_ms << std::setw(13)
@@ -533,6 +706,7 @@ void print_result(Operation operation, std::int64_t size, int iterations, const 
 }
 
 void print_section_header(const char* backend) {
+    current_backend = backend;
     std::cout << "\n" << backend << "\n";
     std::cout << std::left << std::setw(14) << "Operation" << std::right << std::setw(7) << "N"
               << std::setw(8) << "Runs" << std::setw(13) << "Best ms" << std::setw(13) << "Avg ms"
@@ -543,13 +717,23 @@ void print_section_header(const char* backend) {
 } // namespace
 
 int main(int argc, char** argv) {
-    if (argc != 2 || (std::string(argv[1]) != "--cpu" && std::string(argv[1]) != "--cuda" &&
-                      std::string(argv[1]) != "--all")) {
-        std::cerr << "Usage: operations_benchmark --cpu|--cuda|--all\n";
+    if (argc < 2 || (std::string(argv[1]) != "--cpu" && std::string(argv[1]) != "--cuda" &&
+                     std::string(argv[1]) != "--all")) {
+        std::cerr << "Usage: operations_benchmark --cpu|--cuda|--all [--html [FILE]]\n";
         return 1;
     }
 
     const std::string selection(argv[1]);
+    std::string html_path;
+    for (int argument = 2; argument < argc; ++argument) {
+        if (std::string(argv[argument]) != "--html" || !html_path.empty()) {
+            std::cerr << "Usage: operations_benchmark --cpu|--cuda|--all [--html [FILE]]\n";
+            return 1;
+        }
+        html_path = "operations_benchmark.html";
+        if (argument + 1 < argc && std::string(argv[argument + 1]).rfind("--", 0) != 0)
+            html_path = argv[++argument];
+    }
     const bool use_cpu = selection == "--cpu" || selection == "--all";
     const bool use_cuda = selection == "--cuda" || selection == "--all";
 #ifndef CITRIUS_HAS_CUDA
@@ -558,6 +742,11 @@ int main(int argc, char** argv) {
         return 1;
     }
 #endif
+
+    std::ostringstream captured_output;
+    std::streambuf* original_output = std::cout.rdbuf();
+    TeeBuffer tee_output(original_output, captured_output.rdbuf());
+    if (!html_path.empty()) std::cout.rdbuf(&tee_output);
 
     std::cout << "Square Float32 operations\n"
               << "Single-thread CPU reference: one run; batched N=1024 skipped\n"
@@ -644,7 +833,19 @@ int main(int argc, char** argv) {
         }
 #endif
     } catch (const std::exception& error) {
+        if (!html_path.empty()) std::cout.rdbuf(original_output);
         std::cerr << "Benchmark failed: " << error.what() << '\n';
         return 1;
+    }
+
+    if (!html_path.empty()) {
+        std::cout.rdbuf(original_output);
+        try {
+            write_html_report(html_path, captured_output.str(), benchmark_records);
+            std::cout << "HTML report: " << html_path << '\n';
+        } catch (const std::exception& error) {
+            std::cerr << "Benchmark failed: " << error.what() << '\n';
+            return 1;
+        }
     }
 }

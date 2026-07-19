@@ -7,6 +7,8 @@ set "TEST=%~1"
 set "BACKEND="
 set "CUDA_ARG="
 set "BENCH_ARGS="
+set "REPORT_ARGS="
+set "REPORT_PATH="
 
 if not exist "%BUILD_DIR%\CMakeCache.txt" (
     echo Build directory is not configured. Run build.bat first.
@@ -28,16 +30,29 @@ if /I "%~2"=="--all" (
     set "BACKEND=--all"
     set "CUDA_ARG=--cuda"
 )
-if not "%~3"=="" goto usage_error
 if not defined BACKEND goto usage_error
+
+if "%~3"=="" goto run_operations
+if /I not "%~3"=="--html" goto usage_error
+set "REPORT_ARGS=--html"
+if not "%~4"=="" set "REPORT_PATH=%~4"
+if not "%~5"=="" goto usage_error
+
+:run_operations
 
 if defined CUDA_ARG call :require_cuda
 if errorlevel 1 exit /B %errorlevel%
 
-cmake --build "%BUILD_DIR%" -j --config Release --target operations_benchmark
+cmake --build "%BUILD_DIR%" --config Release --target operations_benchmark
 if errorlevel 1 exit /B %errorlevel%
 
-"%BUILD_DIR%\Release\operations_benchmark.exe" %BACKEND%
+if defined REPORT_PATH (
+    "%BUILD_DIR%\Release\operations_benchmark.exe" %BACKEND% --html "%REPORT_PATH%"
+) else if defined REPORT_ARGS (
+    "%BUILD_DIR%\Release\operations_benchmark.exe" %BACKEND% --html
+) else (
+    "%BUILD_DIR%\Release\operations_benchmark.exe" %BACKEND%
+)
 exit /B %errorlevel%
 
 :parse_add_kernel
@@ -104,7 +119,7 @@ exit /B 0
 
 :usage_error
 echo Usage:
-echo   benchmark.bat operations --cpu^|--cuda^|--all
+echo   benchmark.bat operations --cpu^|--cuda^|--all [--html [FILE]]
 echo   benchmark.bat add-kernel [--size N] [--iterations N] [--samples N]
 echo   benchmark.bat matmul-kernel [--size N] [--iterations N] [--samples N]
 exit /B 1
