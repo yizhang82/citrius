@@ -4,6 +4,7 @@
 #include "nn/feed_forward.h"
 #include "nn/linear.h"
 #include "nn/multi_head_attention.h"
+#include "nn/transformer_block.h"
 #include "nn/functional.h"
 #include "nn/module.h"
 #include "operations.h"

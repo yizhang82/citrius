@@ -26,6 +26,7 @@ add_library(citrius
     src/nn/module.cpp
     src/nn/module_list.cpp
     src/nn/multi_head_attention.cpp
+    src/nn/transformer_block.cpp
     src/indexing_operations.cpp
     src/operations.cpp
     src/reduction_operations.cpp
@@ -192,6 +193,7 @@ add_executable(tensor_test
     tests/nn/functional_test.cpp
     tests/nn/module_test.cpp
     tests/nn/multi_head_attention_test.cpp
+    tests/nn/transformer_block_test.cpp
     tests/operations_test.cpp
     tests/reduction_operations_test.cpp
     tests/shape_operations_test.cpp
