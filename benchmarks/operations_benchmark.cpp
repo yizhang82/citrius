@@ -38,6 +38,9 @@ struct Result {
 enum class Operation {
     Add,
     Sub,
+    BroadcastAdd,
+    BroadcastMul,
+    ScalarMul,
     Matmul,
     BatchedMatmul,
 };
@@ -50,6 +53,12 @@ const char* operation_name(Operation operation) {
         return "add";
     case Operation::Sub:
         return "sub";
+    case Operation::BroadcastAdd:
+        return "broadcast-add";
+    case Operation::BroadcastMul:
+        return "broadcast-mul";
+    case Operation::ScalarMul:
+        return "scalar-mul";
     case Operation::Matmul:
         return "matmul";
     case Operation::BatchedMatmul:
@@ -156,6 +165,9 @@ Result benchmark_cpu(const citrius::impl::CpuDeviceImpl& device, Operation opera
         case Operation::Matmul:
             device.matmul_out(a, b, out);
             break;
+        case Operation::BroadcastAdd:
+        case Operation::BroadcastMul:
+        case Operation::ScalarMul:
         case Operation::BatchedMatmul:
             break;
         }
@@ -189,6 +201,35 @@ Result benchmark_cuda(const CudaDevice& device, Operation operation, std::int64_
         result.checksum = cpu_checksum(output);
         return result;
     }
+    if (operation == Operation::BroadcastAdd || operation == Operation::BroadcastMul) {
+        const auto a_values = input_values(size * size, 3);
+        const auto b_values = input_values(size, 7);
+        const citrius::Tensor a(a_values, {size, size}, citrius::Device::cuda());
+        const citrius::Tensor b(b_values, {size}, citrius::Device::cuda());
+        citrius::Tensor output;
+        auto result = measure(operation_count(operation, size), iterations, [&] {
+            output = device.broadcast_elementwise(
+                a, b,
+                operation == Operation::BroadcastAdd
+                    ? citrius::impl::CudaElementwiseOperation::Add
+                    : citrius::impl::CudaElementwiseOperation::Multiply);
+            return 0.0f;
+        });
+        result.checksum = cpu_checksum(output);
+        return result;
+    }
+    if (operation == Operation::ScalarMul) {
+        const auto values = input_values(size * size, 3);
+        const citrius::Tensor input(values, {size, size}, citrius::Device::cuda());
+        citrius::Tensor output;
+        auto result = measure(operation_count(operation, size), iterations, [&] {
+            output = device.scalar_elementwise(
+                input, 1.5f, citrius::impl::CudaElementwiseOperation::Multiply);
+            return 0.0f;
+        });
+        result.checksum = cpu_checksum(output);
+        return result;
+    }
     const auto a_values = input_values(size * size, 3);
     const auto b_values = input_values(size * size, 7);
     citrius::Tensor a(a_values, {size, size}, citrius::Device::cuda());
@@ -205,6 +246,9 @@ Result benchmark_cuda(const CudaDevice& device, Operation operation, std::int64_
         case Operation::Matmul:
             device.matmul_out(a, b, out);
             return;
+        case Operation::BroadcastAdd:
+        case Operation::BroadcastMul:
+        case Operation::ScalarMul:
         case Operation::BatchedMatmul:
             return;
         }
@@ -313,20 +357,30 @@ int main(int argc, char** argv) {
             citrius::impl::CudaDeviceImpl reference;
             citrius::impl::CublasCudaDeviceImpl cublas;
             citrius::impl::CutlassCudaDeviceImpl cutlass;
-            const auto run_cuda = [&](const char* name, const auto& device) {
+            const auto run_cuda = [&](const char* name, const auto& device, bool elementwise) {
                 print_section_header(name);
                 for (const auto [size, iterations] : std::vector<std::pair<std::int64_t, int>>{
                          {128, 50}, {256, 50}, {512, 50}, {1024, 50}}) {
-                    for (Operation operation : {Operation::Add, Operation::Sub, Operation::Matmul,
-                                                Operation::BatchedMatmul}) {
+                    std::vector<Operation> operations{Operation::Add, Operation::Sub};
+                    if (elementwise) {
+                        operations.insert(
+                            operations.end(),
+                            {Operation::BroadcastAdd, Operation::BroadcastMul,
+                             Operation::ScalarMul});
+                    }
+                    operations.insert(
+                        operations.end(), {Operation::Matmul, Operation::BatchedMatmul});
+                    for (Operation operation : operations) {
                         print_result(operation, size, iterations,
                                      benchmark_cuda(device, operation, size, iterations));
                     }
                 }
             };
-            run_cuda("CUDA (reference)", reference);
-            run_cuda("CUDA (cuBLAS)", cublas);
-            run_cuda("CUDA (CUTLASS)", cutlass);
+            // Elementwise implementations are inherited unchanged by the
+            // cuBLAS and CUTLASS variants, so report them once.
+            run_cuda("CUDA (reference)", reference, true);
+            run_cuda("CUDA (cuBLAS)", cublas, false);
+            run_cuda("CUDA (CUTLASS)", cutlass, false);
         }
 #endif
     } catch (const std::exception& error) {

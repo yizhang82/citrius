@@ -149,6 +149,28 @@ std::unique_ptr<impl::IDevice> cuda_device(int device_index) {
     return std::make_unique<CudaDeviceImpl>(device_index);
 #endif
 }
+
+Tensor cuda_broadcast_elementwise(
+    const Tensor& left,
+    const Tensor& right,
+    impl::CudaElementwiseOperation operation) {
+    require_matching_devices(left, right);
+    require_float32(left);
+    require_float32(right);
+    auto device = cuda_device(left.device().index);
+    return static_cast<impl::CudaDeviceImpl&>(*device).broadcast_elementwise(
+        left, right, operation);
+}
+
+Tensor cuda_scalar_elementwise(
+    const Tensor& tensor,
+    float scalar,
+    impl::CudaElementwiseOperation operation,
+    bool scalar_is_left = false) {
+    auto device = cuda_device(tensor.device().index);
+    return static_cast<impl::CudaDeviceImpl&>(*device).scalar_elementwise(
+        tensor, scalar, operation, scalar_is_left);
+}
 #endif
 
 template <typename Operation>
@@ -181,6 +203,11 @@ Tensor dispatch(const Tensor& left, const Tensor& right, Operation operation) {
 
 Tensor add(const Tensor& left, const Tensor& right) {
     if (left.shape() != right.shape()) {
+#ifdef CITRIUS_HAS_CUDA
+        if (left.device().type == DeviceType::CUDA)
+            return cuda_broadcast_elementwise(
+                left, right, impl::CudaElementwiseOperation::Add);
+#endif
         return broadcast_binary(left, right, std::plus<float>());
     }
     return dispatch(left, right, [](const auto& device, const Tensor& a, const Tensor& b) {
@@ -190,6 +217,11 @@ Tensor add(const Tensor& left, const Tensor& right) {
 
 Tensor sub(const Tensor& left, const Tensor& right) {
     if (left.shape() != right.shape()) {
+#ifdef CITRIUS_HAS_CUDA
+        if (left.device().type == DeviceType::CUDA)
+            return cuda_broadcast_elementwise(
+                left, right, impl::CudaElementwiseOperation::Subtract);
+#endif
         return broadcast_binary(left, right, std::minus<float>());
     }
     return dispatch(left, right, [](const auto& device, const Tensor& a, const Tensor& b) {
@@ -209,14 +241,29 @@ Tensor matmul(const Tensor& left, const Tensor& right) {
 }
 
 Tensor mul(const Tensor& left, const Tensor& right) {
+#ifdef CITRIUS_HAS_CUDA
+    if (left.device().type == DeviceType::CUDA)
+        return cuda_broadcast_elementwise(
+            left, right, impl::CudaElementwiseOperation::Multiply);
+#endif
     return broadcast_binary(left, right, std::multiplies<float>());
 }
 
 Tensor div(const Tensor& left, const Tensor& right) {
+#ifdef CITRIUS_HAS_CUDA
+    if (left.device().type == DeviceType::CUDA)
+        return cuda_broadcast_elementwise(
+            left, right, impl::CudaElementwiseOperation::Divide);
+#endif
     return broadcast_binary(left, right, std::divides<float>());
 }
 
 Tensor maximum(const Tensor& left, const Tensor& right) {
+#ifdef CITRIUS_HAS_CUDA
+    if (left.device().type == DeviceType::CUDA)
+        return cuda_broadcast_elementwise(
+            left, right, impl::CudaElementwiseOperation::Maximum);
+#endif
     return broadcast_binary(left, right, [](float a, float b) { return std::max(a, b); });
 }
 
@@ -257,14 +304,52 @@ Tensor masked_fill(const Tensor& tensor, const Tensor& mask, float value) {
     return from_vector(values, tensor.shape(), tensor.device());
 }
 
-Tensor add(const Tensor& tensor, float scalar) { return unary(tensor, [scalar](float x) { return x + scalar; }); }
+Tensor add(const Tensor& tensor, float scalar) {
+#ifdef CITRIUS_HAS_CUDA
+    if (tensor.device().type == DeviceType::CUDA)
+        return cuda_scalar_elementwise(tensor, scalar, impl::CudaElementwiseOperation::Add);
+#endif
+    return unary(tensor, [scalar](float x) { return x + scalar; });
+}
 Tensor add(float scalar, const Tensor& tensor) { return add(tensor, scalar); }
-Tensor sub(const Tensor& tensor, float scalar) { return unary(tensor, [scalar](float x) { return x - scalar; }); }
-Tensor sub(float scalar, const Tensor& tensor) { return unary(tensor, [scalar](float x) { return scalar - x; }); }
-Tensor mul(const Tensor& tensor, float scalar) { return unary(tensor, [scalar](float x) { return x * scalar; }); }
+Tensor sub(const Tensor& tensor, float scalar) {
+#ifdef CITRIUS_HAS_CUDA
+    if (tensor.device().type == DeviceType::CUDA)
+        return cuda_scalar_elementwise(tensor, scalar, impl::CudaElementwiseOperation::Subtract);
+#endif
+    return unary(tensor, [scalar](float x) { return x - scalar; });
+}
+Tensor sub(float scalar, const Tensor& tensor) {
+#ifdef CITRIUS_HAS_CUDA
+    if (tensor.device().type == DeviceType::CUDA)
+        return cuda_scalar_elementwise(
+            tensor, scalar, impl::CudaElementwiseOperation::Subtract, true);
+#endif
+    return unary(tensor, [scalar](float x) { return scalar - x; });
+}
+Tensor mul(const Tensor& tensor, float scalar) {
+#ifdef CITRIUS_HAS_CUDA
+    if (tensor.device().type == DeviceType::CUDA)
+        return cuda_scalar_elementwise(tensor, scalar, impl::CudaElementwiseOperation::Multiply);
+#endif
+    return unary(tensor, [scalar](float x) { return x * scalar; });
+}
 Tensor mul(float scalar, const Tensor& tensor) { return mul(tensor, scalar); }
-Tensor div(const Tensor& tensor, float scalar) { return unary(tensor, [scalar](float x) { return x / scalar; }); }
-Tensor div(float scalar, const Tensor& tensor) { return unary(tensor, [scalar](float x) { return scalar / x; }); }
+Tensor div(const Tensor& tensor, float scalar) {
+#ifdef CITRIUS_HAS_CUDA
+    if (tensor.device().type == DeviceType::CUDA)
+        return cuda_scalar_elementwise(tensor, scalar, impl::CudaElementwiseOperation::Divide);
+#endif
+    return unary(tensor, [scalar](float x) { return x / scalar; });
+}
+Tensor div(float scalar, const Tensor& tensor) {
+#ifdef CITRIUS_HAS_CUDA
+    if (tensor.device().type == DeviceType::CUDA)
+        return cuda_scalar_elementwise(
+            tensor, scalar, impl::CudaElementwiseOperation::Divide, true);
+#endif
+    return unary(tensor, [scalar](float x) { return scalar / x; });
+}
 
 Tensor operator+(const Tensor& left, const Tensor& right) {
     return add(left, right);

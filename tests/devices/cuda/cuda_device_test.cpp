@@ -255,6 +255,63 @@ TEST(CudaDeviceTest, TopLevelOperationsDispatchToCuda) {
     EXPECT_EQ(values(citrius::add(left, right)), std::vector<float>({11, 22}));
 }
 
+TEST(CudaDeviceTest, BroadcastElementwiseOperationsStayOnCuda) {
+    std::string error;
+    auto device = make_cuda_device(&error);
+    if (!device)
+        GTEST_SKIP() << error;
+    const citrius::Tensor left(
+        std::vector<float>{1, 2, 3, 4, 5, 6}, {2, 1, 3}, citrius::Device::cuda());
+    const citrius::Tensor right(
+        std::vector<float>{10, 20, 30, 40}, {1, 4, 1}, citrius::Device::cuda());
+
+    const auto added = citrius::add(left, right);
+    const auto subtracted = citrius::sub(right, left);
+    const auto multiplied = citrius::mul(left, right);
+    const auto divided = citrius::div(right, left);
+    const auto maxima = citrius::maximum(left, right);
+
+    EXPECT_EQ(added.device(), citrius::Device::cuda());
+    EXPECT_EQ(added.shape(), citrius::Shape({2, 4, 3}));
+    EXPECT_EQ(
+        values(added),
+        (std::vector<float>{11, 12, 13, 21, 22, 23, 31, 32, 33, 41, 42, 43,
+                            14, 15, 16, 24, 25, 26, 34, 35, 36, 44, 45, 46}));
+    EXPECT_EQ(
+        values(subtracted),
+        (std::vector<float>{9, 8, 7, 19, 18, 17, 29, 28, 27, 39, 38, 37,
+                            6, 5, 4, 16, 15, 14, 26, 25, 24, 36, 35, 34}));
+    EXPECT_EQ(
+        values(multiplied),
+        (std::vector<float>{10, 20, 30, 20, 40, 60, 30, 60, 90, 40, 80, 120,
+                            40, 50, 60, 80, 100, 120, 120, 150, 180, 160, 200, 240}));
+    const auto quotients = values(divided);
+    EXPECT_NEAR(quotients[0], 10.0f, 1e-6f);
+    EXPECT_NEAR(quotients[23], 40.0f / 6.0f, 1e-6f);
+    EXPECT_EQ(values(maxima), values(right + citrius::mul(left, 0.0f)));
+    EXPECT_THROW(
+        citrius::add(
+            left,
+            citrius::Tensor(
+                std::vector<float>{1, 2, 3, 4}, {2, 2}, citrius::Device::cuda())),
+        std::invalid_argument);
+}
+
+TEST(CudaDeviceTest, ScalarElementwiseOperationsStayOnCuda) {
+    std::string error;
+    auto device = make_cuda_device(&error);
+    if (!device)
+        GTEST_SKIP() << error;
+    const citrius::Tensor input(std::vector<float>{1, 2, 4}, citrius::Device::cuda());
+
+    EXPECT_EQ(values(input + 2.0f), std::vector<float>({3, 4, 6}));
+    EXPECT_EQ(values(input - 2.0f), std::vector<float>({-1, 0, 2}));
+    EXPECT_EQ(values(10.0f - input), std::vector<float>({9, 8, 6}));
+    EXPECT_EQ(values(input * 3.0f), std::vector<float>({3, 6, 12}));
+    EXPECT_EQ(values(input / 2.0f), std::vector<float>({0.5f, 1, 2}));
+    EXPECT_EQ(values(8.0f / input), std::vector<float>({8, 4, 2}));
+}
+
 TEST(CudaDeviceTest, TopLevelMatmulUsesConfiguredCudaBackend) {
     std::string error;
     auto device = make_cuda_device(&error);

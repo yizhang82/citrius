@@ -5,6 +5,14 @@
 
 namespace citrius::impl {
 
+enum class CudaElementwiseOperation {
+    Add,
+    Subtract,
+    Multiply,
+    Divide,
+    Maximum,
+};
+
 class CudaDeviceImpl : public IDevice {
 public:
     explicit CudaDeviceImpl(int device_index = 0);
@@ -16,6 +24,15 @@ public:
     Tensor sub(const Tensor& a, const Tensor& b) const override;
     Tensor matmul(const Tensor& a, const Tensor& b) const override;
     Tensor batched_matmul(const Tensor& a, const Tensor& b) const override;
+    Tensor broadcast_elementwise(
+        const Tensor& a,
+        const Tensor& b,
+        CudaElementwiseOperation operation) const;
+    Tensor scalar_elementwise(
+        const Tensor& tensor,
+        float scalar,
+        CudaElementwiseOperation operation,
+        bool scalar_is_left = false) const;
     virtual void add_out(const Tensor& a, const Tensor& b, Tensor& out) const;
     virtual void sub_out(const Tensor& a, const Tensor& b, Tensor& out) const;
     virtual void matmul_out(const Tensor& a, const Tensor& b, Tensor& out) const;

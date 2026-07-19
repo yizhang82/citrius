@@ -31,6 +31,26 @@ void require_same_shape(const Tensor& a, const Tensor& b) {
     if (a.shape() != b.shape())
         throw std::invalid_argument("tensor shapes must match");
 }
+
+Shape broadcast_shape(const Shape& left, const Shape& right) {
+    const std::size_t rank = std::max(left.size(), right.size());
+    Shape output(rank, 1);
+    for (std::size_t offset = 0; offset < rank; ++offset) {
+        const auto a = offset < left.size() ? left[left.size() - 1 - offset] : 1;
+        const auto b = offset < right.size() ? right[right.size() - 1 - offset] : 1;
+        if (a != b && a != 1 && b != 1)
+            throw std::invalid_argument("tensor shapes are not broadcastable");
+        output[rank - 1 - offset] = std::max(a, b);
+    }
+    return output;
+}
+
+Strides contiguous_strides(const Shape& shape) {
+    Strides result(shape.size(), 1);
+    for (std::size_t index = shape.size(); index-- > 1;)
+        result[index - 1] = result[index] * shape[index];
+    return result;
+}
 void require_2d_matmul_shapes(const Tensor& a, const Tensor& b) {
     if (a.ndim() != 2 || b.ndim() != 2)
         throw std::invalid_argument("matmul expects 2D tensors");
@@ -91,6 +111,65 @@ __global__ void sub_f32(const float* a, const float* b, float* out, std::int64_t
     const auto stride = static_cast<std::int64_t>(blockDim.x) * gridDim.x;
     for (auto i = first; i < count; i += stride)
         out[i] = a[i] - b[i];
+}
+
+__device__ float apply_elementwise(
+    float a,
+    float b,
+    CudaElementwiseOperation operation) {
+    switch (operation) {
+        case CudaElementwiseOperation::Add: return a + b;
+        case CudaElementwiseOperation::Subtract: return a - b;
+        case CudaElementwiseOperation::Multiply: return a * b;
+        case CudaElementwiseOperation::Divide: return a / b;
+        case CudaElementwiseOperation::Maximum: return a < b ? b : a;
+    }
+    return 0.0f;
+}
+
+__global__ void broadcast_elementwise_f32(
+    const float* a,
+    const float* b,
+    float* out,
+    std::int64_t count,
+    const std::int64_t* metadata,
+    std::int64_t rank,
+    CudaElementwiseOperation operation) {
+    const auto* output_strides = metadata;
+    const auto* output_shape = metadata + rank;
+    const auto* a_shape = metadata + 2 * rank;
+    const auto* a_strides = metadata + 3 * rank;
+    const auto* b_shape = metadata + 4 * rank;
+    const auto* b_strides = metadata + 5 * rank;
+    const auto first = static_cast<std::int64_t>(blockIdx.x) * blockDim.x + threadIdx.x;
+    const auto stride = static_cast<std::int64_t>(blockDim.x) * gridDim.x;
+    for (auto index = first; index < count; index += stride) {
+        std::int64_t a_index = 0;
+        std::int64_t b_index = 0;
+        for (std::int64_t axis = 0; axis < rank; ++axis) {
+            const auto coordinate =
+                (index / output_strides[axis]) % output_shape[axis];
+            if (a_shape[axis] != 1) a_index += coordinate * a_strides[axis];
+            if (b_shape[axis] != 1) b_index += coordinate * b_strides[axis];
+        }
+        out[index] = apply_elementwise(a[a_index], b[b_index], operation);
+    }
+}
+
+__global__ void scalar_elementwise_f32(
+    const float* input,
+    float scalar,
+    float* out,
+    std::int64_t count,
+    CudaElementwiseOperation operation,
+    bool scalar_is_left) {
+    const auto first = static_cast<std::int64_t>(blockIdx.x) * blockDim.x + threadIdx.x;
+    const auto stride = static_cast<std::int64_t>(blockDim.x) * gridDim.x;
+    for (auto index = first; index < count; index += stride) {
+        const float value = input[index];
+        out[index] = scalar_is_left ? apply_elementwise(scalar, value, operation)
+                                    : apply_elementwise(value, scalar, operation);
+    }
 }
 constexpr int matmul_tile_size = 16;
 
@@ -301,6 +380,86 @@ Tensor CudaDeviceImpl::sub(const Tensor& a, const Tensor& b) const {
     require_same_shape(a, b);
     auto out = empty(a.shape(), a.dtype());
     sub_out(a, b, out);
+    return out;
+}
+
+Tensor CudaDeviceImpl::broadcast_elementwise(
+    const Tensor& a,
+    const Tensor& b,
+    CudaElementwiseOperation operation) const {
+    require_defined(a, "left");
+    require_defined(b, "right");
+    require_float32(a, "left");
+    require_float32(b, "right");
+    const Shape output_shape = broadcast_shape(a.shape(), b.shape());
+    Tensor out = empty(output_shape, DType::Float32);
+    if (out.numel() == 0) return out;
+
+    auto ap = ensure_storage(a.storage(), ConversionPolicy::CopyToDevice);
+    auto bp = ensure_storage(b.storage(), ConversionPolicy::CopyToDevice);
+    const std::size_t rank = output_shape.size();
+    std::vector<std::int64_t> metadata(rank * 6, 0);
+    const Strides output_strides = contiguous_strides(output_shape);
+    const Strides a_strides = contiguous_strides(a.shape());
+    const Strides b_strides = contiguous_strides(b.shape());
+    std::copy(output_strides.begin(), output_strides.end(), metadata.begin());
+    std::copy(output_shape.begin(), output_shape.end(), metadata.begin() + rank);
+    const std::size_t a_padding = rank - a.ndim();
+    const std::size_t b_padding = rank - b.ndim();
+    std::fill(metadata.begin() + 2 * rank, metadata.begin() + 3 * rank, 1);
+    std::fill(metadata.begin() + 4 * rank, metadata.begin() + 5 * rank, 1);
+    std::copy(a.shape().begin(), a.shape().end(), metadata.begin() + 2 * rank + a_padding);
+    std::copy(a_strides.begin(), a_strides.end(), metadata.begin() + 3 * rank + a_padding);
+    std::copy(b.shape().begin(), b.shape().end(), metadata.begin() + 4 * rank + b_padding);
+    std::copy(b_strides.begin(), b_strides.end(), metadata.begin() + 5 * rank + b_padding);
+
+    std::int64_t* device_metadata = nullptr;
+    const std::size_t metadata_bytes = metadata.size() * sizeof(std::int64_t);
+    if (metadata_bytes != 0) {
+        check_cuda(cudaMalloc(&device_metadata, metadata_bytes),
+                   "failed to allocate CUDA broadcast metadata");
+    }
+    try {
+        if (metadata_bytes != 0) {
+            check_cuda(cudaMemcpy(device_metadata, metadata.data(), metadata_bytes,
+                                  cudaMemcpyHostToDevice),
+                       "failed to copy CUDA broadcast metadata");
+        }
+        const auto required_blocks = (out.numel() + 255) / 256;
+        const auto blocks = static_cast<unsigned>(
+            std::min<std::int64_t>(required_blocks, max_elementwise_blocks_));
+        broadcast_elementwise_f32<<<blocks, 256>>>(
+            data(require_cuda_storage(*ap)), data(require_cuda_storage(*bp)),
+            data(require_cuda_storage(*out.storage())), out.numel(), device_metadata,
+            static_cast<std::int64_t>(rank), operation);
+        check_cuda(cudaGetLastError(), "failed to launch CUDA broadcast elementwise kernel");
+        check_cuda(cudaDeviceSynchronize(), "CUDA broadcast elementwise kernel failed");
+    } catch (...) {
+        if (device_metadata) cudaFree(device_metadata);
+        throw;
+    }
+    if (device_metadata) cudaFree(device_metadata);
+    return out;
+}
+
+Tensor CudaDeviceImpl::scalar_elementwise(
+    const Tensor& tensor,
+    float scalar,
+    CudaElementwiseOperation operation,
+    bool scalar_is_left) const {
+    require_defined(tensor, "input");
+    require_float32(tensor, "input");
+    Tensor out = empty(tensor.shape(), DType::Float32);
+    if (out.numel() == 0) return out;
+    auto input = ensure_storage(tensor.storage(), ConversionPolicy::CopyToDevice);
+    const auto required_blocks = (out.numel() + 255) / 256;
+    const auto blocks = static_cast<unsigned>(
+        std::min<std::int64_t>(required_blocks, max_elementwise_blocks_));
+    scalar_elementwise_f32<<<blocks, 256>>>(
+        data(require_cuda_storage(*input)), scalar,
+        data(require_cuda_storage(*out.storage())), out.numel(), operation, scalar_is_left);
+    check_cuda(cudaGetLastError(), "failed to launch CUDA scalar elementwise kernel");
+    check_cuda(cudaDeviceSynchronize(), "CUDA scalar elementwise kernel failed");
     return out;
 }
 
