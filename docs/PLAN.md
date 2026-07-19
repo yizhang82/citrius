@@ -157,8 +157,11 @@ Acceptance criteria:
 
 ## Phase 5: Transformer building blocks
 
-Status: In progress. `nn::functional::relu` and the tanh-approximate
-`nn::functional::gelu` are complete and covered by CPU reference tests.
+Status: In progress. ReLU, tanh-approximate GELU, functional layer normalization,
+`nn::LayerNorm`, inference-only `nn::Dropout`, and registered sequential
+`nn::ModuleList` are complete and covered by CPU reference tests. Integer tensor
+construction, indexed gather, and `nn::Embedding` remain. SiLU is deferred until
+a model requires it.
 
 Add the following functional operations and modules:
 

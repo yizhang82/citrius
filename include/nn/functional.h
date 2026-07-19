@@ -20,6 +20,23 @@ Tensor relu(const Tensor& tensor);
 /// @throws std::invalid_argument If `tensor` is undefined or non-Float32.
 Tensor gelu(const Tensor& tensor);
 
+/// Normalizes the trailing dimensions of a Float32 tensor using population variance.
+/// Optional weight and bias tensors must exactly match `normalized_shape` and are
+/// broadcast over the leading dimensions.
+/// @param tensor Defined Float32 input tensor.
+/// @param normalized_shape Nonempty positive shape matching the input's trailing dimensions.
+/// @param weight Optional elementwise scale tensor.
+/// @param bias Optional elementwise bias tensor.
+/// @param eps Positive value added to the variance for numerical stability.
+/// @return A new tensor with the input shape and device.
+/// @throws std::invalid_argument If shapes, dtypes, devices, or epsilon are invalid.
+Tensor layer_norm(
+    const Tensor& tensor,
+    const Shape& normalized_shape,
+    const Tensor& weight = Tensor(),
+    const Tensor& bias = Tensor(),
+    float eps = 1e-5f);
+
 /// Computes numerically stable softmax along one dimension.
 /// @param tensor Defined Float32 input tensor.
 /// @param dim Dimension normalized into probabilities; negative dimensions are accepted.
