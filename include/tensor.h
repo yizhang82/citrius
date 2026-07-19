@@ -26,8 +26,18 @@ public:
         DType dtype,
         Device device,
         std::shared_ptr<impl::ITensorStorage> storage);
+    Tensor(
+        Shape shape,
+        Strides strides,
+        std::int64_t storage_offset,
+        DType dtype,
+        Device device,
+        std::shared_ptr<impl::ITensorStorage> storage);
 
     const Shape& shape() const;
+    const Strides& strides() const;
+    std::int64_t storage_offset() const;
+    bool is_contiguous() const;
     DType dtype() const;
     Device device() const;
     std::shared_ptr<impl::ITensorStorage> storage() const;
@@ -56,6 +66,8 @@ private:
     void copy_item_to_host(void* destination, DType expected) const;
 
     Shape shape_;
+    Strides strides_;
+    std::int64_t storage_offset_ = 0;
     DType dtype_ = DType::Float32;
     Device device_ = Device::cpu();
     std::shared_ptr<impl::ITensorStorage> storage_;

@@ -33,6 +33,9 @@ TEST(TensorTest, ConstructedTensorExposesMetadata) {
 
     EXPECT_TRUE(tensor.defined());
     EXPECT_EQ(tensor.shape(), citrius::Shape({2, 3}));
+    EXPECT_EQ(tensor.strides(), citrius::Strides({3, 1}));
+    EXPECT_EQ(tensor.storage_offset(), 0);
+    EXPECT_TRUE(tensor.is_contiguous());
     EXPECT_EQ(tensor.dtype(), citrius::DType::Float32);
     EXPECT_EQ(tensor.device(), citrius::Device::cpu());
     EXPECT_EQ(tensor.ndim(), 2);
@@ -140,6 +143,36 @@ TEST(TensorTest, CopyRejectsUndefinedTensor) {
     const citrius::Tensor undefined;
 
     EXPECT_THROW(undefined.copy(), std::invalid_argument);
+}
+
+TEST(TensorTest, ExplicitLayoutExposesStridesOffsetAndContiguity) {
+    auto storage = std::make_shared<citrius::impl::CpuMemTensorStorageImpl>(
+        24 * sizeof(float), citrius::DType::Float32);
+    const citrius::Tensor tensor(
+        {2, 4}, {12, 1}, 8, citrius::DType::Float32, citrius::Device::cpu(), storage);
+
+    EXPECT_EQ(tensor.shape(), citrius::Shape({2, 4}));
+    EXPECT_EQ(tensor.strides(), citrius::Strides({12, 1}));
+    EXPECT_EQ(tensor.storage_offset(), 8);
+    EXPECT_FALSE(tensor.is_contiguous());
+}
+
+TEST(TensorTest, ExplicitLayoutValidatesMetadataAndStorageBounds) {
+    auto storage = std::make_shared<citrius::impl::CpuMemTensorStorageImpl>(
+        6 * sizeof(float), citrius::DType::Float32);
+
+    EXPECT_THROW(
+        citrius::Tensor({2, 3}, {3}, 0, citrius::DType::Float32,
+                        citrius::Device::cpu(), storage),
+        std::invalid_argument);
+    EXPECT_THROW(
+        citrius::Tensor({2, 3}, {3, 1}, -1, citrius::DType::Float32,
+                        citrius::Device::cpu(), storage),
+        std::invalid_argument);
+    EXPECT_THROW(
+        citrius::Tensor({2, 3}, {4, 1}, 0, citrius::DType::Float32,
+                        citrius::Device::cpu(), storage),
+        std::invalid_argument);
 }
 
 TEST(TensorTest, ItemMaterializesScalarAndValidatesTypeAndShape) {
