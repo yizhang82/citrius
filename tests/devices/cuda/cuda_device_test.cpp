@@ -7,6 +7,8 @@
 #include "operations.h"
 #include "reduction_operations.h"
 #include "tensor_factory.h"
+#include "nn/functional.h"
+#include "nn/layer_norm.h"
 
 #include <gtest/gtest.h>
 
@@ -400,6 +402,51 @@ TEST(CudaDeviceTest, MaskedFillBroadcastsBoolMaskOnCuda) {
                 citrius::Device::cuda()),
             0.0f),
         std::invalid_argument);
+}
+
+TEST(CudaDeviceTest, SoftmaxComposesNativeCudaOperations) {
+    std::string error;
+    auto device = make_cuda_device(&error);
+    if (!device)
+        GTEST_SKIP() << error;
+    const citrius::Tensor input(
+        std::vector<float>{1, 2, 3, 10001, 10002, 10003},
+        {2, 3}, citrius::Device::cuda());
+
+    const auto output = citrius::nn::functional::softmax(input, -1);
+    const auto output_values = values(output);
+
+    EXPECT_EQ(output.device(), citrius::Device::cuda());
+    EXPECT_EQ(output.shape(), input.shape());
+    for (std::size_t index = 0; index < 3; ++index)
+        EXPECT_NEAR(output_values[index], output_values[index + 3], 1e-6f);
+    EXPECT_NEAR(output_values[0] + output_values[1] + output_values[2], 1.0f, 1e-6f);
+    EXPECT_NEAR(output_values[3] + output_values[4] + output_values[5], 1.0f, 1e-6f);
+}
+
+TEST(CudaDeviceTest, LayerNormComposesNativeCudaOperations) {
+    std::string error;
+    auto device = make_cuda_device(&error);
+    if (!device)
+        GTEST_SKIP() << error;
+    citrius::nn::LayerNorm layer_norm(3, 1e-5f, true, citrius::Device::cuda());
+    layer_norm.weight() = citrius::Tensor(
+        std::vector<float>{1.0f, 2.0f, 3.0f}, citrius::Device::cuda());
+    layer_norm.bias() = citrius::Tensor(
+        std::vector<float>{0.5f, 0.0f, -0.5f}, citrius::Device::cuda());
+    const citrius::Tensor input(
+        std::vector<float>{1, 2, 3, 4, 5, 6}, {2, 3}, citrius::Device::cuda());
+
+    const auto output = layer_norm(input);
+    const auto output_values = values(output);
+
+    EXPECT_EQ(output.device(), citrius::Device::cuda());
+    EXPECT_NEAR(output_values[0], -0.724736f, 1e-5f);
+    EXPECT_NEAR(output_values[1], 0.0f, 1e-6f);
+    EXPECT_NEAR(output_values[2], 3.174207f, 1e-5f);
+    EXPECT_NEAR(output_values[3], output_values[0], 1e-5f);
+    EXPECT_NEAR(output_values[4], output_values[1], 1e-6f);
+    EXPECT_NEAR(output_values[5], output_values[2], 1e-5f);
 }
 
 TEST(CudaDeviceTest, TopLevelMatmulUsesConfiguredCudaBackend) {

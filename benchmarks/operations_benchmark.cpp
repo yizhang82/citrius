@@ -3,6 +3,7 @@
 #include "impl/multi_thread_cpu_device.h"
 #include "operations.h"
 #include "tensor_factory.h"
+#include "nn/functional.h"
 
 #ifdef CITRIUS_HAS_CUDA
 #include "impl/cublas_cuda_device.h"
@@ -49,6 +50,8 @@ enum class Operation {
     Sqrt,
     Power,
     MaskedFill,
+    Softmax,
+    LayerNorm,
     Matmul,
     BatchedMatmul,
 };
@@ -83,6 +86,10 @@ const char* operation_name(Operation operation) {
         return "pow";
     case Operation::MaskedFill:
         return "masked-fill";
+    case Operation::Softmax:
+        return "softmax";
+    case Operation::LayerNorm:
+        return "layer-norm";
     case Operation::Matmul:
         return "matmul";
     case Operation::BatchedMatmul:
@@ -200,6 +207,8 @@ Result benchmark_cpu(const citrius::impl::CpuDeviceImpl& device, Operation opera
         case Operation::Sqrt:
         case Operation::Power:
         case Operation::MaskedFill:
+        case Operation::Softmax:
+        case Operation::LayerNorm:
         case Operation::BatchedMatmul:
             break;
         }
@@ -327,6 +336,30 @@ Result benchmark_cuda(const CudaDevice& device, Operation operation, std::int64_
         result.checksum = cpu_checksum(output);
         return result;
     }
+    if (operation == Operation::Softmax || operation == Operation::LayerNorm) {
+        const auto values = input_values(size * size, 3);
+        const citrius::Tensor input(values, {size, size}, citrius::Device::cuda());
+        citrius::Tensor weight;
+        citrius::Tensor bias;
+        if (operation == Operation::LayerNorm) {
+            weight = citrius::from_vector(
+                std::vector<float>(static_cast<std::size_t>(size), 1.0f),
+                {size}, citrius::Device::cuda());
+            bias = citrius::from_vector(
+                std::vector<float>(static_cast<std::size_t>(size), 0.0f),
+                {size}, citrius::Device::cuda());
+        }
+        citrius::Tensor output;
+        auto result = measure(operation_count(operation, size), iterations, [&] {
+            output = operation == Operation::Softmax
+                ? citrius::nn::functional::softmax(input, -1)
+                : citrius::nn::functional::layer_norm(
+                      input, {size}, weight, bias, 1e-5f);
+            return 0.0f;
+        });
+        result.checksum = cpu_checksum(output);
+        return result;
+    }
     const auto a_values = input_values(size * size, 3);
     const auto b_values = input_values(size * size, 7);
     citrius::Tensor a(a_values, {size, size}, citrius::Device::cuda());
@@ -354,6 +387,8 @@ Result benchmark_cuda(const CudaDevice& device, Operation operation, std::int64_
         case Operation::Sqrt:
         case Operation::Power:
         case Operation::MaskedFill:
+        case Operation::Softmax:
+        case Operation::LayerNorm:
         case Operation::BatchedMatmul:
             return;
         }
@@ -475,7 +510,8 @@ int main(int argc, char** argv) {
                              Operation::ReduceMean, Operation::ReduceMax,
                              Operation::ReduceVariance, Operation::Exp,
                              Operation::Sqrt, Operation::Power,
-                             Operation::MaskedFill});
+                             Operation::MaskedFill, Operation::Softmax,
+                             Operation::LayerNorm});
                     }
                     operations.insert(
                         operations.end(), {Operation::Matmul, Operation::BatchedMatmul});

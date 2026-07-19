@@ -110,7 +110,9 @@ Status: CPU reference implementation complete. Sum, mean, maximum, and
 population variance support full, single-dimension, and multi-dimension
 reductions with negative dimensions and optional `keepdim`. CUDA has a native
 general reference kernel for the same reduction variants. Numerically stable
-softmax is available through `nn::functional::softmax`.
+softmax is available through `nn::functional::softmax`. CUDA softmax composes
+entirely from native CUDA primitives and has device parity coverage; a fused
+implementation remains a later optimization.
 
 Implement dimension-aware reductions:
 
@@ -165,7 +167,8 @@ functional layer normalization, `nn::LayerNorm`, inference-only `nn::Dropout`,
 registered sequential `nn::ModuleList`, Int64 tensor construction, indexed row
 gather, and `nn::Embedding` are covered by CPU reference tests. Indexed gather
 currently stages through CPU for non-CPU devices. SiLU is deferred until a model
-requires it.
+requires it. LayerNorm composes entirely from native CUDA primitives and has
+device parity coverage; a fused implementation remains a later optimization.
 
 Add the following functional operations and modules:
 
