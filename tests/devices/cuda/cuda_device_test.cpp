@@ -5,6 +5,7 @@
 #include "impl/cuda_storage.h"
 #include "impl/cutlass_cuda_device.h"
 #include "operations.h"
+#include "reduction_operations.h"
 
 #include <gtest/gtest.h>
 
@@ -310,6 +311,42 @@ TEST(CudaDeviceTest, ScalarElementwiseOperationsStayOnCuda) {
     EXPECT_EQ(values(input * 3.0f), std::vector<float>({3, 6, 12}));
     EXPECT_EQ(values(input / 2.0f), std::vector<float>({0.5f, 1, 2}));
     EXPECT_EQ(values(8.0f / input), std::vector<float>({8, 4, 2}));
+}
+
+TEST(CudaDeviceTest, ReductionsSupportDimensionsAndKeepdim) {
+    std::string error;
+    auto device = make_cuda_device(&error);
+    if (!device)
+        GTEST_SKIP() << error;
+    const citrius::Tensor input(
+        std::vector<float>{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12},
+        {2, 2, 3}, citrius::Device::cuda());
+
+    const auto sums = citrius::sum(input, -1, true);
+    const auto means = citrius::mean(input, std::vector<std::int64_t>{0, 2});
+    const auto maxima = citrius::max(input, 1);
+    const auto variances = citrius::variance(input, -1);
+
+    EXPECT_EQ(sums.device(), citrius::Device::cuda());
+    EXPECT_EQ(sums.shape(), citrius::Shape({2, 2, 1}));
+    EXPECT_EQ(values(sums), std::vector<float>({6, 15, 24, 33}));
+    EXPECT_EQ(values(means), std::vector<float>({5, 8}));
+    EXPECT_EQ(values(maxima), std::vector<float>({4, 5, 6, 10, 11, 12}));
+    for (const float value : values(variances))
+        EXPECT_NEAR(value, 2.0f / 3.0f, 1e-6f);
+}
+
+TEST(CudaDeviceTest, FullReductionsMatchCpuReference) {
+    std::string error;
+    auto device = make_cuda_device(&error);
+    if (!device)
+        GTEST_SKIP() << error;
+    const std::vector<float> input_values{-3, 1, 4, 1, 5, 9};
+    const citrius::Tensor cuda_input(input_values, {2, 3}, citrius::Device::cuda());
+    EXPECT_EQ(values(citrius::sum(cuda_input)), std::vector<float>({17.0f}));
+    EXPECT_NEAR(values(citrius::mean(cuda_input))[0], 17.0f / 6.0f, 1e-6f);
+    EXPECT_EQ(values(citrius::max(cuda_input)), std::vector<float>({9.0f}));
+    EXPECT_NEAR(values(citrius::variance(cuda_input))[0], 14.138889f, 1e-5f);
 }
 
 TEST(CudaDeviceTest, TopLevelMatmulUsesConfiguredCudaBackend) {

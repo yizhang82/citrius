@@ -13,6 +13,13 @@ enum class CudaElementwiseOperation {
     Maximum,
 };
 
+enum class CudaReductionOperation {
+    Sum,
+    Mean,
+    Maximum,
+    Variance,
+};
+
 class CudaDeviceImpl : public IDevice {
 public:
     explicit CudaDeviceImpl(int device_index = 0);
@@ -33,6 +40,11 @@ public:
         float scalar,
         CudaElementwiseOperation operation,
         bool scalar_is_left = false) const;
+    Tensor reduce(
+        const Tensor& tensor,
+        const std::vector<std::int64_t>& dimensions,
+        bool keepdim,
+        CudaReductionOperation operation) const;
     virtual void add_out(const Tensor& a, const Tensor& b, Tensor& out) const;
     virtual void sub_out(const Tensor& a, const Tensor& b, Tensor& out) const;
     virtual void matmul_out(const Tensor& a, const Tensor& b, Tensor& out) const;

@@ -3,6 +3,10 @@
 #include "impl/cpu_storage.h"
 #include "tensor_factory.h"
 
+#ifdef CITRIUS_HAS_CUDA
+#include "impl/cuda_device.h"
+#endif
+
 #include <algorithm>
 #include <cmath>
 #include <limits>
@@ -65,6 +69,21 @@ Tensor reduce(
     Reduction reduction) {
     require_float32(tensor);
     dims = normalize_dims(tensor, std::move(dims));
+#ifdef CITRIUS_HAS_CUDA
+    if (tensor.device().type == DeviceType::CUDA) {
+        impl::CudaReductionOperation cuda_operation;
+        switch (reduction) {
+            case Reduction::Sum: cuda_operation = impl::CudaReductionOperation::Sum; break;
+            case Reduction::Mean: cuda_operation = impl::CudaReductionOperation::Mean; break;
+            case Reduction::Max: cuda_operation = impl::CudaReductionOperation::Maximum; break;
+            case Reduction::Variance:
+                cuda_operation = impl::CudaReductionOperation::Variance;
+                break;
+        }
+        return impl::CudaDeviceImpl(tensor.device().index)
+            .reduce(tensor, dims, keepdim, cuda_operation);
+    }
+#endif
     std::vector<bool> reduced(tensor.ndim(), false);
     for (const auto dim : dims) reduced[static_cast<std::size_t>(dim)] = true;
 

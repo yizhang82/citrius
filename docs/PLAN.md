@@ -107,7 +107,8 @@ Acceptance criteria:
 
 Status: CPU reference implementation complete. Sum, mean, maximum, and
 population variance support full, single-dimension, and multi-dimension
-reductions with negative dimensions and optional `keepdim`. Numerically stable
+reductions with negative dimensions and optional `keepdim`. CUDA has a native
+general reference kernel for the same reduction variants. Numerically stable
 softmax is available through `nn::functional::softmax`.
 
 Implement dimension-aware reductions:

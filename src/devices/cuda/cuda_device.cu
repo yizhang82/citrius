@@ -171,6 +171,79 @@ __global__ void scalar_elementwise_f32(
                                     : apply_elementwise(value, scalar, operation);
     }
 }
+
+__global__ void reduce_f32(
+    const float* input,
+    float* output,
+    std::int64_t output_count,
+    std::int64_t reduced_count,
+    const std::int64_t* metadata,
+    std::int64_t rank,
+    CudaReductionOperation operation) {
+    const auto* shape = metadata;
+    const auto* strides = metadata + rank;
+    const auto* reduced = metadata + 2 * rank;
+    const auto first = static_cast<std::int64_t>(blockIdx.x) * blockDim.x + threadIdx.x;
+    const auto grid_stride = static_cast<std::int64_t>(blockDim.x) * gridDim.x;
+    for (auto output_index = first; output_index < output_count;
+         output_index += grid_stride) {
+        std::int64_t remainder = output_index;
+        std::int64_t base = 0;
+        for (std::int64_t axis = rank; axis-- > 0;) {
+            if (reduced[axis] == 0) {
+                const auto coordinate = remainder % shape[axis];
+                remainder /= shape[axis];
+                base += coordinate * strides[axis];
+            }
+        }
+
+        float value = operation == CudaReductionOperation::Maximum
+            ? -__int_as_float(0x7f800000)
+            : 0.0f;
+        float mean = 0.0f;
+        if (operation == CudaReductionOperation::Variance && reduced_count != 0) {
+            for (std::int64_t reduction_index = 0; reduction_index < reduced_count;
+                 ++reduction_index) {
+                std::int64_t reduction_remainder = reduction_index;
+                std::int64_t input_index = base;
+                for (std::int64_t axis = rank; axis-- > 0;) {
+                    if (reduced[axis] != 0) {
+                        const auto coordinate = reduction_remainder % shape[axis];
+                        reduction_remainder /= shape[axis];
+                        input_index += coordinate * strides[axis];
+                    }
+                }
+                mean += input[input_index];
+            }
+            mean /= static_cast<float>(reduced_count);
+        }
+
+        for (std::int64_t reduction_index = 0; reduction_index < reduced_count;
+             ++reduction_index) {
+            std::int64_t reduction_remainder = reduction_index;
+            std::int64_t input_index = base;
+            for (std::int64_t axis = rank; axis-- > 0;) {
+                if (reduced[axis] != 0) {
+                    const auto coordinate = reduction_remainder % shape[axis];
+                    reduction_remainder /= shape[axis];
+                    input_index += coordinate * strides[axis];
+                }
+            }
+            const float input_value = input[input_index];
+            if (operation == CudaReductionOperation::Maximum)
+                value = value < input_value ? input_value : value;
+            else if (operation == CudaReductionOperation::Variance) {
+                const float difference = input_value - mean;
+                value += difference * difference;
+            } else
+                value += input_value;
+        }
+        if (operation == CudaReductionOperation::Mean ||
+            operation == CudaReductionOperation::Variance)
+            value /= static_cast<float>(reduced_count);
+        output[output_index] = value;
+    }
+}
 constexpr int matmul_tile_size = 16;
 
 __global__ void matmul_f32(const float* a, const float* b, float* out, std::int64_t m,
@@ -461,6 +534,75 @@ Tensor CudaDeviceImpl::scalar_elementwise(
     check_cuda(cudaGetLastError(), "failed to launch CUDA scalar elementwise kernel");
     check_cuda(cudaDeviceSynchronize(), "CUDA scalar elementwise kernel failed");
     return out;
+}
+
+Tensor CudaDeviceImpl::reduce(
+    const Tensor& tensor,
+    const std::vector<std::int64_t>& dimensions,
+    bool keepdim,
+    CudaReductionOperation operation) const {
+    require_defined(tensor, "reduction input");
+    require_float32(tensor, "reduction input");
+    std::vector<bool> reduced(tensor.ndim(), false);
+    for (const std::int64_t dimension : dimensions) {
+        if (dimension < 0 || dimension >= static_cast<std::int64_t>(tensor.ndim()))
+            throw std::out_of_range("reduction dimension is out of range");
+        if (reduced[static_cast<std::size_t>(dimension)])
+            throw std::invalid_argument("reduction dimensions must be unique");
+        reduced[static_cast<std::size_t>(dimension)] = true;
+    }
+
+    Shape output_shape;
+    std::int64_t reduced_count = 1;
+    for (std::size_t axis = 0; axis < tensor.ndim(); ++axis) {
+        if (reduced[axis]) {
+            reduced_count *= tensor.shape()[axis];
+            if (keepdim) output_shape.push_back(1);
+        } else {
+            output_shape.push_back(tensor.shape()[axis]);
+        }
+    }
+    Tensor output = empty(output_shape, DType::Float32);
+    if (output.numel() == 0) return output;
+
+    const Strides input_strides = contiguous_strides(tensor.shape());
+    const std::size_t rank = tensor.ndim();
+    // Keep a valid metadata pointer for rank-zero scalar reductions even though
+    // the kernel does not dereference any axis entries in that case.
+    std::vector<std::int64_t> metadata(std::max<std::size_t>(rank * 3, 1), 0);
+    std::copy(tensor.shape().begin(), tensor.shape().end(), metadata.begin());
+    std::copy(input_strides.begin(), input_strides.end(), metadata.begin() + rank);
+    for (std::size_t axis = 0; axis < rank; ++axis)
+        metadata[2 * rank + axis] = reduced[axis] ? 1 : 0;
+
+    std::int64_t* device_metadata = nullptr;
+    const std::size_t metadata_bytes = metadata.size() * sizeof(std::int64_t);
+    if (metadata_bytes != 0) {
+        check_cuda(cudaMalloc(&device_metadata, metadata_bytes),
+                   "failed to allocate CUDA reduction metadata");
+    }
+    auto input = ensure_storage(tensor.storage(), ConversionPolicy::CopyToDevice);
+    try {
+        if (metadata_bytes != 0) {
+            check_cuda(cudaMemcpy(device_metadata, metadata.data(), metadata_bytes,
+                                  cudaMemcpyHostToDevice),
+                       "failed to copy CUDA reduction metadata");
+        }
+        const auto required_blocks = (output.numel() + 255) / 256;
+        const auto blocks = static_cast<unsigned>(
+            std::min<std::int64_t>(required_blocks, max_elementwise_blocks_));
+        reduce_f32<<<blocks, 256>>>(
+            data(require_cuda_storage(*input)),
+            data(require_cuda_storage(*output.storage())), output.numel(), reduced_count,
+            device_metadata, static_cast<std::int64_t>(rank), operation);
+        check_cuda(cudaGetLastError(), "failed to launch CUDA reduction kernel");
+        check_cuda(cudaDeviceSynchronize(), "CUDA reduction kernel failed");
+    } catch (...) {
+        if (device_metadata) cudaFree(device_metadata);
+        throw;
+    }
+    if (device_metadata) cudaFree(device_metadata);
+    return output;
 }
 
 void CudaDeviceImpl::sub_out(const Tensor& a, const Tensor& b, Tensor& out) const {
