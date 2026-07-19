@@ -72,18 +72,21 @@ until native backend kernels or stride-aware views are added.
 Implement the metadata and data-layout operations needed to form attention
 heads:
 
+- per-dimension strides, a storage offset, contiguity state, and shared
+  allocation ownership;
 - `reshape` and `view`;
 - `flatten`;
 - `unsqueeze` and `squeeze`;
 - `transpose` for two dimensions;
 - general `permute`;
-- `contiguous`;
+- `contiguous`, backed by a native strided-to-contiguous CUDA kernel rather than
+  host staging;
 - `split` or `chunk`;
 - `concat`.
 
-Views share storage whenever the current contiguous layout permits it.
-Operations that require a different physical layout currently return a
-materialized contiguous tensor.
+Views share storage whenever their layout can be represented by shape, strides,
+and a storage offset. Operations requiring a different physical layout return
+an explicitly materialized contiguous tensor on the tensor's current device.
 Shape, stride, device, dtype, and invalid-dimension behavior need unit tests.
 
 Acceptance criteria:
@@ -300,15 +303,18 @@ After the reference model is correct:
 
 Current CUDA optimization order:
 
-1. specialize contiguous last-dimension sum, mean, and maximum using one block
+1. add stride/storage-offset views plus native CUDA `contiguous()` so transpose,
+   permute, split, slice, and final-position selection never require host
+   staging;
+2. implement native indexed gather to remove Embedding host staging;
+3. make CUDA GEMM consume transpose/layout metadata or persistent prepacked
+   weights so `Linear` never materializes a transposed weight per forward;
+4. specialize contiguous last-dimension sum, mean, and maximum using one block
    per output row with warp shuffles and shared-memory reduction;
-2. add a numerically stable cooperative variance kernel, retaining the current
+5. add a numerically stable cooperative variance kernel, retaining the current
    general arbitrary-dimension reduction kernel as a fallback;
-3. fuse softmax's maximum, exponential, sum, and division sequence;
-4. fuse LayerNorm's mean, variance, normalization, and affine sequence;
-5. implement native transpose and permute to remove layout host staging from
-   Linear and attention;
-6. implement native indexed gather to remove Embedding host staging.
+6. fuse softmax's maximum, exponential, sum, and division sequence;
+7. fuse LayerNorm's mean, variance, normalization, and affine sequence.
 
 Each optimization step must add or extend `operations_benchmark` CPU/CUDA
 comparisons and retain parity tests against the composable CPU reference.
@@ -359,6 +365,11 @@ Acceptance criteria:
 
 ### 2.2 Stream-ordered execution and tensor materialization
 
+- complete the stride/storage-offset view foundation required by inference,
+  including metadata-only transpose, permute, split, slice, and last-position
+  selection;
+- implement native CUDA strided-to-contiguous materialization for consumers that
+  cannot operate on a view directly;
 - define a CUDA execution stream owned by each device;
 - make operations enqueue work and return potentially pending tensors;
 - define `to(cpu)`, scalar `item`, printing, and host pointer access as explicit
@@ -371,6 +382,9 @@ Acceptance criteria:
 
 Acceptance criteria:
 
+- Qwen3 layout operations and final-position selection do not stage through CPU;
+- CUDA `contiguous()` correctly materializes representative transposed, sliced,
+  and offset views;
 - ordinary same-stream tensor composition does not synchronize the host;
 - greedy generation has at most one required host materialization per token;
 - asynchronous execution passes correctness and storage-lifetime stress tests.
@@ -394,6 +408,8 @@ Acceptance criteria:
 - implement BF16 and FP16 tensor storage, transfer, and operation dispatch;
 - use FP32 accumulation for reductions and other numerically sensitive paths;
 - route projection GEMMs through Tensor Core-capable cuBLAS configurations;
+- pass transpose/layout information directly to cuBLAS/cuBLASLt or retain
+  persistent prepacked weights instead of transposing weights per forward;
 - verify layouts do not introduce per-forward transposes or copies.
 
 Acceptance criteria:
@@ -407,14 +423,20 @@ Acceptance criteria:
 - introduce separate `prefill(input_ids)` and `decode(next_token, cache)` APIs;
 - preallocate per-layer K/V storage with contiguous head dimensions;
 - support Qwen3 grouped-query attention with 16 query heads and 8 KV heads;
+- map query-head groups directly to K/V heads without materializing repeated K/V
+  tensors through split, concat, or repeat operations;
 - append one K/V position per generated token;
-- apply RoPE using the absolute cached position;
+- precompute and retain RoPE sin/cos tables on CUDA, or generate and apply them
+  in a native CUDA kernel, using the absolute cached position during decode;
 - run the LM head only for the final hidden state;
 - stop recomputing previous tokens after prompt prefill.
 
 Acceptance criteria:
 
 - cached and full-sequence logits agree within the selected dtype tolerance;
+- steady-state inference performs no per-layer host construction or transfer of
+  RoPE tables;
+- grouped-query attention does not allocate physically repeated K/V heads;
 - post-first-token work processes one query token;
 - short-context decode latency no longer grows materially on every generated
   token.
@@ -523,13 +545,14 @@ execution model.
 
 ### 3.1 Tensor views, indexing, and data manipulation
 
-Establish a PyTorch-style indexing and view model before autograd. Training data
+Extend the stride-aware inference view foundation into a complete PyTorch-style
+indexing model before autograd. Training data
 processing needs richer tensor manipulation than inference alone: token-window
 creation, shuffled gathers, shifted input/target pairs, batching, masking,
 padding, and packing should not require handwritten backend-specific code or
 unnecessary full-tensor copies.
 
-Start by extending `Tensor` storage metadata with:
+The shared inference/training view model includes:
 
 - per-dimension strides,
 - a storage offset,
@@ -557,9 +580,11 @@ explicitly through `index_put_` rather than hidden proxy assignment semantics.
 
 Implement this in stages:
 
-1. Add stride/storage-offset metadata and correct view lifetime management.
-2. Add `select`, `slice`, `narrow`, negative indices, and basic `Tensor::index`.
-3. Add `None`, `Ellipsis`, `contiguous`, and non-contiguous kernel handling.
+1. Reuse and validate the stride/storage-offset metadata and view lifetime model
+   established for inference.
+2. Extend `select`, `slice`, and `narrow` with negative indices and general
+   `Tensor::index` composition.
+3. Add `None`, `Ellipsis`, and broader non-contiguous kernel handling.
 4. Add `index_put_`, boolean-mask indexing, and tensor advanced indexing.
 5. Use the public API in data-pipeline utilities for batching, token windows,
    masks, and shifted training targets.

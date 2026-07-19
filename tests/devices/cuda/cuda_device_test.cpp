@@ -181,6 +181,26 @@ TEST(CudaDeviceTest, CudaAllocationIsMoveOnlyAndRetainsMemory) {
     EXPECT_EQ(moved.nbytes(), 64);
 }
 
+TEST(CudaDeviceTest, CudaAllocationCopiesAndSynchronizesOnItsContext) {
+    std::string error;
+    auto device = make_cuda_device(&error);
+    if (!device)
+        GTEST_SKIP() << error;
+    const std::vector<float> source{1.0f, 2.0f, 3.0f, 4.0f};
+    std::vector<float> destination(source.size());
+    const auto nbytes = source.size() * sizeof(float);
+    citrius::impl::CudaAllocation first(nbytes, device->execution_context());
+    citrius::impl::CudaAllocation second(nbytes, device->execution_context());
+
+    first.copy_from_host_async(source.data(), nbytes);
+    second.copy_from_device_async(first, nbytes);
+    second.copy_to_host_async(destination.data(), nbytes);
+    second.synchronize();
+
+    EXPECT_EQ(destination, source);
+    EXPECT_THROW(first.copy_from_host_async(source.data(), nbytes + 1), std::invalid_argument);
+}
+
 TEST(CudaDeviceTest, ArgmaxMatchesCpuForTiesNegativesAndIrregularSizes) {
     std::string error;
     auto device = make_cuda_device(&error);

@@ -50,6 +50,51 @@ CudaAllocation& CudaAllocation::operator=(CudaAllocation&& other) noexcept {
 void* CudaAllocation::data() const { return data_; }
 std::size_t CudaAllocation::nbytes() const { return nbytes_; }
 
+void CudaAllocation::copy_from_host_async(const void* source, std::size_t nbytes) {
+    validate_copy_size(nbytes);
+    if (nbytes == 0) return;
+    if (!source) throw std::invalid_argument("CUDA copy source cannot be null");
+    check_cuda(cudaSetDevice(context_->device_index()), "failed to select CUDA device");
+    check_cuda(cudaMemcpyAsync(data_, source, nbytes, cudaMemcpyHostToDevice,
+                               static_cast<cudaStream_t>(context_->stream())),
+               "failed to copy data to CUDA");
+}
+
+void CudaAllocation::copy_to_host_async(void* destination, std::size_t nbytes) const {
+    validate_copy_size(nbytes);
+    if (nbytes == 0) return;
+    if (!destination) throw std::invalid_argument("CUDA copy destination cannot be null");
+    check_cuda(cudaSetDevice(context_->device_index()), "failed to select CUDA device");
+    check_cuda(cudaMemcpyAsync(destination, data_, nbytes, cudaMemcpyDeviceToHost,
+                               static_cast<cudaStream_t>(context_->stream())),
+               "failed to copy data from CUDA");
+}
+
+void CudaAllocation::copy_from_device_async(const CudaAllocation& source, std::size_t nbytes) {
+    validate_copy_size(nbytes);
+    source.validate_copy_size(nbytes);
+    if (nbytes == 0) return;
+    if (context_->device_index() != source.context_->device_index()) {
+        throw std::invalid_argument("CUDA device copy requires allocations on the same device");
+    }
+    check_cuda(cudaSetDevice(context_->device_index()), "failed to select CUDA device");
+    check_cuda(cudaMemcpyAsync(data_, source.data_, nbytes, cudaMemcpyDeviceToDevice,
+                               static_cast<cudaStream_t>(context_->stream())),
+               "failed to copy CUDA memory");
+}
+
+void CudaAllocation::synchronize() const {
+    if (!context_) throw std::invalid_argument("cannot synchronize an empty CUDA allocation");
+    check_cuda(cudaSetDevice(context_->device_index()), "failed to select CUDA device");
+    check_cuda(cudaStreamSynchronize(static_cast<cudaStream_t>(context_->stream())),
+               "CUDA stream synchronization failed");
+}
+
+void CudaAllocation::validate_copy_size(std::size_t nbytes) const {
+    if (nbytes > nbytes_) throw std::invalid_argument("copy is larger than CUDA allocation");
+    if (nbytes != 0 && !data_) throw std::invalid_argument("cannot copy using an empty CUDA allocation");
+}
+
 void CudaAllocation::reset() noexcept {
     if (data_) {
         cudaSetDevice(context_->device_index());
