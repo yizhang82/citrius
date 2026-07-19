@@ -20,6 +20,13 @@ public:
         Shape shape,
         Device device = Device::cpu());
     static Tensor from_vector(
+        const std::vector<std::int64_t>& values,
+        Device device = Device::cpu());
+    static Tensor from_vector(
+        const std::vector<std::int64_t>& values,
+        Shape shape,
+        Device device = Device::cpu());
+    static Tensor from_vector(
         const std::vector<bool>& values,
         Device device = Device::cpu());
     static Tensor from_vector(

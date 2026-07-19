@@ -18,11 +18,13 @@ add_library(citrius
     src/devices/cpu/cpu_storage.cpp
     src/devices/cpu/multi_thread_cpu_device.cpp
     src/nn/dropout.cpp
+    src/nn/embedding.cpp
     src/nn/linear.cpp
     src/nn/layer_norm.cpp
     src/nn/functional.cpp
     src/nn/module.cpp
     src/nn/module_list.cpp
+    src/indexing_operations.cpp
     src/operations.cpp
     src/reduction_operations.cpp
     src/shape_operations.cpp
@@ -178,6 +180,7 @@ include(GoogleTest)
 add_executable(tensor_test
     tests/devices/cpu/cpu_device_test.cpp
     tests/nn/container_test.cpp
+    tests/nn/embedding_test.cpp
     tests/nn/linear_test.cpp
     tests/nn/layer_norm_test.cpp
     tests/nn/functional_test.cpp

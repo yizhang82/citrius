@@ -39,6 +39,11 @@ TEST(TensorTest, ConstructedTensorExposesMetadata) {
     EXPECT_EQ(tensor.numel(), 6);
 }
 
+std::vector<std::int64_t> cpu_int64_values(const citrius::Tensor& tensor) {
+    const auto* data = cpu_storage(tensor)->data_as<std::int64_t>();
+    return std::vector<std::int64_t>(data, data + tensor.numel());
+}
+
 TEST(TensorTest, ConstructsFromVectorWithInferredShape) {
     const std::vector<float> values = {1.0f, 2.0f, 3.0f};
     const citrius::Tensor tensor(values);
@@ -54,6 +59,16 @@ TEST(TensorTest, FactoryConstructsVectorWithExplicitShape) {
 
     EXPECT_EQ(tensor.shape(), citrius::Shape({2, 2}));
     EXPECT_EQ(cpu_tensor_values(tensor), values);
+}
+
+TEST(TensorTest, FactoryConstructsInt64TokenIds) {
+    const std::vector<std::int64_t> values = {3, 1, 4, 1};
+    const auto tensor = citrius::from_vector(values, {2, 2});
+
+    EXPECT_EQ(tensor.shape(), citrius::Shape({2, 2}));
+    EXPECT_EQ(tensor.dtype(), citrius::DType::Int64);
+    EXPECT_EQ(cpu_int64_values(tensor), values);
+    EXPECT_NE(tensor.to_string().find("dtype=int64"), std::string::npos);
 }
 
 TEST(TensorTest, FreeFactoryFunctionsCreateAndTransferTensors) {
