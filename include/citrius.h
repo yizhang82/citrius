@@ -10,6 +10,7 @@
 #include "nn/module.h"
 #include "operations.h"
 #include "reduction_operations.h"
+#include "safetensors.h"
 #include "shape_operations.h"
 #include "tensor.h"
 #include "tensor_factory.h"

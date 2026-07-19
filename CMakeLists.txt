@@ -31,6 +31,7 @@ add_library(citrius
     src/indexing_operations.cpp
     src/operations.cpp
     src/reduction_operations.cpp
+    src/safetensors.cpp
     src/shape_operations.cpp
     src/tensor.cpp
     src/tensor_factory.cpp

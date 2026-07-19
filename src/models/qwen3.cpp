@@ -3,6 +3,7 @@
 #include "nn/functional.h"
 #include "operations.h"
 #include "reduction_operations.h"
+#include "safetensors.h"
 #include "shape_operations.h"
 #include "tensor_factory.h"
 #include "tensor_utils.h"
@@ -227,5 +228,46 @@ Tensor Qwen3ForCausalLM::forward(const Tensor& input_ids) {
 
 Qwen3Model& Qwen3ForCausalLM::model() { return *model_; }
 const Qwen3Config& Qwen3ForCausalLM::config() const { return model_->config(); }
+
+void load_qwen3_weights(
+    Qwen3ForCausalLM& model,
+    const std::filesystem::path& path,
+    bool strict) {
+    TensorMap tensors = load_safetensors(path, model.config().device);
+    const auto assign = [&](const std::string& name, Tensor& destination) {
+        const auto found = tensors.find(name);
+        if (found == tensors.end()) {
+            if (strict) throw std::runtime_error("missing Qwen3 checkpoint tensor: " + name);
+            return;
+        }
+        if (found->second.shape() != destination.shape()) {
+            throw std::runtime_error("Qwen3 checkpoint shape mismatch: " + name);
+        }
+        destination = found->second;
+        tensors.erase(found);
+    };
+
+    assign("model.embed_tokens.weight", model.model().token_embedding().weight());
+    for (std::int64_t index = 0; index < model.config().num_hidden_layers; ++index) {
+        Qwen3DecoderLayer& layer = model.model().layer(static_cast<std::size_t>(index));
+        const std::string prefix = "model.layers." + std::to_string(index) + ".";
+        assign(prefix + "self_attn.q_proj.weight", layer.attention().query_projection().weight());
+        assign(prefix + "self_attn.k_proj.weight", layer.attention().key_projection().weight());
+        assign(prefix + "self_attn.v_proj.weight", layer.attention().value_projection().weight());
+        assign(prefix + "self_attn.o_proj.weight", layer.attention().output_projection().weight());
+        assign(prefix + "self_attn.q_norm.weight", layer.attention().query_norm().weight());
+        assign(prefix + "self_attn.k_norm.weight", layer.attention().key_norm().weight());
+        assign(prefix + "mlp.gate_proj.weight", layer.mlp().gate_projection().weight());
+        assign(prefix + "mlp.up_proj.weight", layer.mlp().up_projection().weight());
+        assign(prefix + "mlp.down_proj.weight", layer.mlp().down_projection().weight());
+        assign(prefix + "input_layernorm.weight", layer.input_norm().weight());
+        assign(prefix + "post_attention_layernorm.weight", layer.post_attention_norm().weight());
+    }
+    assign("model.norm.weight", model.model().norm().weight());
+    tensors.erase("lm_head.weight");
+    if (strict && !tensors.empty()) {
+        throw std::runtime_error("unexpected Qwen3 checkpoint tensor: " + tensors.begin()->first);
+    }
+}
 
 } // namespace citrius::models

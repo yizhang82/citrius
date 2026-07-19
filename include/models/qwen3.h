@@ -5,6 +5,7 @@
 #include "nn/module.h"
 
 #include <cstdint>
+#include <filesystem>
 #include <memory>
 #include <vector>
 
@@ -121,5 +122,12 @@ public:
 private:
     std::shared_ptr<Qwen3Model> model_;
 };
+
+/// Loads Hugging Face Qwen3 safetensors names into a compatible model.
+/// When strict is false, parameters absent from the file retain their current values.
+void load_qwen3_weights(
+    Qwen3ForCausalLM& model,
+    const std::filesystem::path& path,
+    bool strict = true);
 
 } // namespace citrius::models
