@@ -3,7 +3,11 @@
 #include "cuda_storage.h"
 #include "device.h"
 
+#include <memory>
+
 namespace citrius::impl {
+
+class CudaExecutionContext;
 
 enum class CudaElementwiseOperation {
     Add,
@@ -32,6 +36,7 @@ public:
 
     DeviceType type() const override;
     int device_index() const;
+    const std::shared_ptr<CudaExecutionContext>& execution_context() const;
     Tensor empty(Shape shape, DType dtype) const override;
     Tensor add(const Tensor& a, const Tensor& b) const override;
     Tensor sub(const Tensor& a, const Tensor& b) const override;
@@ -68,6 +73,7 @@ public:
 private:
     int device_index_;
     int max_elementwise_blocks_;
+    std::shared_ptr<CudaExecutionContext> context_;
 
     const CudaMemTensorStorageImpl& require_cuda_storage(const ITensorStorage& storage) const;
     CudaMemTensorStorageImpl& require_cuda_storage(ITensorStorage& storage) const;

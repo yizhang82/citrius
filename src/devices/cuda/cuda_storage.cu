@@ -1,9 +1,11 @@
 #include "impl/cuda_storage.h"
+#include "impl/cuda_context.h"
 
 #include <cuda_runtime.h>
 
 #include <stdexcept>
 #include <string>
+#include <utility>
 
 namespace citrius::impl {
 namespace {
@@ -24,7 +26,17 @@ CudaMemTensorStorageImpl::CudaMemTensorStorageImpl(
     std::size_t nbytes,
     DType dtype,
     int device_index)
-    : nbytes_(nbytes), dtype_(dtype), device_index_(device_index) {
+    : CudaMemTensorStorageImpl(nbytes, dtype, cuda_execution_context(device_index)) {}
+
+CudaMemTensorStorageImpl::CudaMemTensorStorageImpl(
+    std::size_t nbytes,
+    DType dtype,
+    std::shared_ptr<CudaExecutionContext> context)
+    : nbytes_(nbytes),
+      dtype_(dtype),
+      device_index_(context ? context->device_index() : 0),
+      context_(std::move(context)) {
+    if (!context_) throw std::invalid_argument("CUDA storage requires an execution context");
     select_device(device_index_);
     if (nbytes_ != 0) {
         check_cuda(cudaMalloc(&data_, nbytes_), "failed to allocate CUDA memory");
@@ -45,9 +57,12 @@ std::size_t CudaMemTensorStorageImpl::nbytes() const { return nbytes_; }
 StorageHandle CudaMemTensorStorageImpl::handle() { return {data_, nbytes_}; }
 StorageHandle CudaMemTensorStorageImpl::handle() const { return {data_, nbytes_}; }
 int CudaMemTensorStorageImpl::device_index() const { return device_index_; }
+const std::shared_ptr<CudaExecutionContext>& CudaMemTensorStorageImpl::execution_context() const {
+    return context_;
+}
 
 std::shared_ptr<ITensorStorage> CudaMemTensorStorageImpl::clone() const {
-    auto copied = std::make_shared<CudaMemTensorStorageImpl>(nbytes_, dtype_, device_index_);
+    auto copied = std::make_shared<CudaMemTensorStorageImpl>(nbytes_, dtype_, context_);
     select_device(device_index_);
     if (nbytes_ != 0) {
         check_cuda(cudaMemcpy(copied->data_, data_, nbytes_, cudaMemcpyDeviceToDevice),

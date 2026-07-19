@@ -1,5 +1,6 @@
 #include "impl/cpu_device.h"
 #include "impl/cpu_storage.h"
+#include "impl/cuda_context.h"
 #include "impl/cublas_cuda_device.h"
 #include "impl/cuda_device.h"
 #include "impl/cuda_storage.h"
@@ -147,6 +148,21 @@ TEST(CudaDeviceTest, GridStrideAddAndSubCoverLargeTensorAndTail) {
         ASSERT_EQ(sums[i], a_values[i] + b_values[i]);
         ASSERT_EQ(differences[i], a_values[i] - b_values[i]);
     }
+}
+TEST(CudaDeviceTest, SharesOneExecutionContextPerDevice) {
+    std::string error;
+    auto first = make_cuda_device(&error);
+    if (!first)
+        GTEST_SKIP() << error;
+    auto second = make_cuda_device(&error);
+    ASSERT_NE(second, nullptr);
+    EXPECT_EQ(first->execution_context(), second->execution_context());
+    EXPECT_NE(first->execution_context()->stream(), nullptr);
+
+    auto tensor = first->empty({1}, citrius::DType::Float32);
+    const auto storage =
+        std::static_pointer_cast<citrius::impl::CudaMemTensorStorageImpl>(tensor.storage());
+    EXPECT_EQ(storage->execution_context(), first->execution_context());
 }
 
 TEST(CudaDeviceTest, ArgmaxMatchesCpuForTiesNegativesAndIrregularSizes) {

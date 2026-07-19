@@ -1,4 +1,5 @@
 #include "impl/cuda_device.h"
+#include "impl/cuda_context.h"
 
 #include "impl/cpu_storage.h"
 
@@ -462,11 +463,9 @@ float* data(CudaMemTensorStorageImpl& storage) {
 } // namespace
 
 CudaDeviceImpl::CudaDeviceImpl(int device_index)
-    : device_index_(device_index), max_elementwise_blocks_(0) {
-    int count = 0;
-    check_cuda(cudaGetDeviceCount(&count), "failed to query CUDA devices");
-    if (device_index < 0 || device_index >= count)
-        throw std::runtime_error("CUDA device index is not available");
+    : device_index_(device_index),
+      max_elementwise_blocks_(0),
+      context_(cuda_execution_context(device_index)) {
     check_cuda(cudaSetDevice(device_index_), "failed to select CUDA device");
     int multiprocessor_count = 0;
     check_cuda(cudaDeviceGetAttribute(&multiprocessor_count, cudaDevAttrMultiProcessorCount,
@@ -484,11 +483,14 @@ DeviceType CudaDeviceImpl::type() const {
 int CudaDeviceImpl::device_index() const {
     return device_index_;
 }
+const std::shared_ptr<CudaExecutionContext>& CudaDeviceImpl::execution_context() const {
+    return context_;
+}
 
 Tensor CudaDeviceImpl::empty(Shape shape, DType dtype) const {
     const Tensor metadata(shape, dtype, Device::cpu());
     auto storage = std::make_shared<CudaMemTensorStorageImpl>(
-        static_cast<std::size_t>(metadata.numel()) * dtype_size(dtype), dtype, device_index_);
+        static_cast<std::size_t>(metadata.numel()) * dtype_size(dtype), dtype, context_);
     return Tensor(std::move(shape), dtype, Device::cuda(device_index_), std::move(storage));
 }
 
