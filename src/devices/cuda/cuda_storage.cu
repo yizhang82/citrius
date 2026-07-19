@@ -65,7 +65,6 @@ std::shared_ptr<ITensorStorage> CudaMemTensorStorageImpl::clone() const {
                                    cudaMemcpyDeviceToDevice,
                                    stream(context_)),
                    "failed to copy CUDA memory");
-        check_cuda(cudaStreamSynchronize(stream(context_)), "CUDA storage copy failed");
     }
     return copied;
 }

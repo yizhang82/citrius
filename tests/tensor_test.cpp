@@ -142,6 +142,14 @@ TEST(TensorTest, CopyRejectsUndefinedTensor) {
     EXPECT_THROW(undefined.copy(), std::invalid_argument);
 }
 
+TEST(TensorTest, ItemMaterializesScalarAndValidatesTypeAndShape) {
+    EXPECT_EQ(citrius::from_vector(std::vector<std::int64_t>{42}, citrius::Shape{}).item<std::int64_t>(), 42);
+    EXPECT_FLOAT_EQ(citrius::from_vector(std::vector<float>{3.5f}, citrius::Shape{}).item<float>(), 3.5f);
+    EXPECT_THROW(citrius::Tensor().item<float>(), std::invalid_argument);
+    EXPECT_THROW(citrius::Tensor(std::vector<float>{1, 2}).item<float>(), std::invalid_argument);
+    EXPECT_THROW(citrius::Tensor(std::vector<float>{1}).item<std::int64_t>(), std::invalid_argument);
+}
+
 TEST(TensorTest, ToStringIncludesValuesAndMetadata) {
     const citrius::Tensor tensor(
         std::vector<float>{1.0f, 2.0f, 3.0f, 4.0f},

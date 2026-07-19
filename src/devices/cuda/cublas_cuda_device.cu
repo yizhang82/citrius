@@ -93,8 +93,6 @@ void CublasCudaDeviceImpl::matmul_out(const Tensor& a, const Tensor& b, Tensor& 
         check_cuda(cudaMemsetAsync(data(*out.storage()), 0, out.storage()->nbytes(),
                                    stream(execution_context())),
                    "failed to clear CUDA matmul output");
-        check_cuda(cudaStreamSynchronize(stream(execution_context())),
-                   "CUDA cuBLAS output clear failed");
         return;
     }
 
@@ -129,7 +127,6 @@ void CublasCudaDeviceImpl::matmul_out(const Tensor& a, const Tensor& b, Tensor& 
                                                    // row-major C
                              static_cast<int>(n)), // leading dimension of C^T
                  "cuBLAS matmul failed");
-    check_cuda(cudaStreamSynchronize(stream(execution_context())), "CUDA cuBLAS matmul failed");
 }
 
 Tensor CublasCudaDeviceImpl::batched_matmul(const Tensor& a, const Tensor& b) const {
@@ -169,8 +166,6 @@ Tensor CublasCudaDeviceImpl::batched_matmul(const Tensor& a, const Tensor& b) co
                                      (int)k, &alpha, (const float**)db, (int)n, (const float**)da,
                                      (int)k, &beta, dc, (int)n, (int)ah.size());
     check_cublas(status, "cuBLAS batched_matmul failed");
-    check_cuda(cudaStreamSynchronize(stream(execution_context())),
-               "CUDA cuBLAS batched_matmul failed");
     return out;
 }
 

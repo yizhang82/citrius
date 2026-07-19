@@ -7,7 +7,7 @@ namespace citrius::impl {
 
 class CudaExecutionContext;
 
-/// Move-only ownership of a cudaMalloc allocation.
+/// Move-only ownership of a stream-ordered CUDA allocation.
 class CudaAllocation final {
 public:
     CudaAllocation() = default;

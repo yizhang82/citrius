@@ -5,6 +5,7 @@
 #include "impl/storage.h"
 
 #include <cstdint>
+#include <cstring>
 #include <numeric>
 #include <ostream>
 #include <sstream>
@@ -114,6 +115,16 @@ Tensor Tensor::copy() const {
 
 Tensor Tensor::to(Device device) const {
     return citrius::to(*this, device);
+}
+
+void Tensor::copy_item_to_host(void* destination, DType expected) const {
+    if (!defined()) throw std::invalid_argument("cannot materialize an undefined tensor");
+    if (numel() != 1) throw std::invalid_argument("Tensor::item requires exactly one element");
+    if (dtype() != expected) throw std::invalid_argument("Tensor::item type does not match dtype");
+    const Tensor cpu = to(Device::cpu());
+    const auto cpu_storage =
+        std::static_pointer_cast<CpuMemTensorStorageImpl>(cpu.storage());
+    std::memcpy(destination, cpu_storage->data(), dtype_size(dtype()));
 }
 
 std::string Tensor::to_string() const {

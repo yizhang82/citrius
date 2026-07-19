@@ -6,6 +6,7 @@
 #include <iosfwd>
 #include <memory>
 #include <string>
+#include <type_traits>
 #include <vector>
 
 namespace citrius {
@@ -36,9 +37,24 @@ public:
     bool defined() const;
     Tensor copy() const;
     Tensor to(Device device) const;
+    template <typename T>
+    T item() const {
+        DType expected;
+        if constexpr (std::is_same_v<T, float>) expected = DType::Float32;
+        else if constexpr (std::is_same_v<T, double>) expected = DType::Float64;
+        else if constexpr (std::is_same_v<T, std::int32_t>) expected = DType::Int32;
+        else if constexpr (std::is_same_v<T, std::int64_t>) expected = DType::Int64;
+        else if constexpr (std::is_same_v<T, bool>) expected = DType::Bool;
+        else static_assert(!sizeof(T), "Tensor::item does not support this type");
+        T value{};
+        copy_item_to_host(&value, expected);
+        return value;
+    }
     std::string to_string() const;
 
 private:
+    void copy_item_to_host(void* destination, DType expected) const;
+
     Shape shape_;
     DType dtype_ = DType::Float32;
     Device device_ = Device::cpu();

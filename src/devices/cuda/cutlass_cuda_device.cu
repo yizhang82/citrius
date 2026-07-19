@@ -73,8 +73,6 @@ void CutlassCudaDeviceImpl::matmul_out(const Tensor& a, const Tensor& b, Tensor&
         check_cuda(cudaMemsetAsync(data(*out.storage()), 0, out.storage()->nbytes(),
                                    stream(execution_context())),
                    "failed to clear CUDA matmul output");
-        check_cuda(cudaStreamSynchronize(stream(execution_context())),
-                   "CUDA CUTLASS output clear failed");
         return;
     }
 
@@ -109,9 +107,6 @@ void CutlassCudaDeviceImpl::matmul_out(const Tensor& a, const Tensor& b, Tensor&
     // Initialize and launch the selected CUTLASS GEMM kernel on the context
     // stream. The call reports setup/launch errors through cutlass::Status.
     check_cutlass(gemm(arguments, nullptr, stream(execution_context())), "CUTLASS matmul failed");
-    // Citrius operations are currently eager and synchronous, so do not return
-    // until the kernel has completed and asynchronous CUDA errors are visible.
-    check_cuda(cudaStreamSynchronize(stream(execution_context())), "CUDA CUTLASS matmul failed");
 }
 
 Tensor CutlassCudaDeviceImpl::batched_matmul(const Tensor& a, const Tensor& b) const {
@@ -136,8 +131,6 @@ Tensor CutlassCudaDeviceImpl::batched_matmul(const Tensor& a, const Tensor& b) c
         check_cutlass(gemm(args, nullptr, stream(execution_context())),
                       "CUTLASS batched_matmul failed");
     }
-    check_cuda(cudaStreamSynchronize(stream(execution_context())),
-               "CUDA CUTLASS batched_matmul failed");
     return out;
 }
 

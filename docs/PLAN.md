@@ -521,7 +521,66 @@ Training must build on the same tensor, dtype, allocator, and execution-stream
 contracts established for inference. It must not introduce a second incompatible
 execution model.
 
-### 3.1 Automatic differentiation
+### 3.1 Tensor views, indexing, and data manipulation
+
+Establish a PyTorch-style indexing and view model before autograd. Training data
+processing needs richer tensor manipulation than inference alone: token-window
+creation, shuffled gathers, shifted input/target pairs, batching, masking,
+padding, and packing should not require handwritten backend-specific code or
+unnecessary full-tensor copies.
+
+Start by extending `Tensor` storage metadata with:
+
+- per-dimension strides,
+- a storage offset,
+- explicit contiguity and view information, and
+- shared ownership of the underlying allocation so views cannot outlive storage.
+
+The public API should keep indexing tensor-valued and scalar extraction explicit:
+
+```cpp
+using namespace citrius::indexing;
+
+Tensor row = tensor.index({2, Slice()});
+Tensor tail = tensor.index({Ellipsis, Slice(1, None)});
+Tensor expanded = tensor.index({None, Ellipsis});
+float value = tensor.index({2, 3}).item<float>();
+```
+
+Provide `Slice`, `None`, `Ellipsis`, and `TensorIndex` in
+`citrius::indexing`, alongside specialized operations such as `select`, `slice`,
+`narrow`, and `contiguous`. Basic integer and slice indexing should return views
+that alias the original storage. Boolean-mask and tensor-based advanced indexing
+should return newly allocated tensors, matching PyTorch's basic-versus-advanced
+indexing distinction. Mutation through indexed regions should be introduced
+explicitly through `index_put_` rather than hidden proxy assignment semantics.
+
+Implement this in stages:
+
+1. Add stride/storage-offset metadata and correct view lifetime management.
+2. Add `select`, `slice`, `narrow`, negative indices, and basic `Tensor::index`.
+3. Add `None`, `Ellipsis`, `contiguous`, and non-contiguous kernel handling.
+4. Add `index_put_`, boolean-mask indexing, and tensor advanced indexing.
+5. Use the public API in data-pipeline utilities for batching, token windows,
+   masks, and shifted training targets.
+
+Backend kernels must either consume shape, stride, and storage-offset metadata
+correctly or request an explicit contiguous materialization. They must not
+silently stage through the host. Bounds, invalid slices, unsupported index
+combinations, and illegal writes to broadcast or overlapping views need clear
+errors.
+
+This phase is complete when:
+
+- basic indexing produces storage-aliasing views with correct values and
+  negative-index behavior;
+- advanced indexing produces independent results with CPU/CUDA parity;
+- data-pipeline code can construct batches, masks, token windows, and shifted
+  targets without mandatory full-tensor copies or host staging; and
+- scalar reads remain explicit as `tensor.index(...).item<T>()`, copying only
+  the requested value when the tensor is on CUDA.
+
+### 3.2 Automatic differentiation
 
 - define gradient ownership, leaf tensors, and `requires_grad` semantics;
 - record backward graphs for tensor operations and modules;
@@ -530,7 +589,7 @@ execution model.
 - support `detach`, inference/no-grad scopes, and graph release;
 - add numerical gradient checks for every differentiable operation.
 
-### 3.2 Backward kernels and trainable modules
+### 3.3 Backward kernels and trainable modules
 
 - implement backward operations for elementwise math, reductions, views,
   broadcasting, matmul, embeddings, normalization, and attention;
@@ -538,14 +597,14 @@ execution model.
 - implement training-mode dropout with reproducible device RNG state;
 - validate complete Transformer-block gradients against a trusted reference.
 
-### 3.3 Optimizers and gradient processing
+### 3.4 Optimizers and gradient processing
 
 - implement SGD and AdamW as initial optimizers;
 - add parameter groups, weight decay, and learning-rate schedules;
 - add gradient zeroing, clipping, and global norm calculation;
 - define optimizer state serialization and restoration.
 
-### 3.4 Mixed-precision training
+### 3.5 Mixed-precision training
 
 - support BF16 and FP16 forward/backward execution with FP32 master state where
   required;
@@ -553,21 +612,21 @@ execution model.
 - define autocast policies per operation;
 - test overflow detection, skipped updates, and convergence against Float32.
 
-### 3.5 Training memory efficiency
+### 3.6 Training memory efficiency
 
 - add activation checkpointing/recomputation;
 - reuse forward and backward workspaces safely;
 - support gradient accumulation over microbatches;
 - profile activation, gradient, optimizer, and temporary memory independently.
 
-### 3.6 Data and checkpoint lifecycle
+### 3.7 Data and checkpoint lifecycle
 
 - define dataset, sampler, batch, and asynchronous input-pipeline interfaces;
 - serialize model, optimizer, scheduler, RNG, and training-step state;
 - support resumable sharded checkpoints for larger models;
 - preserve Hugging Face-compatible parameter import/export where practical.
 
-### 3.7 Distributed training
+### 3.8 Distributed training
 
 - implement data-parallel gradient synchronization;
 - add process-group, rank, device, and collective abstractions;
@@ -577,6 +636,8 @@ execution model.
 
 Phase 3 acceptance criteria:
 
+- training batches, masks, token windows, and shifted targets are constructed
+  through the public tensor indexing/view API without mandatory host staging;
 - a tiny Transformer trains end-to-end and reduces a known loss;
 - gradients and optimizer updates match a trusted reference;
 - BF16 training remains stable on a representative workload;

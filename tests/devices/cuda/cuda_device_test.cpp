@@ -197,6 +197,14 @@ TEST(CudaDeviceTest, ArgmaxMatchesCpuForTiesNegativesAndIrregularSizes) {
     EXPECT_EQ(indices(result), indices(citrius::argmax(citrius::Tensor(input, {2, vocabulary_size}), -1)
                                            .to(citrius::Device::cuda())));
 }
+TEST(CudaDeviceTest, ItemMaterializesPendingCudaScalar) {
+    std::string error;
+    auto device = make_cuda_device(&error);
+    if (!device)
+        GTEST_SKIP() << error;
+    const auto input = make_cuda_tensor(*device, {5}, {-3, 7, 2, 7, 1});
+    EXPECT_EQ(citrius::argmax(input).item<std::int64_t>(), 1);
+}
 
 TEST(CudaDeviceTest, CublasMatmulMatchesReferenceForNonSquareMatrices) {
     std::string error;

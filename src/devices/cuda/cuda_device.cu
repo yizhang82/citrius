@@ -533,7 +533,6 @@ void CudaDeviceImpl::add_out(const Tensor& a, const Tensor& b, Tensor& out) cons
             data(require_cuda_storage(*out.storage())), count);
     }
     check_cuda(cudaGetLastError(), "failed to launch CUDA add kernel");
-    check_cuda(cudaStreamSynchronize(stream(context_)), "CUDA add kernel failed");
 }
 
 Tensor CudaDeviceImpl::sub(const Tensor& a, const Tensor& b) const {
@@ -594,8 +593,6 @@ Tensor CudaDeviceImpl::broadcast_elementwise(
             data(require_cuda_storage(*out.storage())), out.numel(), device_metadata,
             static_cast<std::int64_t>(rank), operation);
         check_cuda(cudaGetLastError(), "failed to launch CUDA broadcast elementwise kernel");
-        check_cuda(cudaStreamSynchronize(stream(context_)),
-                   "CUDA broadcast elementwise kernel failed");
     }
     return out;
 }
@@ -617,7 +614,6 @@ Tensor CudaDeviceImpl::scalar_elementwise(
         data(require_cuda_storage(*input)), scalar,
         data(require_cuda_storage(*out.storage())), out.numel(), operation, scalar_is_left);
     check_cuda(cudaGetLastError(), "failed to launch CUDA scalar elementwise kernel");
-    check_cuda(cudaStreamSynchronize(stream(context_)), "CUDA scalar elementwise kernel failed");
     return out;
 }
 
@@ -678,7 +674,6 @@ Tensor CudaDeviceImpl::reduce(
             data(require_cuda_storage(*output.storage())), output.numel(), reduced_count,
             device_metadata, static_cast<std::int64_t>(rank), operation);
         check_cuda(cudaGetLastError(), "failed to launch CUDA reduction kernel");
-        check_cuda(cudaStreamSynchronize(stream(context_)), "CUDA reduction kernel failed");
     }
     return output;
 }
@@ -708,7 +703,6 @@ Tensor CudaDeviceImpl::argmax(const Tensor& tensor, std::int64_t dimension, bool
         data(require_cuda_storage(*input)), output_data, output.numel(), reduction_size,
         inner_size);
     check_cuda(cudaGetLastError(), "failed to launch CUDA argmax kernel");
-    check_cuda(cudaStreamSynchronize(stream(context_)), "CUDA argmax kernel failed");
     return output;
 }
 
@@ -736,7 +730,6 @@ Tensor CudaDeviceImpl::unary(
         data(require_cuda_storage(*input)),
         data(require_cuda_storage(*output.storage())), output.numel(), operation, argument);
     check_cuda(cudaGetLastError(), "failed to launch CUDA unary kernel");
-    check_cuda(cudaStreamSynchronize(stream(context_)), "CUDA unary kernel failed");
     return output;
 }
 
@@ -785,7 +778,6 @@ Tensor CudaDeviceImpl::masked_fill(
             data(require_cuda_storage(*output.storage())), output.numel(), device_metadata,
             static_cast<std::int64_t>(rank), value);
         check_cuda(cudaGetLastError(), "failed to launch CUDA masked_fill kernel");
-        check_cuda(cudaStreamSynchronize(stream(context_)), "CUDA masked_fill kernel failed");
     }
     return output;
 }
@@ -813,7 +805,6 @@ void CudaDeviceImpl::sub_out(const Tensor& a, const Tensor& b, Tensor& out) cons
             data(require_cuda_storage(*out.storage())), count);
     }
     check_cuda(cudaGetLastError(), "failed to launch CUDA sub kernel");
-    check_cuda(cudaStreamSynchronize(stream(context_)), "CUDA sub kernel failed");
 }
 
 Tensor CudaDeviceImpl::matmul(const Tensor& a, const Tensor& b) const {
@@ -857,7 +848,6 @@ Tensor CudaDeviceImpl::batched_matmul(const Tensor& a, const Tensor& b) const {
             data(require_cuda_storage(*out.storage())), dao, dbo, l.ao.size(), m,
             a.shape().back(), n);
         check_cuda(cudaGetLastError(), "failed to launch CUDA batched_matmul kernel");
-        check_cuda(cudaStreamSynchronize(stream(context_)), "CUDA batched_matmul failed");
     }
     return out;
 }
@@ -891,7 +881,6 @@ void CudaDeviceImpl::matmul_out(const Tensor& a, const Tensor& b, Tensor& out) c
             data(require_cuda_storage(*out.storage())), m, k, n);
     }
     check_cuda(cudaGetLastError(), "failed to launch CUDA matmul kernel");
-    check_cuda(cudaStreamSynchronize(stream(context_)), "CUDA matmul kernel failed");
 }
 
 TensorStoragePtr CudaDeviceImpl::ensure_storage(const TensorStoragePtr& storage,
