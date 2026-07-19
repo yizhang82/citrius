@@ -245,6 +245,45 @@ __global__ void reduce_f32(
     }
 }
 
+__global__ void argmax_f32(const float* input, std::int64_t* output,
+                           std::int64_t output_count, std::int64_t reduction_size,
+                           std::int64_t inner_size) {
+    __shared__ float values[256];
+    __shared__ std::int64_t indices[256];
+    for (std::int64_t output_index = blockIdx.x; output_index < output_count;
+         output_index += gridDim.x) {
+        const auto outer = output_index / inner_size;
+        const auto inner = output_index % inner_size;
+        const auto base = outer * reduction_size * inner_size + inner;
+        float best_value = -__int_as_float(0x7f800000);
+        std::int64_t best_index = 0x7fffffffffffffffLL;
+        for (std::int64_t index = threadIdx.x; index < reduction_size; index += blockDim.x) {
+            const float value = input[base + index * inner_size];
+            if (value > best_value || (value == best_value && index < best_index)) {
+                best_value = value;
+                best_index = index;
+            }
+        }
+        values[threadIdx.x] = best_value;
+        indices[threadIdx.x] = best_index;
+        __syncthreads();
+        for (unsigned offset = blockDim.x / 2; offset != 0; offset /= 2) {
+            if (threadIdx.x < offset) {
+                const float other_value = values[threadIdx.x + offset];
+                const auto other_index = indices[threadIdx.x + offset];
+                if (other_value > values[threadIdx.x] ||
+                    (other_value == values[threadIdx.x] && other_index < indices[threadIdx.x])) {
+                    values[threadIdx.x] = other_value;
+                    indices[threadIdx.x] = other_index;
+                }
+            }
+            __syncthreads();
+        }
+        if (threadIdx.x == 0) output[output_index] = indices[0];
+        __syncthreads();
+    }
+}
+
 __global__ void unary_f32(
     const float* input,
     float* output,
@@ -647,6 +686,42 @@ Tensor CudaDeviceImpl::reduce(
     }
     if (device_metadata) cudaFree(device_metadata);
     return output;
+}
+
+Tensor CudaDeviceImpl::argmax(const Tensor& tensor, std::int64_t dimension, bool keepdim) const {
+    require_defined(tensor, "argmax input");
+    require_float32(tensor, "argmax input");
+    if (dimension < 0 || dimension >= static_cast<std::int64_t>(tensor.ndim()))
+        throw std::out_of_range("argmax dimension is out of range");
+    const auto axis = static_cast<std::size_t>(dimension);
+    const auto reduction_size = tensor.shape()[axis];
+    if (reduction_size == 0) throw std::invalid_argument("argmax cannot reduce an empty dimension");
+    Shape output_shape = tensor.shape();
+    if (keepdim) output_shape[axis] = 1;
+    else output_shape.erase(output_shape.begin() + static_cast<std::ptrdiff_t>(axis));
+    Tensor output = empty(output_shape, DType::Int64);
+    if (output.numel() == 0) return output;
+    const auto inner_size = std::accumulate(
+        tensor.shape().begin() + static_cast<std::ptrdiff_t>(axis + 1), tensor.shape().end(),
+        std::int64_t{1}, std::multiplies<>());
+    auto input = ensure_storage(tensor.storage(), ConversionPolicy::CopyToDevice);
+    const auto blocks = static_cast<unsigned>(
+        std::min<std::int64_t>(output.numel(), max_elementwise_blocks_));
+    auto* output_data = static_cast<std::int64_t*>(
+        require_cuda_storage(*output.storage()).handle().ptr);
+    argmax_f32<<<blocks, 256>>>(data(require_cuda_storage(*input)), output_data, output.numel(),
+                                reduction_size, inner_size);
+    check_cuda(cudaGetLastError(), "failed to launch CUDA argmax kernel");
+    check_cuda(cudaDeviceSynchronize(), "CUDA argmax kernel failed");
+    return output;
+}
+
+Tensor CudaDeviceImpl::argmax(const Tensor& tensor) const {
+    require_defined(tensor, "argmax input");
+    require_float32(tensor, "argmax input");
+    if (tensor.numel() == 0) throw std::invalid_argument("argmax input cannot be empty");
+    const Tensor flattened({tensor.numel()}, tensor.dtype(), tensor.device(), tensor.storage());
+    return argmax(flattened, 0, false);
 }
 
 Tensor CudaDeviceImpl::unary(

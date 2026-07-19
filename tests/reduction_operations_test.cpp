@@ -16,6 +16,12 @@ std::vector<float> values(const citrius::Tensor& tensor) {
     return std::vector<float>(data, data + tensor.numel());
 }
 
+std::vector<std::int64_t> indices(const citrius::Tensor& tensor) {
+    const auto storage = std::static_pointer_cast<citrius::impl::CpuMemTensorStorageImpl>(tensor.storage());
+    const auto* data = storage->data_as<std::int64_t>();
+    return std::vector<std::int64_t>(data, data + tensor.numel());
+}
+
 citrius::Tensor matrix() {
     return citrius::Tensor(std::vector<float>{1, 2, 3, 4, 5, 6}, {2, 3});
 }
@@ -54,6 +60,22 @@ TEST(ReductionOperationsTest, ReducesMultipleDimensions) {
 TEST(ReductionOperationsTest, ComputesPopulationVariance) {
     EXPECT_EQ(values(citrius::variance(matrix(), 1)), std::vector<float>({2.0f / 3.0f, 2.0f / 3.0f}));
     EXPECT_FLOAT_EQ(values(citrius::variance(matrix()))[0], 35.0f / 12.0f);
+}
+
+TEST(ReductionOperationsTest, ArgmaxReturnsInt64Indices) {
+    const citrius::Tensor input(std::vector<float>{-4, -1, -1, -2, 9, 3, 4, 9}, {2, 4});
+    const auto rows = citrius::argmax(input, -1);
+    EXPECT_EQ(rows.dtype(), citrius::DType::Int64);
+    EXPECT_EQ(rows.shape(), citrius::Shape({2}));
+    EXPECT_EQ(indices(rows), std::vector<std::int64_t>({1, 0}));
+    EXPECT_EQ(indices(citrius::argmax(input, 0)), std::vector<std::int64_t>({1, 1, 1, 1}));
+    EXPECT_EQ(indices(citrius::argmax(input)), std::vector<std::int64_t>({4}));
+    EXPECT_EQ(citrius::argmax(input, 1, true).shape(), citrius::Shape({2, 1}));
+}
+
+TEST(ReductionOperationsTest, ArgmaxRejectsInvalidAndEmptyInputs) {
+    EXPECT_THROW(citrius::argmax(matrix(), 2), std::out_of_range);
+    EXPECT_THROW(citrius::argmax(citrius::Tensor({0}, citrius::DType::Float32)), std::invalid_argument);
 }
 
 TEST(ReductionOperationsTest, RejectsInvalidDimensions) {

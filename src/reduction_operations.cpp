@@ -152,6 +152,38 @@ Tensor reduce(
     return from_vector(output, output_shape, tensor.device());
 }
 
+Tensor argmax_cpu(const Tensor& tensor, std::int64_t dim, bool keepdim) {
+    const auto normalized = normalize_dims(tensor, {dim});
+    const auto axis = static_cast<std::size_t>(normalized.front());
+    if (tensor.shape()[axis] == 0) throw std::invalid_argument("argmax cannot reduce an empty dimension");
+
+    Shape output_shape = tensor.shape();
+    if (keepdim) output_shape[axis] = 1;
+    else output_shape.erase(output_shape.begin() + static_cast<std::ptrdiff_t>(axis));
+    const Tensor cpu = tensor.to(Device::cpu());
+    const auto storage = std::static_pointer_cast<impl::CpuMemTensorStorageImpl>(cpu.storage());
+    const float* input = storage->data_as<float>();
+    const auto inner = std::accumulate(
+        tensor.shape().begin() + static_cast<std::ptrdiff_t>(axis + 1), tensor.shape().end(),
+        std::int64_t{1}, std::multiplies<>());
+    const auto reduction_size = tensor.shape()[axis];
+    std::vector<std::int64_t> output(static_cast<std::size_t>(tensor.numel() / reduction_size));
+    for (std::int64_t output_index = 0; output_index < static_cast<std::int64_t>(output.size()); ++output_index) {
+        const auto base = (output_index / inner) * reduction_size * inner + output_index % inner;
+        float best_value = input[base];
+        std::int64_t best_index = 0;
+        for (std::int64_t index = 1; index < reduction_size; ++index) {
+            const float value = input[base + index * inner];
+            if (value > best_value) {
+                best_value = value;
+                best_index = index;
+            }
+        }
+        output[static_cast<std::size_t>(output_index)] = best_index;
+    }
+    return from_vector(output, output_shape, tensor.device());
+}
+
 } // namespace
 
 #define CITRIUS_REDUCTION_OVERLOADS(name, kind) \
@@ -165,5 +197,26 @@ CITRIUS_REDUCTION_OVERLOADS(max, Max)
 CITRIUS_REDUCTION_OVERLOADS(variance, Variance)
 
 #undef CITRIUS_REDUCTION_OVERLOADS
+
+Tensor argmax(const Tensor& tensor) {
+    require_float32(tensor);
+    if (tensor.numel() == 0) throw std::invalid_argument("argmax input cannot be empty");
+#ifdef CITRIUS_HAS_CUDA
+    if (tensor.device().type == DeviceType::CUDA)
+        return impl::CudaDeviceImpl(tensor.device().index).argmax(tensor);
+#endif
+    const Tensor flattened({tensor.numel()}, tensor.dtype(), tensor.device(), tensor.storage());
+    return argmax_cpu(flattened, 0, false);
+}
+
+Tensor argmax(const Tensor& tensor, std::int64_t dim, bool keepdim) {
+    require_float32(tensor);
+    const auto normalized = normalize_dims(tensor, {dim});
+#ifdef CITRIUS_HAS_CUDA
+    if (tensor.device().type == DeviceType::CUDA)
+        return impl::CudaDeviceImpl(tensor.device().index).argmax(tensor, normalized.front(), keepdim);
+#endif
+    return argmax_cpu(tensor, normalized.front(), keepdim);
+}
 
 } // namespace citrius

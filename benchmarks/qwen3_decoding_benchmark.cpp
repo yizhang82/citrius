@@ -1,6 +1,7 @@
 #include "models/qwen3.h"
 
 #include "impl/cpu_storage.h"
+#include "reduction_operations.h"
 #include "tensor_factory.h"
 
 #include <algorithm>
@@ -37,13 +38,10 @@ citrius::Device parse_device(int argc, char** argv) {
 }
 
 std::int64_t last_token_argmax(const citrius::Tensor& logits) {
-    const citrius::Tensor cpu = logits.to(citrius::Device::cpu());
+    const citrius::Tensor cpu = citrius::argmax(logits, -1).to(citrius::Device::cpu());
     const auto storage =
         std::static_pointer_cast<citrius::impl::CpuMemTensorStorageImpl>(cpu.storage());
-    const std::int64_t vocabulary_size = cpu.shape().back();
-    const float* final_logits = storage->data_as<float>() + cpu.numel() - vocabulary_size;
-    return static_cast<std::int64_t>(
-        std::max_element(final_logits, final_logits + vocabulary_size) - final_logits);
+    return storage->data_as<std::int64_t>()[cpu.numel() - 1];
 }
 
 } // namespace

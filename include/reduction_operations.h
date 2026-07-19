@@ -102,6 +102,17 @@ Tensor max(const Tensor& tensor, std::int64_t dim, bool keepdim = false);
 /// @endcode
 Tensor max(const Tensor& tensor, std::vector<std::int64_t> dims, bool keepdim = false);
 
+/// Returns the index of the maximum element in the flattened tensor.
+/// Ties are resolved by returning the first index.
+/// @throws std::invalid_argument If the Float32 input is undefined or empty.
+Tensor argmax(const Tensor& tensor);
+
+/// Returns indices of maximum values along one dimension as Int64 values.
+/// Negative dimensions are accepted and ties return the first index.
+/// @throws std::invalid_argument If the Float32 input is undefined or the reduced dimension is empty.
+/// @throws std::out_of_range If `dim` is outside the tensor rank.
+Tensor argmax(const Tensor& tensor, std::int64_t dim, bool keepdim = false);
+
 /// Computes population variance across all tensor elements.
 /// @param tensor Defined Float32 input tensor.
 /// @return A scalar Float32 population variance on the input device.

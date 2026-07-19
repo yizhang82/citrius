@@ -50,6 +50,12 @@ std::vector<float> values(const citrius::Tensor& tensor) {
         ->copy_to_host(result.data(), result.size() * sizeof(float));
     return result;
 }
+std::vector<std::int64_t> indices(const citrius::Tensor& tensor) {
+    std::vector<std::int64_t> result(static_cast<std::size_t>(tensor.numel()));
+    std::static_pointer_cast<citrius::impl::CudaMemTensorStorageImpl>(tensor.storage())
+        ->copy_to_host(result.data(), result.size() * sizeof(std::int64_t));
+    return result;
+}
 } // namespace
 
 TEST(CudaDeviceTest, EmptyAllocatesCudaStorage) {
@@ -141,6 +147,23 @@ TEST(CudaDeviceTest, GridStrideAddAndSubCoverLargeTensorAndTail) {
         ASSERT_EQ(sums[i], a_values[i] + b_values[i]);
         ASSERT_EQ(differences[i], a_values[i] - b_values[i]);
     }
+}
+
+TEST(CudaDeviceTest, ArgmaxMatchesCpuForTiesNegativesAndIrregularSizes) {
+    std::string error;
+    auto device = make_cuda_device(&error);
+    if (!device) GTEST_SKIP() << error;
+    constexpr std::int64_t vocabulary_size = 151936;
+    std::vector<float> input(static_cast<std::size_t>(2 * vocabulary_size), -10.0f);
+    input[12345] = -1.0f;
+    input[54321] = -1.0f;
+    input[static_cast<std::size_t>(vocabulary_size + 151935)] = 4.0f;
+    const auto result = citrius::argmax(
+        make_cuda_tensor(*device, {2, vocabulary_size}, input), -1);
+    EXPECT_EQ(result.dtype(), citrius::DType::Int64);
+    EXPECT_EQ(indices(result), std::vector<std::int64_t>({12345, 151935}));
+    EXPECT_EQ(indices(result), indices(citrius::argmax(citrius::Tensor(input, {2, vocabulary_size}), -1)
+                                           .to(citrius::Device::cuda())));
 }
 
 TEST(CudaDeviceTest, CublasMatmulMatchesReferenceForNonSquareMatrices) {

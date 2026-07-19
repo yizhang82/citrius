@@ -51,6 +51,8 @@ public:
         const std::vector<std::int64_t>& dimensions,
         bool keepdim,
         CudaReductionOperation operation) const;
+    Tensor argmax(const Tensor& tensor, std::int64_t dimension, bool keepdim) const;
+    Tensor argmax(const Tensor& tensor) const;
     Tensor unary(
         const Tensor& tensor,
         CudaUnaryOperation operation,
