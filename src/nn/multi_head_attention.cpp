@@ -58,7 +58,6 @@ Tensor MultiHeadAttention::forward(const Tensor& input) {
         throw std::invalid_argument("MultiHeadAttention input must have 3 dimensions");
     }
 
-
     // [B, S, E] x [E, E] -> [B, S, E] 
     auto query = (*query_)(input);
     auto key = (*key_)(input);

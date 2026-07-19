@@ -52,6 +52,8 @@ Tensor softmax(const Tensor& tensor, std::int64_t dim);
 /// Query, key, and value may include any number of leading batch dimensions. Their
 /// trailing dimensions must be `[query_length, head_dim]`,
 /// `[key_length, head_dim]`, and `[key_length, value_dim]`, respectively.
+/// @param attn_mask Optional Bool mask broadcastable to
+///        `[..., query_length, key_length]`; `true` entries cannot be attended to.
 /// @return A tensor shaped `[..., query_length, value_dim]`.
 /// @throws DeviceMismatchException If the input devices differ.
 /// @throws std::invalid_argument If an input is undefined, non-Float32, or has
@@ -62,6 +64,7 @@ Tensor softmax(const Tensor& tensor, std::int64_t dim);
 Tensor scaled_dot_product_attention(
     const Tensor& query,
     const Tensor& key,
-    const Tensor& value);
+    const Tensor& value,
+    const Tensor& attn_mask = Tensor());
 
 } // namespace citrius::nn::functional

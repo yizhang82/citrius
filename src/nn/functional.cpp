@@ -106,7 +106,8 @@ Tensor softmax(const Tensor& tensor, std::int64_t dim) {
 Tensor scaled_dot_product_attention(
     const Tensor& query,
     const Tensor& key,
-    const Tensor& value) {
+    const Tensor& value,
+    const Tensor& attn_mask) {
     if (!query.defined()) throw std::invalid_argument("query must be defined");
     if (query.dtype() != DType::Float32) {
         throw std::invalid_argument("query currently supports Float32 only");
@@ -138,6 +139,22 @@ Tensor scaled_dot_product_attention(
     // query -> [..., Q, H]
     // scores -> [..., Q, K]
     auto scores = citrius::matmul(query, key_transposed); 
+
+    if (attn_mask.defined()) {
+        if (attn_mask.dtype() != DType::Bool) {
+            throw std::invalid_argument("attn_mask must be a boolean tensor");
+        }
+        if (attn_mask.device() != scores.device()) {
+            throw DeviceMismatchException(
+                "attn_mask device must match scores device");
+        }
+
+        // mask based on the attention (casual attention, self attention, etc)
+        scores = citrius::masked_fill(
+            scores,
+            attn_mask,
+            -std::numeric_limits<float>::infinity());
+    }
 
     auto scores_div = citrius::div(scores, std::sqrt(static_cast<float>(query.shape().back())));
 

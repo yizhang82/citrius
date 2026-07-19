@@ -698,3 +698,6 @@ sub              1024      50        0.025        0.038        1.917       42.22
 matmul           1024      50        0.082        0.097        4.831    26132.735         66.406
 batch-matmul     1024      50        4.584        5.129      256.454     3747.708       1342.562
 ```
+
+* scaled_dot_product_attention (hand-written)
+* MHA (hand-written)
