@@ -116,6 +116,7 @@ if(CITRIUS_CLANG_FORMAT)
         "${PROJECT_SOURCE_DIR}/examples/*.h"
         "${PROJECT_SOURCE_DIR}/benchmarks/*.cpp"
         "${PROJECT_SOURCE_DIR}/benchmarks/*.cu"
+        "${PROJECT_SOURCE_DIR}/tools/*.cpp"
     )
     add_custom_target(format
         COMMAND "${CITRIUS_CLANG_FORMAT}" -i -style=file ${CITRIUS_FORMAT_FILES}
@@ -140,6 +141,9 @@ target_link_libraries(example_custom_module PRIVATE citrius)
 
 add_executable(operations_benchmark benchmarks/operations_benchmark.cpp)
 target_link_libraries(operations_benchmark PRIVATE citrius)
+
+add_executable(decoder_chat tools/decoder_chat.cpp)
+target_link_libraries(decoder_chat PRIVATE citrius)
 if(CITRIUS_ENABLE_METAL)
     target_compile_definitions(operations_benchmark PRIVATE CITRIUS_HAS_METAL=1)
 endif()
