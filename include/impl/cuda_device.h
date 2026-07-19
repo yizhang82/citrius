@@ -20,6 +20,12 @@ enum class CudaReductionOperation {
     Variance,
 };
 
+enum class CudaUnaryOperation {
+    Exp,
+    Sqrt,
+    Power,
+};
+
 class CudaDeviceImpl : public IDevice {
 public:
     explicit CudaDeviceImpl(int device_index = 0);
@@ -45,6 +51,10 @@ public:
         const std::vector<std::int64_t>& dimensions,
         bool keepdim,
         CudaReductionOperation operation) const;
+    Tensor unary(
+        const Tensor& tensor,
+        CudaUnaryOperation operation,
+        float argument = 0.0f) const;
     virtual void add_out(const Tensor& a, const Tensor& b, Tensor& out) const;
     virtual void sub_out(const Tensor& a, const Tensor& b, Tensor& out) const;
     virtual void matmul_out(const Tensor& a, const Tensor& b, Tensor& out) const;

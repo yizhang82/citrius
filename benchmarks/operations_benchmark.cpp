@@ -45,6 +45,9 @@ enum class Operation {
     ReduceMean,
     ReduceMax,
     ReduceVariance,
+    Exp,
+    Sqrt,
+    Power,
     Matmul,
     BatchedMatmul,
 };
@@ -71,6 +74,12 @@ const char* operation_name(Operation operation) {
         return "reduce-max";
     case Operation::ReduceVariance:
         return "reduce-var";
+    case Operation::Exp:
+        return "exp";
+    case Operation::Sqrt:
+        return "sqrt";
+    case Operation::Power:
+        return "pow";
     case Operation::Matmul:
         return "matmul";
     case Operation::BatchedMatmul:
@@ -184,6 +193,9 @@ Result benchmark_cpu(const citrius::impl::CpuDeviceImpl& device, Operation opera
         case Operation::ReduceMean:
         case Operation::ReduceMax:
         case Operation::ReduceVariance:
+        case Operation::Exp:
+        case Operation::Sqrt:
+        case Operation::Power:
         case Operation::BatchedMatmul:
             break;
         }
@@ -275,6 +287,26 @@ Result benchmark_cuda(const CudaDevice& device, Operation operation, std::int64_
         result.checksum = cpu_checksum(output);
         return result;
     }
+    if (operation == Operation::Exp || operation == Operation::Sqrt ||
+        operation == Operation::Power) {
+        auto values = input_values(size * size, 3);
+        if (operation == Operation::Sqrt) {
+            for (float& value : values) value = std::abs(value) + 0.01f;
+        }
+        const citrius::Tensor input(values, {size, size}, citrius::Device::cuda());
+        const auto unary_operation = operation == Operation::Exp
+            ? citrius::impl::CudaUnaryOperation::Exp
+            : operation == Operation::Sqrt
+                ? citrius::impl::CudaUnaryOperation::Sqrt
+                : citrius::impl::CudaUnaryOperation::Power;
+        citrius::Tensor output;
+        auto result = measure(operation_count(operation, size), iterations, [&] {
+            output = device.unary(input, unary_operation, 2.0f);
+            return 0.0f;
+        });
+        result.checksum = cpu_checksum(output);
+        return result;
+    }
     const auto a_values = input_values(size * size, 3);
     const auto b_values = input_values(size * size, 7);
     citrius::Tensor a(a_values, {size, size}, citrius::Device::cuda());
@@ -298,6 +330,9 @@ Result benchmark_cuda(const CudaDevice& device, Operation operation, std::int64_
         case Operation::ReduceMean:
         case Operation::ReduceMax:
         case Operation::ReduceVariance:
+        case Operation::Exp:
+        case Operation::Sqrt:
+        case Operation::Power:
         case Operation::BatchedMatmul:
             return;
         }
@@ -417,7 +452,8 @@ int main(int argc, char** argv) {
                             {Operation::BroadcastAdd, Operation::BroadcastMul,
                              Operation::ScalarMul, Operation::ReduceSum,
                              Operation::ReduceMean, Operation::ReduceMax,
-                             Operation::ReduceVariance});
+                             Operation::ReduceVariance, Operation::Exp,
+                             Operation::Sqrt, Operation::Power});
                     }
                     operations.insert(
                         operations.end(), {Operation::Matmul, Operation::BatchedMatmul});

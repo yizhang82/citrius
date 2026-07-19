@@ -10,6 +10,7 @@
 #include <gtest/gtest.h>
 
 #include <algorithm>
+#include <cmath>
 #include <memory>
 #include <stdexcept>
 #include <string>
@@ -347,6 +348,32 @@ TEST(CudaDeviceTest, FullReductionsMatchCpuReference) {
     EXPECT_NEAR(values(citrius::mean(cuda_input))[0], 17.0f / 6.0f, 1e-6f);
     EXPECT_EQ(values(citrius::max(cuda_input)), std::vector<float>({9.0f}));
     EXPECT_NEAR(values(citrius::variance(cuda_input))[0], 14.138889f, 1e-5f);
+}
+
+TEST(CudaDeviceTest, UnaryMathOperationsStayOnCuda) {
+    std::string error;
+    auto device = make_cuda_device(&error);
+    if (!device)
+        GTEST_SKIP() << error;
+
+    const citrius::Tensor exponential_input(
+        std::vector<float>{-1.0f, 0.0f, 1.0f}, citrius::Device::cuda());
+    const citrius::Tensor sqrt_input(
+        std::vector<float>{0.0f, 1.0f, 4.0f, 9.0f}, citrius::Device::cuda());
+    const citrius::Tensor power_input(
+        std::vector<float>{-2.0f, 3.0f, 0.5f}, citrius::Device::cuda());
+
+    const auto exponentials = citrius::exp(exponential_input);
+    const auto roots = citrius::sqrt(sqrt_input);
+    const auto powers = citrius::pow(power_input, 3.0f);
+
+    EXPECT_EQ(exponentials.device(), citrius::Device::cuda());
+    const auto exponential_values = values(exponentials);
+    EXPECT_NEAR(exponential_values[0], std::exp(-1.0f), 1e-6f);
+    EXPECT_NEAR(exponential_values[1], 1.0f, 1e-6f);
+    EXPECT_NEAR(exponential_values[2], std::exp(1.0f), 1e-6f);
+    EXPECT_EQ(values(roots), std::vector<float>({0, 1, 2, 3}));
+    EXPECT_EQ(values(powers), std::vector<float>({-8, 27, 0.125f}));
 }
 
 TEST(CudaDeviceTest, TopLevelMatmulUsesConfiguredCudaBackend) {

@@ -268,14 +268,35 @@ Tensor maximum(const Tensor& left, const Tensor& right) {
 }
 
 Tensor exp(const Tensor& tensor) {
+#ifdef CITRIUS_HAS_CUDA
+    if (tensor.device().type == DeviceType::CUDA) {
+        auto device = cuda_device(tensor.device().index);
+        return static_cast<impl::CudaDeviceImpl&>(*device).unary(
+            tensor, impl::CudaUnaryOperation::Exp);
+    }
+#endif
     return unary(tensor, [](float value) { return std::exp(value); });
 }
 
 Tensor sqrt(const Tensor& tensor) {
+#ifdef CITRIUS_HAS_CUDA
+    if (tensor.device().type == DeviceType::CUDA) {
+        auto device = cuda_device(tensor.device().index);
+        return static_cast<impl::CudaDeviceImpl&>(*device).unary(
+            tensor, impl::CudaUnaryOperation::Sqrt);
+    }
+#endif
     return unary(tensor, [](float value) { return std::sqrt(value); });
 }
 
 Tensor pow(const Tensor& tensor, float exponent) {
+#ifdef CITRIUS_HAS_CUDA
+    if (tensor.device().type == DeviceType::CUDA) {
+        auto device = cuda_device(tensor.device().index);
+        return static_cast<impl::CudaDeviceImpl&>(*device).unary(
+            tensor, impl::CudaUnaryOperation::Power, exponent);
+    }
+#endif
     return unary(tensor, [exponent](float value) { return std::pow(value, exponent); });
 }
 

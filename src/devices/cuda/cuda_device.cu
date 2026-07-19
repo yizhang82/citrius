@@ -244,6 +244,24 @@ __global__ void reduce_f32(
         output[output_index] = value;
     }
 }
+
+__global__ void unary_f32(
+    const float* input,
+    float* output,
+    std::int64_t count,
+    CudaUnaryOperation operation,
+    float argument) {
+    const auto first = static_cast<std::int64_t>(blockIdx.x) * blockDim.x + threadIdx.x;
+    const auto stride = static_cast<std::int64_t>(blockDim.x) * gridDim.x;
+    for (auto index = first; index < count; index += stride) {
+        const float value = input[index];
+        switch (operation) {
+            case CudaUnaryOperation::Exp: output[index] = expf(value); break;
+            case CudaUnaryOperation::Sqrt: output[index] = sqrtf(value); break;
+            case CudaUnaryOperation::Power: output[index] = powf(value, argument); break;
+        }
+    }
+}
 constexpr int matmul_tile_size = 16;
 
 __global__ void matmul_f32(const float* a, const float* b, float* out, std::int64_t m,
@@ -602,6 +620,26 @@ Tensor CudaDeviceImpl::reduce(
         throw;
     }
     if (device_metadata) cudaFree(device_metadata);
+    return output;
+}
+
+Tensor CudaDeviceImpl::unary(
+    const Tensor& tensor,
+    CudaUnaryOperation operation,
+    float argument) const {
+    require_defined(tensor, "unary input");
+    require_float32(tensor, "unary input");
+    Tensor output = empty(tensor.shape(), DType::Float32);
+    if (output.numel() == 0) return output;
+    auto input = ensure_storage(tensor.storage(), ConversionPolicy::CopyToDevice);
+    const auto required_blocks = (output.numel() + 255) / 256;
+    const auto blocks = static_cast<unsigned>(
+        std::min<std::int64_t>(required_blocks, max_elementwise_blocks_));
+    unary_f32<<<blocks, 256>>>(
+        data(require_cuda_storage(*input)),
+        data(require_cuda_storage(*output.storage())), output.numel(), operation, argument);
+    check_cuda(cudaGetLastError(), "failed to launch CUDA unary kernel");
+    check_cuda(cudaDeviceSynchronize(), "CUDA unary kernel failed");
     return output;
 }
 
