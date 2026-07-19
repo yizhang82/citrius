@@ -206,35 +206,44 @@ void Tensor::copy_item_to_host(void* destination, DType expected) const {
     const Tensor cpu = to(Device::cpu());
     const auto cpu_storage =
         std::static_pointer_cast<CpuMemTensorStorageImpl>(cpu.storage());
-    std::memcpy(destination, cpu_storage->data(), dtype_size(dtype()));
+    const auto byte_offset =
+        static_cast<std::size_t>(cpu.storage_offset()) * dtype_size(dtype());
+    const auto* source = static_cast<const std::byte*>(cpu_storage->data()) + byte_offset;
+    std::memcpy(destination, source, dtype_size(dtype()));
 }
 
 std::string Tensor::to_string() const {
     if (!defined()) return "tensor(undefined)";
+    if (!is_contiguous()) {
+        throw std::invalid_argument("printing a non-contiguous tensor requires contiguous()");
+    }
 
     const Tensor cpu_tensor = to(Device::cpu());
     const auto cpu_storage =
         std::static_pointer_cast<CpuMemTensorStorageImpl>(cpu_tensor.storage());
+    const auto byte_offset =
+        static_cast<std::size_t>(cpu_tensor.storage_offset()) * dtype_size(dtype());
+    const auto* values = static_cast<const std::byte*>(cpu_storage->data()) + byte_offset;
     std::ostringstream stream;
     stream << "tensor([";
     switch (dtype()) {
         case DType::Float32:
-            append_values(stream, cpu_storage->data_as<float>(), numel());
+            append_values(stream, reinterpret_cast<const float*>(values), numel());
             break;
         case DType::Float64:
-            append_values(stream, cpu_storage->data_as<double>(), numel());
+            append_values(stream, reinterpret_cast<const double*>(values), numel());
             break;
         case DType::Int32:
-            append_values(stream, cpu_storage->data_as<std::int32_t>(), numel());
+            append_values(stream, reinterpret_cast<const std::int32_t*>(values), numel());
             break;
         case DType::Int64:
-            append_values(stream, cpu_storage->data_as<std::int64_t>(), numel());
+            append_values(stream, reinterpret_cast<const std::int64_t*>(values), numel());
             break;
         case DType::Bool: {
-            const auto* values = cpu_storage->data_as<std::uint8_t>();
+            const auto* bool_values = reinterpret_cast<const std::uint8_t*>(values);
             for (std::int64_t index = 0; index < numel(); ++index) {
                 if (index != 0) stream << ", ";
-                stream << (values[index] == 0 ? "false" : "true");
+                stream << (bool_values[index] == 0 ? "false" : "true");
             }
             break;
         }

@@ -226,6 +226,18 @@ TEST(CudaDeviceTest, ItemMaterializesPendingCudaScalar) {
     EXPECT_EQ(citrius::argmax(input).item<std::int64_t>(), 1);
 }
 
+TEST(CudaDeviceTest, OffsetScalarCopiesOnlyItsLogicalElementToHost) {
+    std::string error;
+    auto device = make_cuda_device(&error);
+    if (!device)
+        GTEST_SKIP() << error;
+    const auto values = make_cuda_tensor(*device, {4}, {1, 2, 3, 4});
+    const citrius::Tensor scalar(
+        {}, {}, 2, citrius::DType::Float32, values.device(), values.storage());
+
+    EXPECT_FLOAT_EQ(scalar.item<float>(), 3.0f);
+}
+
 TEST(CudaDeviceTest, CublasMatmulMatchesReferenceForNonSquareMatrices) {
     std::string error;
     auto baseline = make_cuda_device(&error);

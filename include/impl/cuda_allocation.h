@@ -25,7 +25,10 @@ public:
     std::size_t nbytes() const;
 
     void copy_from_host_async(const void* source, std::size_t nbytes);
-    void copy_to_host_async(void* destination, std::size_t nbytes) const;
+    void copy_to_host_async(
+        void* destination,
+        std::size_t nbytes,
+        std::size_t source_offset = 0) const;
     void copy_from_device_async(const CudaAllocation& source, std::size_t nbytes);
     void synchronize() const;
 
@@ -35,7 +38,7 @@ public:
     }
 
 private:
-    void validate_copy_size(std::size_t nbytes) const;
+    void validate_copy_range(std::size_t offset, std::size_t nbytes) const;
     void reset() noexcept;
 
     void* data_ = nullptr;

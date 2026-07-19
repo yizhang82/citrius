@@ -30,18 +30,25 @@ using MetalMemTensorStorageImpl = citrius::impl::MetalMemTensorStorageImpl;
 #endif
 
 Tensor copy_to_cpu(const Tensor& tensor) {
+    if (!tensor.is_contiguous()) {
+        throw std::invalid_argument("moving a non-contiguous tensor requires contiguous()");
+    }
     if (tensor.device().type == DeviceType::CPU) return tensor;
     auto output = CpuDeviceImpl().empty(tensor.shape(), tensor.dtype());
     auto destination = std::static_pointer_cast<CpuMemTensorStorageImpl>(output.storage());
+    const auto source_offset =
+        static_cast<std::size_t>(tensor.storage_offset()) * dtype_size(tensor.dtype());
     switch (tensor.device().type) {
 #ifdef CITRIUS_HAS_CUDA
         case DeviceType::CUDA:
-            std::static_pointer_cast<CudaMemTensorStorageImpl>(tensor.storage())->copy_to_host(destination->data(), destination->nbytes());
+            std::static_pointer_cast<CudaMemTensorStorageImpl>(tensor.storage())->copy_to_host(
+                destination->data(), destination->nbytes(), source_offset);
             return output;
 #endif
 #ifdef CITRIUS_HAS_METAL
         case DeviceType::Metal:
-            std::static_pointer_cast<MetalMemTensorStorageImpl>(tensor.storage())->copy_to_host(destination->data(), destination->nbytes());
+            std::static_pointer_cast<MetalMemTensorStorageImpl>(tensor.storage())->copy_to_host(
+                destination->data(), destination->nbytes(), source_offset);
             return output;
 #endif
         default: throw std::invalid_argument("source tensor backend is not enabled");
@@ -125,15 +132,21 @@ Tensor TensorFactory::to(const Tensor& tensor, Device device) {
     if (device.type == DeviceType::CPU) return cpu;
     auto output = empty(tensor.shape(), tensor.dtype(), device);
     const auto source = std::static_pointer_cast<CpuMemTensorStorageImpl>(cpu.storage());
+    const auto source_offset =
+        static_cast<std::size_t>(cpu.storage_offset()) * dtype_size(cpu.dtype());
+    const auto nbytes = static_cast<std::size_t>(cpu.numel()) * dtype_size(cpu.dtype());
+    const auto* source_data = static_cast<const std::byte*>(source->data()) + source_offset;
     switch (device.type) {
 #ifdef CITRIUS_HAS_CUDA
         case DeviceType::CUDA:
-            std::static_pointer_cast<CudaMemTensorStorageImpl>(output.storage())->copy_from_host(source->data(), source->nbytes());
+            std::static_pointer_cast<CudaMemTensorStorageImpl>(output.storage())->copy_from_host(
+                source_data, nbytes);
             return output;
 #endif
 #ifdef CITRIUS_HAS_METAL
         case DeviceType::Metal:
-            std::static_pointer_cast<MetalMemTensorStorageImpl>(output.storage())->copy_from_host(source->data(), source->nbytes());
+            std::static_pointer_cast<MetalMemTensorStorageImpl>(output.storage())->copy_from_host(
+                source_data, nbytes);
             return output;
 #endif
         default: throw std::invalid_argument("requested tensor backend is not enabled");

@@ -157,6 +157,21 @@ TEST(TensorTest, ExplicitLayoutExposesStridesOffsetAndContiguity) {
     EXPECT_FALSE(tensor.is_contiguous());
 }
 
+TEST(TensorTest, ScalarMaterializationAndPrintingRespectStorageOffset) {
+    auto storage = std::make_shared<citrius::impl::CpuMemTensorStorageImpl>(
+        4 * sizeof(float), citrius::DType::Float32);
+    auto* values = storage->data_as<float>();
+    values[0] = 1.0f;
+    values[1] = 2.0f;
+    values[2] = 3.0f;
+    values[3] = 4.0f;
+    const citrius::Tensor scalar(
+        {}, {}, 2, citrius::DType::Float32, citrius::Device::cpu(), storage);
+
+    EXPECT_FLOAT_EQ(scalar.item<float>(), 3.0f);
+    EXPECT_EQ(scalar.to_string(), "tensor([3], shape=[], dtype=float32, device=cpu)");
+}
+
 TEST(TensorTest, ExplicitLayoutValidatesMetadataAndStorageBounds) {
     auto storage = std::make_shared<citrius::impl::CpuMemTensorStorageImpl>(
         6 * sizeof(float), citrius::DType::Float32);

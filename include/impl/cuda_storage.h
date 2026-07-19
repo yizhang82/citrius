@@ -32,7 +32,7 @@ public:
     int device_index() const;
     const std::shared_ptr<CudaExecutionContext>& execution_context() const;
     void copy_from_host(const void* data, std::size_t nbytes);
-    void copy_to_host(void* data, std::size_t nbytes) const;
+    void copy_to_host(void* data, std::size_t nbytes, std::size_t source_offset = 0) const;
 
 private:
     std::size_t nbytes_ = 0;

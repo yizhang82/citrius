@@ -72,12 +72,16 @@ void MetalMemTensorStorageImpl::copy_from_host(const void* data, std::size_t nby
     std::memcpy([impl_->buffer contents], data, nbytes);
 }
 
-void MetalMemTensorStorageImpl::copy_to_host(void* data, std::size_t nbytes) const {
-    if (nbytes > impl_->nbytes) {
+void MetalMemTensorStorageImpl::copy_to_host(
+    void* data,
+    std::size_t nbytes,
+    std::size_t source_offset) const {
+    if (source_offset > impl_->nbytes || nbytes > impl_->nbytes - source_offset) {
         throw std::invalid_argument("host destination is larger than Metal storage");
     }
 
-    std::memcpy(data, [impl_->buffer contents], nbytes);
+    const auto* source = static_cast<const std::byte*>([impl_->buffer contents]) + source_offset;
+    std::memcpy(data, source, nbytes);
 }
 
 } // namespace citrius::impl

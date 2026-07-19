@@ -23,7 +23,7 @@ public:
     std::shared_ptr<ITensorStorage> clone() const override;
 
     void copy_from_host(const void* data, std::size_t nbytes);
-    void copy_to_host(void* data, std::size_t nbytes) const;
+    void copy_to_host(void* data, std::size_t nbytes, std::size_t source_offset = 0) const;
 
 private:
     class Impl;

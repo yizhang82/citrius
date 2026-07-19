@@ -60,11 +60,14 @@ void CudaMemTensorStorageImpl::copy_from_host(const void* data, std::size_t nbyt
     }
 }
 
-void CudaMemTensorStorageImpl::copy_to_host(void* data, std::size_t nbytes) const {
-    if (nbytes > nbytes_)
+void CudaMemTensorStorageImpl::copy_to_host(
+    void* data,
+    std::size_t nbytes,
+    std::size_t source_offset) const {
+    if (source_offset > nbytes_ || nbytes > nbytes_ - source_offset)
         throw std::invalid_argument("host destination is larger than CUDA storage");
     if (nbytes != 0) {
-        allocation_.copy_to_host_async(data, nbytes);
+        allocation_.copy_to_host_async(data, nbytes, source_offset);
         allocation_.synchronize();
     }
 }
