@@ -2,6 +2,7 @@
 #include "impl/cpu_storage.h"
 #include "impl/multi_thread_cpu_device.h"
 #include "operations.h"
+#include "reduction_operations.h"
 #include "tensor_factory.h"
 #include "nn/functional.h"
 
@@ -175,6 +176,105 @@ Result benchmark_cpu(const citrius::impl::CpuDeviceImpl& device, Operation opera
         citrius::Tensor output;
         auto result = measure(operation_count(operation, size), iterations, [&] {
             output = device.batched_matmul(a, b);
+            return 0.0f;
+        });
+        result.checksum = cpu_checksum(output);
+        return result;
+    }
+    if (operation == Operation::BroadcastAdd || operation == Operation::BroadcastMul) {
+        const citrius::Tensor a(input_values(size * size, 3), {size, size});
+        const citrius::Tensor b(input_values(size, 7), {size});
+        citrius::Tensor output;
+        auto result = measure(operation_count(operation, size), iterations, [&] {
+            output = operation == Operation::BroadcastAdd
+                ? citrius::add(a, b)
+                : citrius::mul(a, b);
+            return 0.0f;
+        });
+        result.checksum = cpu_checksum(output);
+        return result;
+    }
+    if (operation == Operation::ScalarMul) {
+        const citrius::Tensor input(input_values(size * size, 3), {size, size});
+        citrius::Tensor output;
+        auto result = measure(operation_count(operation, size), iterations, [&] {
+            output = citrius::mul(input, 1.5f);
+            return 0.0f;
+        });
+        result.checksum = cpu_checksum(output);
+        return result;
+    }
+    if (operation == Operation::ReduceSum || operation == Operation::ReduceMean ||
+        operation == Operation::ReduceMax || operation == Operation::ReduceVariance) {
+        const citrius::Tensor input(input_values(size * size, 3), {size, size});
+        citrius::Tensor output;
+        auto result = measure(operation_count(operation, size), iterations, [&] {
+            switch (operation) {
+            case Operation::ReduceSum:
+                output = citrius::sum(input, 1);
+                break;
+            case Operation::ReduceMean:
+                output = citrius::mean(input, 1);
+                break;
+            case Operation::ReduceMax:
+                output = citrius::max(input, 1);
+                break;
+            case Operation::ReduceVariance:
+                output = citrius::variance(input, 1);
+                break;
+            default:
+                break;
+            }
+            return 0.0f;
+        });
+        result.checksum = cpu_checksum(output);
+        return result;
+    }
+    if (operation == Operation::Exp || operation == Operation::Sqrt ||
+        operation == Operation::Power) {
+        auto values = input_values(size * size, 3);
+        if (operation == Operation::Sqrt) {
+            for (float& value : values) value = std::abs(value) + 0.01f;
+        }
+        const citrius::Tensor input(values, {size, size});
+        citrius::Tensor output;
+        auto result = measure(operation_count(operation, size), iterations, [&] {
+            output = operation == Operation::Exp
+                ? citrius::exp(input)
+                : operation == Operation::Sqrt
+                    ? citrius::sqrt(input)
+                    : citrius::pow(input, 2.0f);
+            return 0.0f;
+        });
+        result.checksum = cpu_checksum(output);
+        return result;
+    }
+    if (operation == Operation::MaskedFill) {
+        const citrius::Tensor input(input_values(size * size, 3), {size, size});
+        std::vector<bool> mask_values(static_cast<std::size_t>(size));
+        for (std::int64_t index = 0; index < size; ++index)
+            mask_values[static_cast<std::size_t>(index)] = index % 3 == 0;
+        const citrius::Tensor mask = citrius::from_vector(mask_values, {size});
+        citrius::Tensor output;
+        auto result = measure(operation_count(operation, size), iterations, [&] {
+            output = citrius::masked_fill(input, mask, -100.0f);
+            return 0.0f;
+        });
+        result.checksum = cpu_checksum(output);
+        return result;
+    }
+    if (operation == Operation::Softmax || operation == Operation::LayerNorm) {
+        const citrius::Tensor input(input_values(size * size, 3), {size, size});
+        const citrius::Tensor weight(
+            std::vector<float>(static_cast<std::size_t>(size), 1.0f));
+        const citrius::Tensor bias(
+            std::vector<float>(static_cast<std::size_t>(size), 0.0f));
+        citrius::Tensor output;
+        auto result = measure(operation_count(operation, size), iterations, [&] {
+            output = operation == Operation::Softmax
+                ? citrius::nn::functional::softmax(input, -1)
+                : citrius::nn::functional::layer_norm(
+                      input, {size}, weight, bias, 1e-5f);
             return 0.0f;
         });
         result.checksum = cpu_checksum(output);
@@ -462,6 +562,8 @@ int main(int argc, char** argv) {
     std::cout << "Square Float32 operations\n"
               << "Single-thread CPU reference: one run; batched N=1024 skipped\n"
               << "Multi-thread CPU batched runs={128:10, 256:5, 512:1, 1024:1}\n"
+              << "CPU functional workloads use current top-level paths; only operations with "
+                 "multi-thread dispatch run in parallel\n"
               << "CUDA: 50 runs per workload, including batched matmul\n";
 
     try {
@@ -472,8 +574,21 @@ int main(int argc, char** argv) {
                 print_section_header(name);
                 for (const auto [size, iterations] : std::vector<std::pair<std::int64_t, int>>{
                          {128, 50}, {256, 50}, {512, 50}, {1024, 5}}) {
-                    for (Operation operation : {Operation::Add, Operation::Sub, Operation::Matmul,
-                                                Operation::BatchedMatmul}) {
+                    std::vector<Operation> operations{Operation::Add, Operation::Sub};
+                    if (!reference_only) {
+                        operations.insert(
+                            operations.end(),
+                            {Operation::BroadcastAdd, Operation::BroadcastMul,
+                             Operation::ScalarMul, Operation::ReduceSum,
+                             Operation::ReduceMean, Operation::ReduceMax,
+                             Operation::ReduceVariance, Operation::Exp,
+                             Operation::Sqrt, Operation::Power,
+                             Operation::MaskedFill, Operation::Softmax,
+                             Operation::LayerNorm});
+                    }
+                    operations.insert(
+                        operations.end(), {Operation::Matmul, Operation::BatchedMatmul});
+                    for (Operation operation : operations) {
                         const int runs =
                             reference_only ? 1 : benchmark_iterations(operation, size, iterations);
                         if (runs == 0)
