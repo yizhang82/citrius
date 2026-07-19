@@ -123,4 +123,65 @@ void MultiThreadCpuDeviceImpl::matmul_out(const Tensor& a, const Tensor& b, Tens
     });
 }
 
+void MultiThreadCpuDeviceImpl::batched_matmul_out(
+    const Tensor& a,
+    const Tensor& b,
+    Tensor& output) const {
+    require_inputs(a, b);
+    if (a.ndim() < 2 || b.ndim() < 2 || (a.ndim() == 2 && b.ndim() == 2)) {
+        throw std::invalid_argument("batched_matmul expects at least one batched input");
+    }
+    const auto m = a.shape()[a.ndim() - 2];
+    const auto k = a.shape().back();
+    const auto n = b.shape().back();
+    if (k != b.shape()[b.ndim() - 2]) {
+        throw std::invalid_argument("batched_matmul inner dimensions must match");
+    }
+    const Shape output_batch(output.shape().begin(), output.shape().end() - 2);
+    const Shape a_batch(a.shape().begin(), a.shape().end() - 2);
+    const Shape b_batch(b.shape().begin(), b.shape().end() - 2);
+    auto make_strides = [](const Shape& shape) {
+        Strides result(shape.size(), 1);
+        for (std::size_t index = shape.size(); index-- > 1;) {
+            result[index - 1] = result[index] * shape[index];
+        }
+        return result;
+    };
+    const auto output_strides = make_strides(output_batch);
+    const auto a_strides = make_strides(a_batch);
+    const auto b_strides = make_strides(b_batch);
+    auto mapped_batch = [&](std::int64_t batch, const Shape& shape, const Strides& shape_strides) {
+        const std::size_t padding = output_batch.size() - shape.size();
+        std::int64_t mapped = 0;
+        for (std::size_t axis = padding; axis < output_batch.size(); ++axis) {
+            const auto coordinate = (batch / output_strides[axis]) % output_batch[axis];
+            if (shape[axis - padding] != 1) mapped += coordinate * shape_strides[axis - padding];
+        }
+        return mapped;
+    };
+    const auto& as = static_cast<const CpuMemTensorStorageImpl&>(*ensure_storage(a.storage()));
+    const auto& bs = static_cast<const CpuMemTensorStorageImpl&>(*ensure_storage(b.storage()));
+    auto& os = output_storage(output);
+    const float* ap = as.data_as<float>();
+    const float* bp = bs.data_as<float>();
+    float* op = os.data_as<float>();
+    const std::int64_t batch_count = output.numel() / (m * n);
+    parallel_for(0, batch_count * m, thread_count_, 1, [&](std::int64_t begin, std::int64_t end) {
+        for (std::int64_t item = begin; item < end; ++item) {
+            const auto batch = item / m;
+            const auto row = item % m;
+            const float* am = ap + mapped_batch(batch, a_batch, a_strides) * m * k;
+            const float* bm = bp + mapped_batch(batch, b_batch, b_strides) * k * n;
+            float* om = op + batch * m * n;
+            for (std::int64_t col = 0; col < n; ++col) {
+                float total = 0.0f;
+                for (std::int64_t inner = 0; inner < k; ++inner) {
+                    total += am[row * k + inner] * bm[inner * n + col];
+                }
+                om[row * n + col] = total;
+            }
+        }
+    });
+}
+
 } // namespace citrius::impl

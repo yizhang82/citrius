@@ -222,6 +222,10 @@ Tensor CudaDeviceImpl::matmul(const Tensor& a, const Tensor& b) const {
     return out;
 }
 
+Tensor CudaDeviceImpl::batched_matmul(const Tensor&, const Tensor&) const {
+    throw std::runtime_error("CUDA batched_matmul is not implemented");
+}
+
 void CudaDeviceImpl::matmul_out(const Tensor& a, const Tensor& b, Tensor& out) const {
     require_defined(a, "left"); require_defined(b, "right");
     require_float32(a, "left"); require_float32(b, "right"); require_2d_matmul_shapes(a, b);

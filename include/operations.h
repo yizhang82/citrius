@@ -30,17 +30,20 @@ Tensor add(const Tensor& left, const Tensor& right);
 /// @endcode
 Tensor sub(const Tensor& left, const Tensor& right);
 
-/// Multiplies two matrices.
-/// @param left A 2D input shaped `[M, K]`.
-/// @param right A 2D input shaped `[K, N]` on the same device as `left`.
-/// @return A new tensor shaped `[M, N]` on the inputs' device.
+/// Multiplies matrices, dispatching to regular or batched device execution.
+/// @param left A Float32 input shaped `[M, K]` or `[..., M, K]`.
+/// @param right A Float32 input shaped `[K, N]` or `[..., K, N]` on the same device.
+/// @return A new tensor shaped `[M, N]` for 2D inputs or `[..., M, N]` with
+///         broadcasted leading batch dimensions.
 /// @throws DeviceMismatchException If the input devices differ.
-/// @throws std::invalid_argument If an input is undefined, is not 2D Float32, or
-///         has an incompatible inner dimension.
+/// @throws std::invalid_argument If an input is undefined, has rank below two, is
+///         non-Float32, or has incompatible inner or batch dimensions.
+/// @throws std::runtime_error If batched execution is unavailable on the device.
 /// @code
 /// Tensor a = from_vector(std::vector<float>{1, 2, 3, 4, 5, 6}, {2, 3});
 /// Tensor b = from_vector(std::vector<float>{1, 2, 3, 4, 5, 6}, {3, 2});
 /// Tensor result = matmul(a, b); // shape [2, 2]
+/// Tensor scores = matmul(query, transpose(key, -2, -1)); // [B, H, S, S]
 /// @endcode
 Tensor matmul(const Tensor& left, const Tensor& right);
 

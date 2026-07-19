@@ -333,6 +333,10 @@ Tensor MetalDeviceImpl::matmul(const Tensor& a, const Tensor& b) const {
     return output;
 }
 
+Tensor MetalDeviceImpl::batched_matmul(const Tensor&, const Tensor&) const {
+    throw std::runtime_error("Metal batched_matmul is not implemented");
+}
+
 TensorStoragePtr MetalDeviceImpl::ensure_storage(
     const TensorStoragePtr& storage,
     ConversionPolicy policy) const {

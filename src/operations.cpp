@@ -198,6 +198,11 @@ Tensor sub(const Tensor& left, const Tensor& right) {
 }
 
 Tensor matmul(const Tensor& left, const Tensor& right) {
+    if (left.ndim() != 2 || right.ndim() != 2) {
+        return dispatch(left, right, [](const auto& device, const Tensor& a, const Tensor& b) {
+            return device.batched_matmul(a, b);
+        });
+    }
     return dispatch(left, right, [](const auto& device, const Tensor& a, const Tensor& b) {
         return device.matmul(a, b);
     });

@@ -21,6 +21,7 @@ public:
     virtual Tensor add(const Tensor& a, const Tensor& b) const = 0;
     virtual Tensor sub(const Tensor& a, const Tensor& b) const = 0;
     virtual Tensor matmul(const Tensor& a, const Tensor& b) const = 0;
+    virtual Tensor batched_matmul(const Tensor& a, const Tensor& b) const = 0;
     virtual TensorStoragePtr ensure_storage(
         const TensorStoragePtr& storage,
         ConversionPolicy policy = ConversionPolicy::Error) const = 0;

@@ -1,5 +1,6 @@
 #include "exceptions.h"
 #include "operations.h"
+#include "shape_operations.h"
 #include "tensor_factory.h"
 
 #include "impl/cpu_storage.h"
@@ -127,4 +128,59 @@ TEST(OperationsTest, RejectsIncompatibleBroadcastShapes) {
     EXPECT_THROW(
         citrius::masked_fill(left, citrius::from_vector(std::vector<bool>{true, false, true}), 0),
         std::invalid_argument);
+}
+
+TEST(OperationsTest, MultipliesBatchedMatrices) {
+    const citrius::Tensor left(
+        std::vector<float>{1, 2, 3, 4, 5, 6, 7, 8},
+        {2, 2, 2});
+    const citrius::Tensor right(
+        std::vector<float>{1, 0, 0, 1, 2, 0, 0, 2},
+        {2, 2, 2});
+
+    const auto result = citrius::matmul(left, right);
+
+    EXPECT_EQ(result.shape(), citrius::Shape({2, 2, 2}));
+    EXPECT_EQ(values(result), std::vector<float>({1, 2, 3, 4, 10, 12, 14, 16}));
+}
+
+TEST(OperationsTest, BroadcastsMatmulBatchDimensions) {
+    const citrius::Tensor left(std::vector<float>{1, 2, 3, 4}, {2, 2});
+    const citrius::Tensor right(
+        std::vector<float>{1, 1, 2, 3, 4, 5},
+        {3, 2, 1});
+
+    const auto result = citrius::matmul(left, right);
+
+    EXPECT_EQ(result.shape(), citrius::Shape({3, 2, 1}));
+    EXPECT_EQ(values(result), std::vector<float>({3, 7, 8, 18, 14, 32}));
+}
+
+TEST(OperationsTest, SupportsAttentionMatmulShapes) {
+    const citrius::Tensor query(
+        std::vector<float>{1, 0, 0, 1, 1, 1, 2, 1},
+        {1, 2, 2, 2});
+    const auto key_transposed = citrius::transpose(query, -2, -1);
+
+    const auto scores = citrius::matmul(query, key_transposed);
+    const auto context = citrius::matmul(scores, query);
+
+    EXPECT_EQ(scores.shape(), citrius::Shape({1, 2, 2, 2}));
+    EXPECT_EQ(context.shape(), citrius::Shape({1, 2, 2, 2}));
+}
+
+TEST(OperationsTest, RejectsInvalidBatchedMatmulShapes) {
+    const citrius::Tensor matrix(std::vector<float>{1, 2, 3, 4}, {2, 2});
+    EXPECT_THROW(
+        citrius::matmul(
+            citrius::unsqueeze(matrix, 0),
+            citrius::Tensor(std::vector<float>{1, 2, 3}, {3, 1})),
+        std::invalid_argument);
+    EXPECT_THROW(
+        citrius::matmul(
+            citrius::Tensor(std::vector<float>(2 * 2 * 2), {2, 2, 2}),
+            citrius::Tensor(std::vector<float>(3 * 2 * 2), {3, 2, 2})),
+        std::invalid_argument);
+    EXPECT_THROW(citrius::matmul(citrius::Tensor(std::vector<float>{1, 2}), matrix),
+                 std::invalid_argument);
 }

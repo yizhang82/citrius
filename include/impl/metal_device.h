@@ -20,6 +20,7 @@ public:
     Tensor add(const Tensor& a, const Tensor& b) const override;
     Tensor sub(const Tensor& a, const Tensor& b) const override;
     Tensor matmul(const Tensor& a, const Tensor& b) const override;
+    Tensor batched_matmul(const Tensor& a, const Tensor& b) const override;
     TensorStoragePtr ensure_storage(
         const TensorStoragePtr& storage,
         ConversionPolicy policy = ConversionPolicy::Error) const override;

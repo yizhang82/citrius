@@ -14,6 +14,7 @@ public:
     void add_out(const Tensor& a, const Tensor& b, Tensor& out) const override;
     void sub_out(const Tensor& a, const Tensor& b, Tensor& out) const override;
     void matmul_out(const Tensor& a, const Tensor& b, Tensor& out) const override;
+    void batched_matmul_out(const Tensor& a, const Tensor& b, Tensor& out) const override;
 
 private:
     std::size_t thread_count_;
