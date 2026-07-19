@@ -99,7 +99,7 @@ Qwen3RMSNorm::Qwen3RMSNorm(std::int64_t hidden_size, float eps, Device device)
 }
 
 Tensor Qwen3RMSNorm::forward(const Tensor& input) {
-    CITRIUS_ENSURE_TENSOR_DEFINED(input);
+    ENSURE_TENSOR_DEFINED(input);
     if (input.dtype() != DType::Float32 || input.ndim() == 0 || input.shape().back() != hidden_size_) {
         throw std::invalid_argument("Qwen3RMSNorm requires Float32 input ending in hidden_size");
     }
@@ -140,8 +140,8 @@ Tensor Qwen3Attention::forward(const Tensor& input) {
 }
 
 Tensor Qwen3Attention::forward(const Tensor& input, const Tensor& attn_mask) {
-    CITRIUS_ENSURE_TENSOR_DEFINED(input);
-    CITRIUS_ENSURE_TENSOR_DIM(input, 3);
+    ENSURE_TENSOR_DEFINED(input);
+    ENSURE_TENSOR_DIM(input, 3);
     if (input.shape().back() != config_.hidden_size) {
         throw std::invalid_argument("Qwen3Attention input must end in hidden_size");
     }
@@ -200,8 +200,8 @@ Qwen3Model::Qwen3Model(Qwen3Config config) : config_(std::move(config)) {
 }
 
 Tensor Qwen3Model::forward(const Tensor& input_ids) {
-    CITRIUS_ENSURE_TENSOR_DEFINED(input_ids);
-    CITRIUS_ENSURE_TENSOR_DIM(input_ids, 2);
+    ENSURE_TENSOR_DEFINED(input_ids);
+    ENSURE_TENSOR_DIM(input_ids, 2);
     if (input_ids.dtype() != DType::Int64) throw std::invalid_argument("Qwen3 input_ids must be Int64");
     if (input_ids.shape()[1] > config_.max_position_embeddings) {
         throw std::invalid_argument("Qwen3 sequence exceeds max_position_embeddings");

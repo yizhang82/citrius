@@ -53,8 +53,8 @@ Tensor TransformerBlock::forward(const Tensor& input) {
 }
 
 Tensor TransformerBlock::forward(const Tensor& input, const Tensor& attn_mask) {
-    CITRIUS_ENSURE_TENSOR_DEFINED(input);
-    CITRIUS_ENSURE_TENSOR_DIM(input, 3);
+    ENSURE_TENSOR_DEFINED(input);
+    ENSURE_TENSOR_DIM(input, 3);
     if (input.shape().back() != embed_dim_) {
         throw std::invalid_argument(
             "TransformerBlock input's last dimension must equal embed_dim");

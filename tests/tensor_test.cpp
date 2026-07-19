@@ -172,6 +172,36 @@ TEST(TensorTest, ScalarMaterializationAndPrintingRespectStorageOffset) {
     EXPECT_EQ(scalar.to_string(), "tensor([3], shape=[], dtype=float32, device=cpu)");
 }
 
+TEST(TensorTest, SelectReturnsAnAliasingMetadataOnlyView) {
+    const citrius::Tensor tensor(
+        std::vector<float>{0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11,
+                           12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23},
+        {2, 3, 4});
+    const auto selected = tensor.select(1, 2);
+
+    EXPECT_EQ(selected.shape(), citrius::Shape({2, 4}));
+    EXPECT_EQ(selected.strides(), citrius::Strides({12, 1}));
+    EXPECT_EQ(selected.storage_offset(), 8);
+    EXPECT_EQ(selected.storage(), tensor.storage());
+    EXPECT_FALSE(selected.is_contiguous());
+    EXPECT_FLOAT_EQ(selected.select(0, -1).select(0, 3).item<float>(), 23.0f);
+}
+
+TEST(TensorTest, SliceReturnsAnAliasingPositiveStepView) {
+    const citrius::Tensor tensor(
+        std::vector<float>{0, 1, 2, 3, 4, 5, 6, 7, 8, 9});
+    const auto sliced = tensor.slice(0, 2, 8, 2);
+
+    EXPECT_EQ(sliced.shape(), citrius::Shape({3}));
+    EXPECT_EQ(sliced.strides(), citrius::Strides({2}));
+    EXPECT_EQ(sliced.storage_offset(), 2);
+    EXPECT_EQ(sliced.storage(), tensor.storage());
+    EXPECT_FALSE(sliced.is_contiguous());
+    EXPECT_FLOAT_EQ(sliced.select(0, 1).item<float>(), 4.0f);
+    EXPECT_THROW(tensor.slice(0, 0, 2, 0), std::invalid_argument);
+    EXPECT_THROW(tensor.select(0, 10), std::out_of_range);
+}
+
 TEST(TensorTest, ExplicitLayoutValidatesMetadataAndStorageBounds) {
     auto storage = std::make_shared<citrius::impl::CpuMemTensorStorageImpl>(
         6 * sizeof(float), citrius::DType::Float32);

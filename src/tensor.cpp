@@ -1,5 +1,6 @@
 #include "tensor.h"
 
+#include "shape_operations.h"
 #include "tensor_factory.h"
 #include "impl/cpu_storage.h"
 #include "impl/storage.h"
@@ -185,6 +186,18 @@ std::int64_t Tensor::numel() const {
 
 bool Tensor::defined() const {
     return defined_;
+}
+
+Tensor Tensor::select(std::int64_t dim, std::int64_t index) const {
+    return citrius::select(*this, dim, index);
+}
+
+Tensor Tensor::slice(
+    std::int64_t dim,
+    std::int64_t start,
+    std::int64_t end,
+    std::int64_t step) const {
+    return citrius::slice(*this, dim, start, end, step);
 }
 
 Tensor Tensor::copy() const {

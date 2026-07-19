@@ -2,6 +2,7 @@
 
 #include "impl/cpu_storage.h"
 #include "tensor_factory.h"
+#include "tensor_utils.h"
 
 #include <algorithm>
 #include <cstring>
@@ -98,10 +99,58 @@ Tensor materialize_permutation(const Tensor& tensor, const std::vector<std::int6
 
 } // namespace
 
+Tensor select(const Tensor& tensor, std::int64_t dim, std::int64_t index) {
+    ENSURE_TENSOR_DEFINED(tensor);
+    dim = normalize_dim(dim, tensor.ndim());
+    const auto axis = static_cast<std::size_t>(dim);
+    const auto size = tensor.shape()[axis];
+    if (index < 0) index += size;
+    if (index < 0 || index >= size) throw std::out_of_range("tensor index is out of range");
+
+    Shape shape = tensor.shape();
+    Strides strides = tensor.strides();
+    const auto offset = tensor.storage_offset() + index * strides[axis];
+    shape.erase(shape.begin() + static_cast<std::ptrdiff_t>(axis));
+    strides.erase(strides.begin() + static_cast<std::ptrdiff_t>(axis));
+    return Tensor(std::move(shape), std::move(strides), offset, tensor.dtype(),
+                  tensor.device(), tensor.storage());
+}
+
+Tensor slice(
+    const Tensor& tensor,
+    std::int64_t dim,
+    std::int64_t start,
+    std::int64_t end,
+    std::int64_t step) {
+    ENSURE_TENSOR_DEFINED(tensor);
+    if (step <= 0) throw std::invalid_argument("slice step must be positive");
+    dim = normalize_dim(dim, tensor.ndim());
+    const auto axis = static_cast<std::size_t>(dim);
+    const auto size = tensor.shape()[axis];
+    if (start < 0) start += size;
+    if (end < 0) end += size;
+    start = std::clamp<std::int64_t>(start, 0, size);
+    end = std::clamp<std::int64_t>(end, 0, size);
+    const auto length = end <= start ? 0 : 1 + (end - start - 1) / step;
+
+    Shape shape = tensor.shape();
+    Strides strides = tensor.strides();
+    const auto offset = tensor.storage_offset() + start * strides[axis];
+    shape[axis] = length;
+    strides[axis] *= step;
+    return Tensor(std::move(shape), std::move(strides), offset, tensor.dtype(),
+                  tensor.device(), tensor.storage());
+}
+
 Tensor reshape(const Tensor& tensor, Shape shape) {
-    if (!tensor.defined()) throw std::invalid_argument("cannot reshape an undefined tensor");
+    ENSURE_TENSOR_DEFINED(tensor);
+    if (!tensor.is_contiguous()) {
+        throw std::invalid_argument("reshaping a non-contiguous tensor requires contiguous()");
+    }
     shape = resolved_shape(tensor, std::move(shape));
-    return Tensor(std::move(shape), tensor.dtype(), tensor.device(), tensor.storage());
+    auto strides = contiguous_strides(shape);
+    return Tensor(std::move(shape), std::move(strides), tensor.storage_offset(),
+                  tensor.dtype(), tensor.device(), tensor.storage());
 }
 
 Tensor view(const Tensor& tensor, Shape shape) {
@@ -109,7 +158,7 @@ Tensor view(const Tensor& tensor, Shape shape) {
 }
 
 Tensor flatten(const Tensor& tensor, std::int64_t start_dim, std::int64_t end_dim) {
-    if (!tensor.defined()) throw std::invalid_argument("cannot flatten an undefined tensor");
+    ENSURE_TENSOR_DEFINED(tensor);
     start_dim = normalize_dim(start_dim, tensor.ndim());
     end_dim = normalize_dim(end_dim, tensor.ndim());
     if (start_dim > end_dim) throw std::invalid_argument("flatten start_dim must not exceed end_dim");
@@ -121,7 +170,7 @@ Tensor flatten(const Tensor& tensor, std::int64_t start_dim, std::int64_t end_di
 }
 
 Tensor unsqueeze(const Tensor& tensor, std::int64_t dim) {
-    if (!tensor.defined()) throw std::invalid_argument("cannot unsqueeze an undefined tensor");
+    ENSURE_TENSOR_DEFINED(tensor);
     dim = normalize_dim(dim, tensor.ndim(), true);
     Shape shape = tensor.shape();
     shape.insert(shape.begin() + dim, 1);
@@ -129,7 +178,7 @@ Tensor unsqueeze(const Tensor& tensor, std::int64_t dim) {
 }
 
 Tensor squeeze(const Tensor& tensor) {
-    if (!tensor.defined()) throw std::invalid_argument("cannot squeeze an undefined tensor");
+    ENSURE_TENSOR_DEFINED(tensor);
     Shape shape;
     for (const auto dimension : tensor.shape()) {
         if (dimension != 1) shape.push_back(dimension);
@@ -138,7 +187,7 @@ Tensor squeeze(const Tensor& tensor) {
 }
 
 Tensor squeeze(const Tensor& tensor, std::int64_t dim) {
-    if (!tensor.defined()) throw std::invalid_argument("cannot squeeze an undefined tensor");
+    ENSURE_TENSOR_DEFINED(tensor);
     dim = normalize_dim(dim, tensor.ndim());
     if (tensor.shape()[static_cast<std::size_t>(dim)] != 1) return tensor;
     Shape shape = tensor.shape();
@@ -147,7 +196,7 @@ Tensor squeeze(const Tensor& tensor, std::int64_t dim) {
 }
 
 Tensor permute(const Tensor& tensor, std::vector<std::int64_t> dimensions) {
-    if (!tensor.defined()) throw std::invalid_argument("cannot permute an undefined tensor");
+    ENSURE_TENSOR_DEFINED(tensor);
     if (dimensions.size() != tensor.ndim()) throw std::invalid_argument("permute dimensions must match tensor rank");
     std::vector<bool> seen(tensor.ndim(), false);
     for (auto& dimension : dimensions) {
@@ -159,7 +208,7 @@ Tensor permute(const Tensor& tensor, std::vector<std::int64_t> dimensions) {
 }
 
 Tensor transpose(const Tensor& tensor, std::int64_t dim0, std::int64_t dim1) {
-    if (!tensor.defined()) throw std::invalid_argument("cannot transpose an undefined tensor");
+    ENSURE_TENSOR_DEFINED(tensor);
     dim0 = normalize_dim(dim0, tensor.ndim());
     dim1 = normalize_dim(dim1, tensor.ndim());
     std::vector<std::int64_t> dimensions(tensor.ndim());
@@ -169,12 +218,12 @@ Tensor transpose(const Tensor& tensor, std::int64_t dim0, std::int64_t dim1) {
 }
 
 Tensor contiguous(const Tensor& tensor) {
-    if (!tensor.defined()) throw std::invalid_argument("cannot make an undefined tensor contiguous");
+    ENSURE_TENSOR_DEFINED(tensor);
     return tensor;
 }
 
 std::vector<Tensor> split(const Tensor& tensor, std::int64_t split_size, std::int64_t dim) {
-    if (!tensor.defined()) throw std::invalid_argument("cannot split an undefined tensor");
+    ENSURE_TENSOR_DEFINED(tensor);
     if (split_size <= 0) throw std::invalid_argument("split_size must be positive");
     dim = normalize_dim(dim, tensor.ndim());
     std::vector<Tensor> result;

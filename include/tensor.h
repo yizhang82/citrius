@@ -45,6 +45,12 @@ public:
     std::size_t ndim() const;
     std::int64_t numel() const;
     bool defined() const;
+    Tensor select(std::int64_t dim, std::int64_t index) const;
+    Tensor slice(
+        std::int64_t dim,
+        std::int64_t start,
+        std::int64_t end,
+        std::int64_t step = 1) const;
     Tensor copy() const;
     Tensor to(Device device) const;
     template <typename T>

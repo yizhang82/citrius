@@ -7,6 +7,21 @@
 
 namespace citrius {
 
+/// Selects one index along a dimension and removes that dimension.
+/// @return A metadata-only view sharing storage with `tensor`.
+Tensor select(const Tensor& tensor, std::int64_t dim, std::int64_t index);
+
+/// Selects a positive-step half-open range `[start, end)` along a dimension.
+/// Negative bounds are interpreted relative to the dimension size and bounds are
+/// clamped in the same manner as an ordinary Python positive-step slice.
+/// @return A metadata-only view sharing storage with `tensor`.
+Tensor slice(
+    const Tensor& tensor,
+    std::int64_t dim,
+    std::int64_t start,
+    std::int64_t end,
+    std::int64_t step = 1);
+
 /// Changes a tensor's shape without changing its element order.
 /// @param tensor Defined contiguous input tensor.
 /// @param shape Requested output shape; at most one dimension may be `-1` for inference.

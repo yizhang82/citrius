@@ -30,8 +30,8 @@ FeedForward::FeedForward(
 }
 
 Tensor FeedForward::forward(const Tensor& input) {
-    CITRIUS_ENSURE_TENSOR_DEFINED(input);
-    CITRIUS_ENSURE_TENSOR_DIM(input, 3); 
+    ENSURE_TENSOR_DEFINED(input);
+    ENSURE_TENSOR_DIM(input, 3);
     if (input.shape()[2] != embed_dim_) {
         throw std::invalid_argument("FeedForward input dim #2 must match embed_dim");
     }

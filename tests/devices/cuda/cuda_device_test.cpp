@@ -238,6 +238,23 @@ TEST(CudaDeviceTest, OffsetScalarCopiesOnlyItsLogicalElementToHost) {
     EXPECT_FLOAT_EQ(scalar.item<float>(), 3.0f);
 }
 
+TEST(CudaDeviceTest, SelectCreatesAViewAndMaterializesOnlyTheSelectedScalar) {
+    std::string error;
+    auto device = make_cuda_device(&error);
+    if (!device)
+        GTEST_SKIP() << error;
+    const auto tensor = make_cuda_tensor(
+        *device, {2, 3, 4},
+        {0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11,
+         12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23});
+    const auto selected = tensor.select(1, 2);
+
+    EXPECT_EQ(selected.storage(), tensor.storage());
+    EXPECT_EQ(selected.strides(), citrius::Strides({12, 1}));
+    EXPECT_EQ(selected.storage_offset(), 8);
+    EXPECT_FLOAT_EQ(selected.select(0, 1).select(0, 3).item<float>(), 23.0f);
+}
+
 TEST(CudaDeviceTest, CublasMatmulMatchesReferenceForNonSquareMatrices) {
     std::string error;
     auto baseline = make_cuda_device(&error);
