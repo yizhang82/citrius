@@ -5,29 +5,37 @@
 #include <cuda_runtime.h>
 
 #include <algorithm>
+#include <numeric>
 #include <stdexcept>
 #include <string>
 #include <utility>
+#include <vector>
 
 namespace citrius::impl {
 namespace {
 
 void check_cuda(cudaError_t status, const char* operation) {
-    if (status != cudaSuccess) throw std::runtime_error(std::string(operation) + ": " + cudaGetErrorString(status));
+    if (status != cudaSuccess)
+        throw std::runtime_error(std::string(operation) + ": " + cudaGetErrorString(status));
 }
 
 void require_defined(const Tensor& tensor, const char* name) {
-    if (!tensor.defined()) throw std::invalid_argument(std::string(name) + " tensor is undefined");
+    if (!tensor.defined())
+        throw std::invalid_argument(std::string(name) + " tensor is undefined");
 }
 void require_float32(const Tensor& tensor, const char* name) {
-    if (tensor.dtype() != DType::Float32) throw std::invalid_argument(std::string(name) + " tensor must be Float32");
+    if (tensor.dtype() != DType::Float32)
+        throw std::invalid_argument(std::string(name) + " tensor must be Float32");
 }
 void require_same_shape(const Tensor& a, const Tensor& b) {
-    if (a.shape() != b.shape()) throw std::invalid_argument("tensor shapes must match");
+    if (a.shape() != b.shape())
+        throw std::invalid_argument("tensor shapes must match");
 }
 void require_2d_matmul_shapes(const Tensor& a, const Tensor& b) {
-    if (a.ndim() != 2 || b.ndim() != 2) throw std::invalid_argument("matmul expects 2D tensors");
-    if (a.shape()[1] != b.shape()[0]) throw std::invalid_argument("matmul inner dimensions must match");
+    if (a.ndim() != 2 || b.ndim() != 2)
+        throw std::invalid_argument("matmul expects 2D tensors");
+    if (a.shape()[1] != b.shape()[0])
+        throw std::invalid_argument("matmul inner dimensions must match");
 }
 
 // CUDA execution hierarchy:
@@ -49,10 +57,12 @@ void require_2d_matmul_shapes(const Tensor& a, const Tensor& b) {
 // and 21 elements (grid width/stride = 8):
 //
 //   Grid
-//   +---------------- Block 0 ----------------+  +---------------- Block 1 ----------------+
-//   |  local thread:   0     1     2     3   |  |  local thread:   0     1     2     3   |
-//   |  global thread: T0    T1    T2    T3   |  |  global thread: T4    T5    T6    T7   |
-//   +-----------------------------------------+  +-----------------------------------------+
+//   +---------------- Block 0 ----------------+  +---------------- Block 1
+//   ----------------+ |  local thread:   0     1     2     3   |  |  local
+//   thread:   0     1     2     3   | |  global thread: T0    T1    T2    T3 |
+//   |  global thread: T4    T5    T6    T7   |
+//   +-----------------------------------------+
+//   +-----------------------------------------+
 //
 //                  Pass 1     Pass 2     Pass 3
 //                +----------+----------+----------+
@@ -73,22 +83,19 @@ void require_2d_matmul_shapes(const Tensor& a, const Tensor& b) {
 __global__ void add_f32(const float* a, const float* b, float* out, std::int64_t count) {
     const auto first = static_cast<std::int64_t>(blockIdx.x) * blockDim.x + threadIdx.x;
     const auto stride = static_cast<std::int64_t>(blockDim.x) * gridDim.x;
-    for (auto i = first; i < count; i += stride) out[i] = a[i] + b[i];
+    for (auto i = first; i < count; i += stride)
+        out[i] = a[i] + b[i];
 }
 __global__ void sub_f32(const float* a, const float* b, float* out, std::int64_t count) {
     const auto first = static_cast<std::int64_t>(blockIdx.x) * blockDim.x + threadIdx.x;
     const auto stride = static_cast<std::int64_t>(blockDim.x) * gridDim.x;
-    for (auto i = first; i < count; i += stride) out[i] = a[i] - b[i];
+    for (auto i = first; i < count; i += stride)
+        out[i] = a[i] - b[i];
 }
 constexpr int matmul_tile_size = 16;
 
-__global__ void matmul_f32(
-    const float* a,
-    const float* b,
-    float* out,
-    std::int64_t m,
-    std::int64_t k,
-    std::int64_t n) {
+__global__ void matmul_f32(const float* a, const float* b, float* out, std::int64_t m,
+                           std::int64_t k, std::int64_t n) {
     // These tiles are shared by all 256 threads in the block. Staging input
     // values here lets 16 output threads reuse each value loaded from global
     // memory instead of fetching it independently.
@@ -108,12 +115,8 @@ __global__ void matmul_f32(
         const auto b_row = start + threadIdx.y;
         // Zero padding keeps every thread participating in synchronization and
         // makes partial tiles behave as though the matrices were padded with 0.
-        a_tile[threadIdx.y][threadIdx.x] = row < m && a_col < k
-            ? a[row * k + a_col]
-            : 0.0f;
-        b_tile[threadIdx.y][threadIdx.x] = b_row < k && col < n
-            ? b[b_row * n + col]
-            : 0.0f;
+        a_tile[threadIdx.y][threadIdx.x] = row < m && a_col < k ? a[row * k + a_col] : 0.0f;
+        b_tile[threadIdx.y][threadIdx.x] = b_row < k && col < n ? b[b_row * n + col] : 0.0f;
         // Do not read a tile until every thread has finished loading it.
         __syncthreads();
 
@@ -129,30 +132,123 @@ __global__ void matmul_f32(
 
     // Threads in partial right/bottom blocks still reach both barriers above,
     // but only threads mapped to valid output elements write a result.
-    if (row < m && col < n) out[row * n + col] = total;
+    if (row < m && col < n)
+        out[row * n + col] = total;
 }
 
-float* data(CudaMemTensorStorageImpl& storage) { return static_cast<float*>(storage.handle().ptr); }
+struct BatchLayout {
+    Shape shape;
+    std::vector<std::int64_t> ao, bo;
+};
+BatchLayout batch_layout(const Tensor& a, const Tensor& b) {
+    require_defined(a, "left");
+    require_defined(b, "right");
+    require_float32(a, "left");
+    require_float32(b, "right");
+    if (a.ndim() < 2 || b.ndim() < 2 || (a.ndim() == 2 && b.ndim() == 2))
+        throw std::invalid_argument("batched_matmul expects at least one batched input");
+    if (a.shape().back() != b.shape()[b.ndim() - 2])
+        throw std::invalid_argument("batched_matmul inner dimensions must match");
+    Shape ab(a.shape().begin(), a.shape().end() - 2), bb(b.shape().begin(), b.shape().end() - 2);
+    const auto rank = std::max(ab.size(), bb.size());
+    Shape ob(rank, 1);
+    for (std::size_t off = 0; off < rank; ++off) {
+        auto x = off < ab.size() ? ab[ab.size() - 1 - off] : 1;
+        auto y = off < bb.size() ? bb[bb.size() - 1 - off] : 1;
+        if (x != y && x != 1 && y != 1)
+            throw std::invalid_argument("batched_matmul batch dimensions are not broadcastable");
+        ob[rank - 1 - off] = std::max(x, y);
+    }
+    auto strides = [](const Shape& s) {
+        Strides r(s.size(), 1);
+        for (std::size_t i = s.size(); i-- > 1;)
+            r[i - 1] = r[i] * s[i];
+        return r;
+    };
+    auto os = strides(ob), as = strides(ab), bs = strides(bb);
+    auto map = [&](std::int64_t batch, const Shape& s, const Strides& ss) {
+        std::int64_t v = 0;
+        auto pad = ob.size() - s.size();
+        for (std::size_t i = pad; i < ob.size(); ++i) {
+            auto c = (batch / os[i]) % ob[i];
+            if (s[i - pad] != 1)
+                v += c * ss[i - pad];
+        }
+        return v;
+    };
+    auto count = std::accumulate(ob.begin(), ob.end(), std::int64_t{1}, std::multiplies<>());
+    BatchLayout l;
+    l.shape = ob;
+    l.shape.push_back(a.shape()[a.ndim() - 2]);
+    l.shape.push_back(b.shape().back());
+    l.ao.resize(count);
+    l.bo.resize(count);
+    auto am = a.shape()[a.ndim() - 2] * a.shape().back(),
+         bm = b.shape()[b.ndim() - 2] * b.shape().back();
+    for (std::int64_t i = 0; i < count; ++i) {
+        l.ao[i] = map(i, ab, as) * am;
+        l.bo[i] = map(i, bb, bs) * bm;
+    }
+    return l;
+}
+
+__global__ void batched_matmul_f32(const float* a, const float* b, float* out,
+                                   const std::int64_t* ao, const std::int64_t* bo,
+                                   std::int64_t batches, std::int64_t m, std::int64_t k,
+                                   std::int64_t n) {
+    __shared__ float at[matmul_tile_size][matmul_tile_size];
+    __shared__ float bt[matmul_tile_size][matmul_tile_size];
+    auto batch = static_cast<std::int64_t>(blockIdx.z);
+    if (batch >= batches)
+        return;
+    auto row = static_cast<std::int64_t>(blockIdx.y) * matmul_tile_size + threadIdx.y,
+         col = static_cast<std::int64_t>(blockIdx.x) * matmul_tile_size + threadIdx.x;
+    float total = 0;
+    const float* am = a + ao[batch];
+    const float* bm = b + bo[batch];
+    for (std::int64_t start = 0; start < k; start += matmul_tile_size) {
+        auto ac = start + threadIdx.x, br = start + threadIdx.y;
+        at[threadIdx.y][threadIdx.x] = row < m && ac < k ? am[row * k + ac] : 0;
+        bt[threadIdx.y][threadIdx.x] = br < k && col < n ? bm[br * n + col] : 0;
+        __syncthreads();
+#pragma unroll
+        for (int inner = 0; inner < matmul_tile_size; ++inner)
+            total += at[threadIdx.y][inner] * bt[inner][threadIdx.x];
+        __syncthreads();
+    }
+    if (row < m && col < n)
+        out[batch * m * n + row * n + col] = total;
+}
+
+float* data(CudaMemTensorStorageImpl& storage) {
+    return static_cast<float*>(storage.handle().ptr);
+}
 
 } // namespace
 
-CudaDeviceImpl::CudaDeviceImpl(int device_index) : device_index_(device_index), max_elementwise_blocks_(0) {
+CudaDeviceImpl::CudaDeviceImpl(int device_index)
+    : device_index_(device_index), max_elementwise_blocks_(0) {
     int count = 0;
     check_cuda(cudaGetDeviceCount(&count), "failed to query CUDA devices");
-    if (device_index < 0 || device_index >= count) throw std::runtime_error("CUDA device index is not available");
+    if (device_index < 0 || device_index >= count)
+        throw std::runtime_error("CUDA device index is not available");
     check_cuda(cudaSetDevice(device_index_), "failed to select CUDA device");
     int multiprocessor_count = 0;
-    check_cuda(
-        cudaDeviceGetAttribute(&multiprocessor_count, cudaDevAttrMultiProcessorCount, device_index_),
-        "failed to query CUDA multiprocessor count");
+    check_cuda(cudaDeviceGetAttribute(&multiprocessor_count, cudaDevAttrMultiProcessorCount,
+                                      device_index_),
+               "failed to query CUDA multiprocessor count");
     // A bounded grid avoids launching one thread per element for very large
     // tensors. Thirty-two blocks per SM provides ample work for scheduling;
     // each thread advances by the full grid width until all elements are done.
     max_elementwise_blocks_ = multiprocessor_count * 32;
 }
 
-DeviceType CudaDeviceImpl::type() const { return DeviceType::CUDA; }
-int CudaDeviceImpl::device_index() const { return device_index_; }
+DeviceType CudaDeviceImpl::type() const {
+    return DeviceType::CUDA;
+}
+int CudaDeviceImpl::device_index() const {
+    return device_index_;
+}
 
 Tensor CudaDeviceImpl::empty(Shape shape, DType dtype) const {
     const Tensor metadata(shape, dtype, Device::cpu());
@@ -162,76 +258,138 @@ Tensor CudaDeviceImpl::empty(Shape shape, DType dtype) const {
 }
 
 Tensor CudaDeviceImpl::add(const Tensor& a, const Tensor& b) const {
-    require_defined(a, "left"); require_defined(b, "right");
-    require_float32(a, "left"); require_float32(b, "right"); require_same_shape(a, b);
+    require_defined(a, "left");
+    require_defined(b, "right");
+    require_float32(a, "left");
+    require_float32(b, "right");
+    require_same_shape(a, b);
     auto out = empty(a.shape(), a.dtype());
     add_out(a, b, out);
     return out;
 }
 
 void CudaDeviceImpl::add_out(const Tensor& a, const Tensor& b, Tensor& out) const {
-    require_defined(a, "left"); require_defined(b, "right");
-    require_float32(a, "left"); require_float32(b, "right"); require_same_shape(a, b);
-    require_defined(out, "output"); require_float32(out, "output"); require_same_shape(a, out);
+    require_defined(a, "left");
+    require_defined(b, "right");
+    require_float32(a, "left");
+    require_float32(b, "right");
+    require_same_shape(a, b);
+    require_defined(out, "output");
+    require_float32(out, "output");
+    require_same_shape(a, out);
     auto ap = ensure_storage(a.storage(), ConversionPolicy::CopyToDevice);
     auto bp = ensure_storage(b.storage(), ConversionPolicy::CopyToDevice);
     const auto count = a.numel();
     if (count != 0) {
         const auto required_blocks = (count + 255) / 256;
-        const auto blocks = static_cast<unsigned>(
-            std::min<std::int64_t>(required_blocks, max_elementwise_blocks_));
-        // <<<blocks, 256>>> launches a grid of `blocks` blocks, each containing 256 threads.
-        add_f32<<<blocks, 256>>>(data(require_cuda_storage(*ap)), data(require_cuda_storage(*bp)), data(require_cuda_storage(*out.storage())), count);
+        const auto blocks =
+            static_cast<unsigned>(std::min<std::int64_t>(required_blocks, max_elementwise_blocks_));
+        // <<<blocks, 256>>> launches a grid of `blocks` blocks, each containing 256
+        // threads.
+        add_f32<<<blocks, 256>>>(data(require_cuda_storage(*ap)), data(require_cuda_storage(*bp)),
+                                 data(require_cuda_storage(*out.storage())), count);
     }
     check_cuda(cudaGetLastError(), "failed to launch CUDA add kernel");
     check_cuda(cudaDeviceSynchronize(), "CUDA add kernel failed");
 }
 
 Tensor CudaDeviceImpl::sub(const Tensor& a, const Tensor& b) const {
-    require_defined(a, "left"); require_defined(b, "right");
-    require_float32(a, "left"); require_float32(b, "right"); require_same_shape(a, b);
+    require_defined(a, "left");
+    require_defined(b, "right");
+    require_float32(a, "left");
+    require_float32(b, "right");
+    require_same_shape(a, b);
     auto out = empty(a.shape(), a.dtype());
     sub_out(a, b, out);
     return out;
 }
 
 void CudaDeviceImpl::sub_out(const Tensor& a, const Tensor& b, Tensor& out) const {
-    require_defined(a, "left"); require_defined(b, "right");
-    require_float32(a, "left"); require_float32(b, "right"); require_same_shape(a, b);
-    require_defined(out, "output"); require_float32(out, "output"); require_same_shape(a, out);
+    require_defined(a, "left");
+    require_defined(b, "right");
+    require_float32(a, "left");
+    require_float32(b, "right");
+    require_same_shape(a, b);
+    require_defined(out, "output");
+    require_float32(out, "output");
+    require_same_shape(a, out);
     auto ap = ensure_storage(a.storage(), ConversionPolicy::CopyToDevice);
     auto bp = ensure_storage(b.storage(), ConversionPolicy::CopyToDevice);
     const auto count = a.numel();
     if (count != 0) {
         const auto required_blocks = (count + 255) / 256;
-        const auto blocks = static_cast<unsigned>(
-            std::min<std::int64_t>(required_blocks, max_elementwise_blocks_));
-        // <<<blocks, 256>>> launches a grid of `blocks` blocks, each containing 256 threads.
-        sub_f32<<<blocks, 256>>>(data(require_cuda_storage(*ap)), data(require_cuda_storage(*bp)), data(require_cuda_storage(*out.storage())), count);
+        const auto blocks =
+            static_cast<unsigned>(std::min<std::int64_t>(required_blocks, max_elementwise_blocks_));
+        // <<<blocks, 256>>> launches a grid of `blocks` blocks, each containing 256
+        // threads.
+        sub_f32<<<blocks, 256>>>(data(require_cuda_storage(*ap)), data(require_cuda_storage(*bp)),
+                                 data(require_cuda_storage(*out.storage())), count);
     }
     check_cuda(cudaGetLastError(), "failed to launch CUDA sub kernel");
     check_cuda(cudaDeviceSynchronize(), "CUDA sub kernel failed");
 }
 
 Tensor CudaDeviceImpl::matmul(const Tensor& a, const Tensor& b) const {
-    require_defined(a, "left"); require_defined(b, "right");
-    require_float32(a, "left"); require_float32(b, "right"); require_2d_matmul_shapes(a, b);
+    require_defined(a, "left");
+    require_defined(b, "right");
+    require_float32(a, "left");
+    require_float32(b, "right");
+    require_2d_matmul_shapes(a, b);
     const auto m = a.shape()[0], k = a.shape()[1], n = b.shape()[1];
     auto out = empty({m, n}, a.dtype());
     matmul_out(a, b, out);
     return out;
 }
 
-Tensor CudaDeviceImpl::batched_matmul(const Tensor&, const Tensor&) const {
-    throw std::runtime_error("CUDA batched_matmul is not implemented");
+Tensor CudaDeviceImpl::batched_matmul(const Tensor& a, const Tensor& b) const {
+    auto l = batch_layout(a, b);
+    auto out = empty(l.shape, DType::Float32);
+    if (out.numel() == 0)
+        return out;
+    auto ap = ensure_storage(a.storage(), ConversionPolicy::CopyToDevice),
+         bp = ensure_storage(b.storage(), ConversionPolicy::CopyToDevice);
+    std::int64_t *dao = nullptr, *dbo = nullptr;
+    auto bytes = l.ao.size() * sizeof(std::int64_t);
+    check_cuda(cudaMalloc(&dao, bytes), "failed to allocate CUDA batch offsets");
+    try {
+        check_cuda(cudaMalloc(&dbo, bytes), "failed to allocate CUDA batch offsets");
+        check_cuda(cudaMemcpy(dao, l.ao.data(), bytes, cudaMemcpyHostToDevice),
+                   "failed to copy CUDA batch offsets");
+        check_cuda(cudaMemcpy(dbo, l.bo.data(), bytes, cudaMemcpyHostToDevice),
+                   "failed to copy CUDA batch offsets");
+        auto m = a.shape()[a.ndim() - 2], n = b.shape().back();
+        dim3 threads(matmul_tile_size, matmul_tile_size);
+        dim3 blocks(static_cast<unsigned>((n + matmul_tile_size - 1) / matmul_tile_size),
+                    static_cast<unsigned>((m + matmul_tile_size - 1) / matmul_tile_size),
+                    static_cast<unsigned>(l.ao.size()));
+        batched_matmul_f32<<<blocks, threads>>>(data(require_cuda_storage(*ap)),
+                                                data(require_cuda_storage(*bp)),
+                                                data(require_cuda_storage(*out.storage())), dao,
+                                                dbo, l.ao.size(), m, a.shape().back(), n);
+        check_cuda(cudaGetLastError(), "failed to launch CUDA batched_matmul kernel");
+        check_cuda(cudaDeviceSynchronize(), "CUDA batched_matmul failed");
+    } catch (...) {
+        if (dbo)
+            cudaFree(dbo);
+        cudaFree(dao);
+        throw;
+    }
+    cudaFree(dbo);
+    cudaFree(dao);
+    return out;
 }
 
 void CudaDeviceImpl::matmul_out(const Tensor& a, const Tensor& b, Tensor& out) const {
-    require_defined(a, "left"); require_defined(b, "right");
-    require_float32(a, "left"); require_float32(b, "right"); require_2d_matmul_shapes(a, b);
+    require_defined(a, "left");
+    require_defined(b, "right");
+    require_float32(a, "left");
+    require_float32(b, "right");
+    require_2d_matmul_shapes(a, b);
     const auto m = a.shape()[0], k = a.shape()[1], n = b.shape()[1];
-    require_defined(out, "output"); require_float32(out, "output");
-    if (out.shape() != Shape({m, n})) throw std::invalid_argument("matmul output shape must be [m, n]");
+    require_defined(out, "output");
+    require_float32(out, "output");
+    if (out.shape() != Shape({m, n}))
+        throw std::invalid_argument("matmul output shape must be [m, n]");
     auto ap = ensure_storage(a.storage(), ConversionPolicy::CopyToDevice);
     auto bp = ensure_storage(b.storage(), ConversionPolicy::CopyToDevice);
     if (m != 0 && n != 0) {
@@ -243,38 +401,49 @@ void CudaDeviceImpl::matmul_out(const Tensor& a, const Tensor& b, Tensor& out) c
         // Ceiling division launches enough blocks to cover partial tiles at
         // the right and bottom edges. The kernel zero-pads out-of-range input
         // loads and suppresses out-of-range output stores.
-        const dim3 blocks(
-            static_cast<unsigned>((n + matmul_tile_size - 1) / matmul_tile_size),
-            static_cast<unsigned>((m + matmul_tile_size - 1) / matmul_tile_size));
-        matmul_f32<<<blocks, threads>>>(data(require_cuda_storage(*ap)), data(require_cuda_storage(*bp)), data(require_cuda_storage(*out.storage())), m, k, n);
+        const dim3 blocks(static_cast<unsigned>((n + matmul_tile_size - 1) / matmul_tile_size),
+                          static_cast<unsigned>((m + matmul_tile_size - 1) / matmul_tile_size));
+        matmul_f32<<<blocks, threads>>>(data(require_cuda_storage(*ap)),
+                                        data(require_cuda_storage(*bp)),
+                                        data(require_cuda_storage(*out.storage())), m, k, n);
     }
     check_cuda(cudaGetLastError(), "failed to launch CUDA matmul kernel");
     check_cuda(cudaDeviceSynchronize(), "CUDA matmul kernel failed");
 }
 
-TensorStoragePtr CudaDeviceImpl::ensure_storage(const TensorStoragePtr& storage, ConversionPolicy policy) const {
-    if (!storage) throw std::invalid_argument("tensor has no storage");
+TensorStoragePtr CudaDeviceImpl::ensure_storage(const TensorStoragePtr& storage,
+                                                ConversionPolicy policy) const {
+    if (!storage)
+        throw std::invalid_argument("tensor has no storage");
     if (storage->type() == TensorStorageType::CudaMemory) {
         const auto& cuda = static_cast<const CudaMemTensorStorageImpl&>(*storage);
-        if (cuda.device_index() == device_index_) return storage;
+        if (cuda.device_index() == device_index_)
+            return storage;
     }
-    if (storage->type() == TensorStorageType::CpuMemory && policy == ConversionPolicy::CopyToDevice) {
+    if (storage->type() == TensorStorageType::CpuMemory &&
+        policy == ConversionPolicy::CopyToDevice) {
         const auto& cpu = static_cast<const CpuMemTensorStorageImpl&>(*storage);
-        auto cuda = std::make_shared<CudaMemTensorStorageImpl>(cpu.nbytes(), cpu.dtype(), device_index_);
+        auto cuda =
+            std::make_shared<CudaMemTensorStorageImpl>(cpu.nbytes(), cpu.dtype(), device_index_);
         cuda->copy_from_host(cpu.data(), cpu.nbytes());
         return cuda;
     }
-    throw std::invalid_argument("CudaDeviceImpl requires CudaMemory storage on the selected device");
+    throw std::invalid_argument(
+        "CudaDeviceImpl requires CudaMemory storage on the selected device");
 }
 
-const CudaMemTensorStorageImpl& CudaDeviceImpl::require_cuda_storage(const ITensorStorage& storage) const {
-    if (storage.type() != TensorStorageType::CudaMemory) throw std::invalid_argument("CudaDeviceImpl requires CudaMemory storage");
+const CudaMemTensorStorageImpl&
+CudaDeviceImpl::require_cuda_storage(const ITensorStorage& storage) const {
+    if (storage.type() != TensorStorageType::CudaMemory)
+        throw std::invalid_argument("CudaDeviceImpl requires CudaMemory storage");
     const auto& cuda = static_cast<const CudaMemTensorStorageImpl&>(storage);
-    if (cuda.device_index() != device_index_) throw std::invalid_argument("CUDA storage is on a different device");
+    if (cuda.device_index() != device_index_)
+        throw std::invalid_argument("CUDA storage is on a different device");
     return cuda;
 }
 CudaMemTensorStorageImpl& CudaDeviceImpl::require_cuda_storage(ITensorStorage& storage) const {
-    return const_cast<CudaMemTensorStorageImpl&>(require_cuda_storage(static_cast<const ITensorStorage&>(storage)));
+    return const_cast<CudaMemTensorStorageImpl&>(
+        require_cuda_storage(static_cast<const ITensorStorage&>(storage)));
 }
 
 } // namespace citrius::impl

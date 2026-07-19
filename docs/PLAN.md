@@ -133,8 +133,9 @@ Acceptance criteria:
 Status: CPU implementation complete. The public `matmul` entry point routes 2D
 inputs to device `matmul` and higher-rank inputs to device `batched_matmul`.
 Batched execution broadcasts leading dimensions and writes directly into CPU
-tensor storage. CUDA and Metal batched implementations are intentionally
-deferred and currently throw explicit errors without host fallback.
+tensor storage. CUDA supports a tiled 16x16 reference kernel, cuBLAS pointer-array
+batched GEMM, and CUTLASS row-major GEMM launches. Metal remains deferred and
+throws an explicit error without host fallback.
 
 Generalize `matmul` beyond two dimensions:
 

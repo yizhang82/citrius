@@ -84,6 +84,44 @@ target_include_directories(citrius
 
 target_compile_features(citrius PUBLIC cxx_std_20)
 
+# Resolve clang-format during configuration so helper scripts do not need to
+# know where Visual Studio, LLVM, or a package manager installed it.
+find_program(CITRIUS_CLANG_FORMAT
+    NAMES clang-format clang-format-20 clang-format-19 clang-format-18
+    HINTS
+        "${CMAKE_GENERATOR_INSTANCE}/VC/Tools/Llvm/x64/bin"
+        "$ENV{VSINSTALLDIR}/VC/Tools/Llvm/x64/bin"
+        "$ENV{ProgramFiles}/LLVM/bin"
+)
+
+if(CITRIUS_CLANG_FORMAT)
+    file(GLOB_RECURSE CITRIUS_FORMAT_FILES CONFIGURE_DEPENDS
+        "${PROJECT_SOURCE_DIR}/include/*.h"
+        "${PROJECT_SOURCE_DIR}/src/*.cpp"
+        "${PROJECT_SOURCE_DIR}/src/*.cu"
+        "${PROJECT_SOURCE_DIR}/src/*.mm"
+        "${PROJECT_SOURCE_DIR}/tests/*.cpp"
+        "${PROJECT_SOURCE_DIR}/tests/*.cu"
+        "${PROJECT_SOURCE_DIR}/examples/*.cpp"
+        "${PROJECT_SOURCE_DIR}/examples/*.h"
+        "${PROJECT_SOURCE_DIR}/benchmarks/*.cpp"
+        "${PROJECT_SOURCE_DIR}/benchmarks/*.cu"
+    )
+    add_custom_target(format
+        COMMAND "${CITRIUS_CLANG_FORMAT}" -i -style=file ${CITRIUS_FORMAT_FILES}
+        WORKING_DIRECTORY "${PROJECT_SOURCE_DIR}"
+        COMMENT "Formatting Citrius sources"
+        VERBATIM
+    )
+else()
+    add_custom_target(format
+        COMMAND "${CMAKE_COMMAND}" -E echo
+            "clang-format was not found. Install LLVM or the Visual Studio LLVM tools."
+        COMMAND "${CMAKE_COMMAND}" -E false
+        VERBATIM
+    )
+endif()
+
 add_executable(example_operations examples/operations.cpp)
 target_link_libraries(example_operations PRIVATE citrius)
 
@@ -108,6 +146,7 @@ if(CITRIUS_ENABLE_CUDA)
     add_executable(cuda_matmul_benchmark
         benchmarks/cuda_matmul_benchmark.cu
     )
+
     target_link_libraries(cuda_matmul_benchmark PRIVATE CUDA::cudart)
     set_target_properties(cuda_matmul_benchmark PROPERTIES
         CUDA_ARCHITECTURES native
