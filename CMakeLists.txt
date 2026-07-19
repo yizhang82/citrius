@@ -15,6 +15,7 @@ option(CITRIUS_CUDA_USE_CUBLAS "Use cuBLAS for top-level CUDA matmul by default"
 
 add_library(citrius
     src/models/qwen3.cpp
+    src/models/qwen3_tokenizer.cpp
     src/devices/cpu/cpu_device.cpp
     src/devices/cpu/cpu_storage.cpp
     src/devices/cpu/multi_thread_cpu_device.cpp
@@ -191,6 +192,7 @@ include(GoogleTest)
 
 add_executable(tensor_test
     tests/models/qwen3_test.cpp
+    tests/models/qwen3_tokenizer_test.cpp
     tests/devices/cpu/cpu_device_test.cpp
     tests/nn/container_test.cpp
     tests/nn/embedding_test.cpp
