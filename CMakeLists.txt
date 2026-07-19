@@ -143,6 +143,9 @@ target_link_libraries(example_custom_module PRIVATE citrius)
 add_executable(operations_benchmark benchmarks/operations_benchmark.cpp)
 target_link_libraries(operations_benchmark PRIVATE citrius)
 
+add_executable(qwen3_decoding_benchmark benchmarks/qwen3_decoding_benchmark.cpp)
+target_link_libraries(qwen3_decoding_benchmark PRIVATE citrius)
+
 add_executable(decoder_chat tools/decoder_chat.cpp)
 target_link_libraries(decoder_chat PRIVATE citrius)
 if(CITRIUS_ENABLE_METAL)
@@ -150,6 +153,7 @@ if(CITRIUS_ENABLE_METAL)
 endif()
 if(CITRIUS_ENABLE_CUDA)
     target_compile_definitions(operations_benchmark PRIVATE CITRIUS_HAS_CUDA=1)
+    target_compile_definitions(qwen3_decoding_benchmark PRIVATE CITRIUS_HAS_CUDA=1)
 
     add_executable(cuda_elementwise_benchmark
         benchmarks/cuda_elementwise_benchmark.cu

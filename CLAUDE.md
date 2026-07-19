@@ -271,6 +271,18 @@ benchmark.bat matmul-kernel
 benchmark.bat matmul-kernel --size 2048 --iterations 20 --samples 5
 ```
 
+Run the checkpoint-free Qwen3-0.6B greedy decoding baseline for exactly 10
+generated tokens with:
+
+```bat
+benchmark.bat qwen3-decoding --cpu
+benchmark.bat qwen3-decoding --cuda
+```
+
+The benchmark excludes model construction, reports time to first token (TTFT),
+end-to-end tokens per second, and post-first-token tokens per second. CUDA requires
+an existing build configured with `build.bat --cuda`.
+
 `benchmark.bat` incrementally builds only the selected benchmark target and never
 configures CMake. CUDA benchmarks require an existing build configured with
 `build.bat --cuda`.

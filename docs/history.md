@@ -701,3 +701,11 @@ batch-matmul     1024      50        4.584        5.129      256.454     3747.70
 
 * scaled_dot_product_attention (hand-written)
 * MHA (hand-written)
+* Transformer
+* Qwen3
+
+## 7/19
+
+* Tokenizer
+* benchmark [qwen3 0.6B CUDA, TTFT=18557ms, Throughput: 0.054 token/s]
+

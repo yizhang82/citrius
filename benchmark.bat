@@ -1,6 +1,12 @@
 @echo off
 setlocal EnableExtensions
 
+rem MSBuild treats Path and PATH as duplicate keys if both are inherited.
+set "CITRIUS_SAVED_PATH=%PATH%"
+set "PATH="
+set "Path=%CITRIUS_SAVED_PATH%"
+set "CITRIUS_SAVED_PATH="
+
 for %%I in ("%~dp0.") do set "ROOT_DIR=%%~fI"
 set "BUILD_DIR=%ROOT_DIR%\build"
 set "TEST=%~1"
@@ -16,6 +22,7 @@ if not exist "%BUILD_DIR%\CMakeCache.txt" (
 )
 
 if /I "%TEST%"=="operations" goto parse_operations
+if /I "%TEST%"=="qwen3-decoding" goto parse_qwen3_decoding
 if /I "%TEST%"=="add-kernel" goto parse_add_kernel
 if /I "%TEST%"=="matmul-kernel" goto parse_matmul_kernel
 goto usage_error
@@ -53,6 +60,24 @@ if defined REPORT_PATH (
 ) else (
     "%BUILD_DIR%\Release\operations_benchmark.exe" %BACKEND%
 )
+exit /B %errorlevel%
+
+:parse_qwen3_decoding
+if /I "%~2"=="--cpu" set "BACKEND=--cpu"
+if /I "%~2"=="--cuda" (
+    set "BACKEND=--cuda"
+    set "CUDA_ARG=--cuda"
+)
+if not defined BACKEND goto usage_error
+if not "%~3"=="" goto usage_error
+
+if defined CUDA_ARG call :require_cuda
+if errorlevel 1 exit /B %errorlevel%
+
+cmake --build "%BUILD_DIR%" --config Release --target qwen3_decoding_benchmark
+if errorlevel 1 exit /B %errorlevel%
+
+"%BUILD_DIR%\Release\qwen3_decoding_benchmark.exe" %BACKEND%
 exit /B %errorlevel%
 
 :parse_add_kernel
@@ -120,6 +145,7 @@ exit /B 0
 :usage_error
 echo Usage:
 echo   benchmark.bat operations --cpu^|--cuda^|--all [--html [FILE]]
+echo   benchmark.bat qwen3-decoding --cpu^|--cuda
 echo   benchmark.bat add-kernel [--size N] [--iterations N] [--samples N]
 echo   benchmark.bat matmul-kernel [--size N] [--iterations N] [--samples N]
 exit /B 1
