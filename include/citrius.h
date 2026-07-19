@@ -1,6 +1,7 @@
 #pragma once
 
 #include "exceptions.h"
+#include "nn/feed_forward.h"
 #include "nn/linear.h"
 #include "nn/multi_head_attention.h"
 #include "nn/functional.h"
@@ -10,4 +11,5 @@
 #include "shape_operations.h"
 #include "tensor.h"
 #include "tensor_factory.h"
+#include "tensor_utils.h"
 #include "types.h"

@@ -19,6 +19,7 @@ add_library(citrius
     src/devices/cpu/multi_thread_cpu_device.cpp
     src/nn/dropout.cpp
     src/nn/embedding.cpp
+    src/nn/feed_forward.cpp
     src/nn/linear.cpp
     src/nn/layer_norm.cpp
     src/nn/functional.cpp
@@ -185,6 +186,7 @@ add_executable(tensor_test
     tests/devices/cpu/cpu_device_test.cpp
     tests/nn/container_test.cpp
     tests/nn/embedding_test.cpp
+    tests/nn/feed_forward_test.cpp
     tests/nn/linear_test.cpp
     tests/nn/layer_norm_test.cpp
     tests/nn/functional_test.cpp
@@ -194,6 +196,7 @@ add_executable(tensor_test
     tests/reduction_operations_test.cpp
     tests/shape_operations_test.cpp
     tests/tensor_test.cpp
+    tests/tensor_utils_test.cpp
 )
 
 if(CITRIUS_ENABLE_METAL)
