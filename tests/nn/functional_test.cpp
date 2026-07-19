@@ -19,6 +19,40 @@ std::vector<float> values(const citrius::Tensor& tensor) {
 
 } // namespace
 
+TEST(FunctionalTest, ReluClampsNegativeValuesToZero) {
+    const citrius::Tensor input(std::vector<float>{-2.0f, -0.0f, 0.0f, 1.5f});
+
+    const auto result = citrius::nn::functional::relu(input);
+
+    EXPECT_EQ(result.shape(), input.shape());
+    EXPECT_EQ(result.device(), input.device());
+    EXPECT_EQ(values(result), (std::vector<float>{0.0f, 0.0f, 0.0f, 1.5f}));
+}
+
+TEST(FunctionalTest, GeluMatchesTanhApproximationReference) {
+    const citrius::Tensor input(
+        std::vector<float>{-3.0f, -1.0f, 0.0f, 1.0f, 3.0f},
+        {1, 5});
+
+    const auto result = values(citrius::nn::functional::gelu(input));
+    const std::vector<float> expected{-0.003637f, -0.158808f, 0.0f, 0.841192f, 2.996363f};
+
+    for (std::size_t index = 0; index < expected.size(); ++index) {
+        EXPECT_NEAR(result[index], expected[index], 1e-5f);
+    }
+}
+
+TEST(FunctionalTest, GeluRemainsFiniteForLargeMagnitudes) {
+    const citrius::Tensor input(std::vector<float>{-100.0f, 100.0f});
+
+    const auto result = values(citrius::nn::functional::gelu(input));
+
+    EXPECT_TRUE(std::isfinite(result[0]));
+    EXPECT_TRUE(std::isfinite(result[1]));
+    EXPECT_NEAR(result[0], 0.0f, 1e-6f);
+    EXPECT_NEAR(result[1], 100.0f, 1e-6f);
+}
+
 TEST(FunctionalTest, SoftmaxNormalizesSelectedDimension) {
     const citrius::Tensor input(
         std::vector<float>{1, 2, 3, 1, 2, 3},

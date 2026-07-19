@@ -157,6 +157,9 @@ Acceptance criteria:
 
 ## Phase 5: Transformer building blocks
 
+Status: In progress. `nn::functional::relu` and the tanh-approximate
+`nn::functional::gelu` are complete and covered by CPU reference tests.
+
 Add the following functional operations and modules:
 
 - `nn::functional::relu`;
