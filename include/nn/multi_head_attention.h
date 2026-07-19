@@ -18,6 +18,7 @@ public:
         Device device = Device::cpu());
 
     Tensor forward(const Tensor& input) override;
+    Tensor forward(const Tensor& input, const Tensor& attn_mask);
 
     std::int64_t embed_dim() const;
     std::int64_t num_heads() const;

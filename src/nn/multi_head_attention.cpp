@@ -42,6 +42,10 @@ MultiHeadAttention::MultiHeadAttention(
 }
 
 Tensor MultiHeadAttention::forward(const Tensor& input) {
+    return forward(input, Tensor());
+}
+
+Tensor MultiHeadAttention::forward(const Tensor& input, const Tensor& attn_mask) {
     // TODO: Implement the following steps:
     // 1. Validate input shape `[batch, sequence, embed_dim]`.
     // 2. Project input independently into query, key, and value.
@@ -73,8 +77,8 @@ Tensor MultiHeadAttention::forward(const Tensor& input) {
     auto key_permuted = citrius::permute(key_reshaped, {0, 2, 1, 3});
     auto value_permuted = citrius::permute(value_reshaped, {0, 2, 1, 3});
 
-    // Call functional::scaled_dot_product_attention
-    auto attn_output = citrius::nn::functional::scaled_dot_product_attention(query_permuted, key_permuted, value_permuted);
+    // [B, H, S, D]
+    auto attn_output = citrius::nn::functional::scaled_dot_product_attention(query_permuted, key_permuted, value_permuted, attn_mask);
 
     // Permute back to [B, S, H, D] and reshape to [B, S, E]
     auto attn_output_permuted = citrius::permute(attn_output, {0, 2, 1, 3});

@@ -1,6 +1,7 @@
 #include "nn/multi_head_attention.h"
 
 #include "impl/cpu_storage.h"
+#include "tensor_factory.h"
 
 #include <gtest/gtest.h>
 
@@ -88,4 +89,47 @@ TEST(MultiHeadAttentionTest, RejectsInvalidInputShape) {
     EXPECT_THROW(
         attention(citrius::Tensor(std::vector<float>{1, 2, 3}, {1, 1, 3})),
         std::invalid_argument);
+}
+
+TEST(MultiHeadAttentionTest, AppliesCausalMaskAcrossHeads) {
+    citrius::nn::MultiHeadAttention attention(4, 2);
+    set_identity(attention.query_projection());
+    set_identity(attention.key_projection());
+    set_identity(attention.value_projection());
+    set_identity(attention.output_projection());
+    const citrius::Tensor input(
+        std::vector<float>{1, 0, 0, 1, 0, 1, 1, 0},
+        {1, 2, 4});
+    const citrius::Tensor causal_mask = citrius::from_vector(
+        std::vector<bool>{false, true, false, false},
+        {2, 2});
+
+    const auto output = attention.forward(input, causal_mask);
+    const auto actual = values(output);
+    const std::vector<float> expected{
+        1.0f,
+        0.0f,
+        0.0f,
+        1.0f,
+        0.330238f,
+        0.669762f,
+        0.669762f,
+        0.330238f};
+
+    EXPECT_EQ(output.shape(), input.shape());
+    ASSERT_EQ(actual.size(), expected.size());
+    for (std::size_t index = 0; index < expected.size(); ++index) {
+        EXPECT_NEAR(actual[index], expected[index], 1e-5f);
+    }
+}
+
+TEST(MultiHeadAttentionTest, RejectsInvalidAttentionMask) {
+    citrius::nn::MultiHeadAttention attention(4, 2);
+    const citrius::Tensor input(std::vector<float>(8), {1, 2, 4});
+    const citrius::Tensor float_mask(std::vector<float>(4), {2, 2});
+    const citrius::Tensor wrong_shape =
+        citrius::from_vector(std::vector<bool>{false, true, false}, {3});
+
+    EXPECT_THROW(attention.forward(input, float_mask), std::invalid_argument);
+    EXPECT_THROW(attention.forward(input, wrong_shape), std::invalid_argument);
 }
