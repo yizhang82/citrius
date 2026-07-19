@@ -1,5 +1,6 @@
 #include "nn/functional.h"
 
+#include "exceptions.h"
 #include "impl/cpu_storage.h"
 #include "reduction_operations.h"
 
@@ -83,4 +84,106 @@ TEST(FunctionalTest, SoftmaxMakesMaskedValuesNegligible) {
     const auto result = values(citrius::nn::functional::softmax(input, -1));
 
     EXPECT_FLOAT_EQ(result[1], 0.0f);
+}
+
+TEST(FunctionalTest, ScaledDotProductAttentionComputesWeightedValues) {
+    const citrius::Tensor query(std::vector<float>{1, 0, 0, 1}, {2, 2});
+    const citrius::Tensor key(std::vector<float>{1, 0, 0, 1}, {2, 2});
+    const citrius::Tensor value(std::vector<float>{1, 0, 0, 1}, {2, 2});
+
+    const auto result = citrius::nn::functional::scaled_dot_product_attention(
+        query,
+        key,
+        value);
+    const auto actual = values(result);
+
+    EXPECT_EQ(result.shape(), (citrius::Shape{2, 2}));
+    EXPECT_NEAR(actual[0], 0.669762f, 1e-5f);
+    EXPECT_NEAR(actual[1], 0.330238f, 1e-5f);
+    EXPECT_NEAR(actual[2], 0.330238f, 1e-5f);
+    EXPECT_NEAR(actual[3], 0.669762f, 1e-5f);
+}
+
+TEST(FunctionalTest, ScaledDotProductAttentionSupportsBatchAndHeadDimensions) {
+    const std::vector<float> identity_heads{1, 0, 0, 1, 1, 0, 0, 1};
+    const citrius::Tensor query(identity_heads, {1, 2, 2, 2});
+    const citrius::Tensor key(identity_heads, {1, 2, 2, 2});
+    const citrius::Tensor value(identity_heads, {1, 2, 2, 2});
+
+    const auto result = citrius::nn::functional::scaled_dot_product_attention(
+        query,
+        key,
+        value);
+    const auto actual = values(result);
+
+    EXPECT_EQ(result.shape(), (citrius::Shape{1, 2, 2, 2}));
+    ASSERT_EQ(actual.size(), identity_heads.size());
+    EXPECT_NEAR(actual[0], 0.669762f, 1e-5f);
+    EXPECT_NEAR(actual[4], 0.669762f, 1e-5f);
+}
+
+TEST(FunctionalTest, ScaledDotProductAttentionRejectsMismatchedHeadDimensions) {
+    const citrius::Tensor query(std::vector<float>(6), {2, 3});
+    const citrius::Tensor key(std::vector<float>(8), {2, 4});
+    const citrius::Tensor value(std::vector<float>(4), {2, 2});
+
+    EXPECT_THROW(
+        citrius::nn::functional::scaled_dot_product_attention(query, key, value),
+        std::invalid_argument);
+}
+
+TEST(FunctionalTest, ScaledDotProductAttentionRejectsInputsWithRankBelowTwo) {
+    const citrius::Tensor vector(std::vector<float>{1, 2});
+    const citrius::Tensor matrix(std::vector<float>{1, 0, 0, 1}, {2, 2});
+
+    EXPECT_THROW(
+        citrius::nn::functional::scaled_dot_product_attention(vector, matrix, matrix),
+        std::invalid_argument);
+    EXPECT_THROW(
+        citrius::nn::functional::scaled_dot_product_attention(matrix, vector, matrix),
+        std::invalid_argument);
+    EXPECT_THROW(
+        citrius::nn::functional::scaled_dot_product_attention(matrix, matrix, vector),
+        std::invalid_argument);
+}
+
+TEST(FunctionalTest, ScaledDotProductAttentionRejectsDeviceMismatch) {
+    const citrius::Tensor cpu(std::vector<float>{1, 0, 0, 1}, {2, 2});
+    const citrius::Tensor other(
+        cpu.shape(),
+        cpu.dtype(),
+        citrius::Device::cuda(),
+        cpu.storage());
+
+    EXPECT_THROW(
+        citrius::nn::functional::scaled_dot_product_attention(cpu, other, cpu),
+        citrius::DeviceMismatchException);
+    EXPECT_THROW(
+        citrius::nn::functional::scaled_dot_product_attention(cpu, cpu, other),
+        citrius::DeviceMismatchException);
+}
+
+TEST(FunctionalTest, ScaledDotProductAttentionRejectsUndefinedInputs) {
+    const citrius::Tensor undefined;
+    const citrius::Tensor matrix(std::vector<float>{1, 0, 0, 1}, {2, 2});
+
+    EXPECT_THROW(
+        citrius::nn::functional::scaled_dot_product_attention(undefined, matrix, matrix),
+        std::invalid_argument);
+    EXPECT_THROW(
+        citrius::nn::functional::scaled_dot_product_attention(matrix, undefined, matrix),
+        std::invalid_argument);
+    EXPECT_THROW(
+        citrius::nn::functional::scaled_dot_product_attention(matrix, matrix, undefined),
+        std::invalid_argument);
+}
+
+TEST(FunctionalTest, ScaledDotProductAttentionRejectsMismatchedKeyAndValueLengths) {
+    const citrius::Tensor query(std::vector<float>{1, 0, 0, 1}, {2, 2});
+    const citrius::Tensor key(std::vector<float>{1, 0, 0, 1}, {2, 2});
+    const citrius::Tensor value(std::vector<float>{1, 0, 0, 1, 1, 1}, {3, 2});
+
+    EXPECT_THROW(
+        citrius::nn::functional::scaled_dot_product_attention(query, key, value),
+        std::invalid_argument);
 }

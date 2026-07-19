@@ -1,8 +1,11 @@
 #include "nn/functional.h"
 
+#include "exceptions.h"
 #include "operations.h"
 #include "reduction_operations.h"
+#include "shape_operations.h"
 
+#include <cmath>
 #include <stdexcept>
 #include <vector>
 
@@ -98,6 +101,52 @@ Tensor softmax(const Tensor& tensor, std::int64_t dim) {
     const Tensor shifted = sub(tensor, citrius::max(tensor, dim, true));
     const Tensor exponentials = citrius::exp(shifted);
     return div(exponentials, sum(exponentials, dim, true));
+}
+
+Tensor scaled_dot_product_attention(
+    const Tensor& query,
+    const Tensor& key,
+    const Tensor& value) {
+    if (!query.defined()) throw std::invalid_argument("query must be defined");
+    if (query.dtype() != DType::Float32) {
+        throw std::invalid_argument("query currently supports Float32 only");
+    }
+    if (query.shape().size() < 2) {
+        throw std::invalid_argument("query must have at least 2 dimensions");
+    }
+    if (!key.defined()) throw std::invalid_argument("key must be defined");
+    if (key.dtype() != DType::Float32) {
+        throw std::invalid_argument("key currently supports Float32 only");
+    }
+    if (key.shape().size() < 2) {
+        throw std::invalid_argument("key must have at least 2 dimensions");
+    }
+    if (!value.defined()) throw std::invalid_argument("value must be defined");
+    if (value.dtype() != DType::Float32) {
+        throw std::invalid_argument("value currently supports Float32 only");
+    }
+    if (value.shape().size() < 2) {
+        throw std::invalid_argument("value must have at least 2 dimensions");
+    }
+    if (query.device() != key.device() || query.device() != value.device()) {
+        throw DeviceMismatchException(
+            "query, key, and value devices must match for scaled dot-product attention");
+    }
+    // key -> [..., K, H]
+    // key_transposed -> [..., H, K]
+    auto key_transposed = citrius::transpose(key, -2, -1);
+    // query -> [..., Q, H]
+    // scores -> [..., Q, K]
+    auto scores = citrius::matmul(query, key_transposed); 
+
+    auto scores_div = citrius::div(scores, std::sqrt(static_cast<float>(query.shape().back())));
+
+    // probabilities -> [..., Q, K]
+    auto probabilities = citrius::nn::functional::softmax(scores_div, -1);
+
+    // value -> [..., K, V]
+    // output -> [..., Q, V]
+    return citrius::matmul(probabilities, value);
 }
 
 } // namespace citrius::nn::functional
