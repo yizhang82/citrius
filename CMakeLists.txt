@@ -136,6 +136,9 @@ target_link_libraries(example_custom_module PRIVATE citrius)
 
 add_executable(operations_benchmark benchmarks/operations_benchmark.cpp)
 target_link_libraries(operations_benchmark PRIVATE citrius)
+if(CITRIUS_ENABLE_METAL)
+    target_compile_definitions(operations_benchmark PRIVATE CITRIUS_HAS_METAL=1)
+endif()
 if(CITRIUS_ENABLE_CUDA)
     target_compile_definitions(operations_benchmark PRIVATE CITRIUS_HAS_CUDA=1)
 

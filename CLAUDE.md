@@ -275,6 +275,19 @@ benchmark.bat matmul-kernel --size 2048 --iterations 20 --samples 5
 configures CMake. CUDA benchmarks require an existing build configured with
 `build.bat --cuda`.
 
+On Unix-like systems, use the matching shell script:
+
+```bash
+./build.sh --metal
+./benchmark.sh operations --cpu
+./benchmark.sh operations --metal
+./benchmark.sh operations --all
+```
+
+`benchmark.sh` also supports the `add-kernel` and `matmul-kernel` commands and options
+shown above. Metal benchmarks require an existing build configured with
+`./build.sh --metal`; CUDA benchmarks require `./build.sh --cuda`.
+
 The `examples` directory contains one program that runs add, sub, and matmul. It is built
 with the library and selects a backend at runtime:
 

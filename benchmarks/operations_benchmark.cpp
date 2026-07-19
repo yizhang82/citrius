@@ -6,6 +6,10 @@
 #include "tensor_factory.h"
 #include "nn/functional.h"
 
+#ifdef CITRIUS_HAS_METAL
+#include "impl/metal_device.h"
+#endif
+
 #ifdef CITRIUS_HAS_CUDA
 #include "impl/cublas_cuda_device.h"
 #include "impl/cuda_device.h"
@@ -488,6 +492,35 @@ Result benchmark_cpu(const citrius::impl::CpuDeviceImpl& device, Operation opera
     return result;
 }
 
+#ifdef CITRIUS_HAS_METAL
+Result benchmark_metal(const citrius::impl::MetalDeviceImpl& device, Operation operation,
+                       std::int64_t size, int iterations) {
+    const auto a_values = input_values(size * size, 3);
+    const auto b_values = input_values(size * size, 7);
+    const citrius::Tensor a(a_values, {size, size}, citrius::Device::metal());
+    const citrius::Tensor b(b_values, {size, size}, citrius::Device::metal());
+    citrius::Tensor output;
+    auto result = measure(operation_count(operation, size), iterations, [&] {
+        switch (operation) {
+        case Operation::Add:
+            output = device.add(a, b);
+            break;
+        case Operation::Sub:
+            output = device.sub(a, b);
+            break;
+        case Operation::Matmul:
+            output = device.matmul(a, b);
+            break;
+        default:
+            throw std::logic_error("unsupported Metal benchmark operation");
+        }
+        return 0.0f;
+    });
+    result.checksum = cpu_checksum(output);
+    return result;
+}
+#endif
+
 #ifdef CITRIUS_HAS_CUDA
 void check_cuda(cudaError_t status, const char* operation) {
     if (status != cudaSuccess)
@@ -717,9 +750,10 @@ void print_section_header(const char* backend) {
 } // namespace
 
 int main(int argc, char** argv) {
-    if (argc < 2 || (std::string(argv[1]) != "--cpu" && std::string(argv[1]) != "--cuda" &&
-                     std::string(argv[1]) != "--all")) {
-        std::cerr << "Usage: operations_benchmark --cpu|--cuda|--all [--html [FILE]]\n";
+    if (argc < 2 || (std::string(argv[1]) != "--cpu" && std::string(argv[1]) != "--metal" &&
+                     std::string(argv[1]) != "--cuda" && std::string(argv[1]) != "--all")) {
+        std::cerr << "Usage: operations_benchmark --cpu|--metal|--cuda|--all "
+                     "[--html [FILE]]\n";
         return 1;
     }
 
@@ -727,7 +761,8 @@ int main(int argc, char** argv) {
     std::string html_path;
     for (int argument = 2; argument < argc; ++argument) {
         if (std::string(argv[argument]) != "--html" || !html_path.empty()) {
-            std::cerr << "Usage: operations_benchmark --cpu|--cuda|--all [--html [FILE]]\n";
+            std::cerr << "Usage: operations_benchmark --cpu|--metal|--cuda|--all "
+                         "[--html [FILE]]\n";
             return 1;
         }
         html_path = "operations_benchmark.html";
@@ -735,7 +770,17 @@ int main(int argc, char** argv) {
             html_path = argv[++argument];
     }
     const bool use_cpu = selection == "--cpu" || selection == "--all";
+    bool use_metal = selection == "--metal";
+#ifdef CITRIUS_HAS_METAL
+    use_metal = use_metal || selection == "--all";
+#endif
     const bool use_cuda = selection == "--cuda" || selection == "--all";
+#ifndef CITRIUS_HAS_METAL
+    if (use_metal) {
+        std::cerr << "Metal support was not enabled for this build.\n";
+        return 1;
+    }
+#endif
 #ifndef CITRIUS_HAS_CUDA
     if (use_cuda) {
         std::cerr << "CUDA support was not enabled for this build.\n";
@@ -753,6 +798,7 @@ int main(int argc, char** argv) {
               << "Multi-thread CPU batched runs={128:10, 256:5, 512:1, 1024:1}\n"
               << "CPU functional workloads use current top-level paths; only operations with "
                  "multi-thread dispatch run in parallel\n"
+              << "Metal: 50 runs per supported workload\n"
               << "CUDA: 50 runs per workload, including batched matmul\n";
 
     try {
@@ -794,6 +840,20 @@ int main(int argc, char** argv) {
                 "CPU (multi-thread, " + std::to_string(multi_thread.thread_count()) + " threads)";
             run_cpu(label.c_str(), multi_thread, false);
         }
+#ifdef CITRIUS_HAS_METAL
+        if (use_metal) {
+            const citrius::impl::MetalDeviceImpl metal;
+            print_section_header("Metal");
+            for (const auto [size, iterations] : std::vector<std::pair<std::int64_t, int>>{
+                     {128, 50}, {256, 50}, {512, 50}, {1024, 50}}) {
+                for (Operation operation :
+                     {Operation::Add, Operation::Sub, Operation::Matmul}) {
+                    print_result(operation, size, iterations,
+                                 benchmark_metal(metal, operation, size, iterations));
+                }
+            }
+        }
+#endif
 #ifdef CITRIUS_HAS_CUDA
         if (use_cuda) {
             // Construct each implementation once so backend setup (notably the
