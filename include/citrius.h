@@ -1,6 +1,7 @@
 #pragma once
 
 #include "exceptions.h"
+#include "models/qwen3.h"
 #include "nn/feed_forward.h"
 #include "nn/linear.h"
 #include "nn/multi_head_attention.h"
