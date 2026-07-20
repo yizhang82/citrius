@@ -6,6 +6,7 @@
 #include "impl/cuda_device.h"
 #include "impl/cuda_storage.h"
 #include "impl/cutlass_cuda_device.h"
+#include "indexing_operations.h"
 #include "operations.h"
 #include "reduction_operations.h"
 #include "shape_operations.h"
@@ -270,6 +271,37 @@ TEST(CudaDeviceTest, ContiguousMaterializesAStridedViewOnCuda) {
     EXPECT_EQ(packed.device(), tensor.device());
     EXPECT_TRUE(packed.is_contiguous());
     EXPECT_EQ(values(packed), std::vector<float>({8, 9, 10, 11, 20, 21, 22, 23}));
+}
+
+TEST(CudaDeviceTest, GatherRowsStaysOnCudaAndMatchesTheCpuReference) {
+    std::string error;
+    auto device = make_cuda_device(&error);
+    if (!device)
+        GTEST_SKIP() << error;
+    const auto table = make_cuda_tensor(
+        *device, {4, 3}, {0, 1, 2, 10, 11, 12, 20, 21, 22, 30, 31, 32});
+    const auto row_indices = citrius::from_vector(
+        std::vector<std::int64_t>{2, 0, 3, 1}, {2, 2}, citrius::Device::cuda());
+
+    const auto output = citrius::gather_rows(table, row_indices);
+
+    EXPECT_EQ(output.device(), citrius::Device::cuda());
+    EXPECT_EQ(output.shape(), citrius::Shape({2, 2, 3}));
+    EXPECT_EQ(
+        values(output),
+        (std::vector<float>{20, 21, 22, 0, 1, 2, 30, 31, 32, 10, 11, 12}));
+}
+
+TEST(CudaDeviceTest, GatherRowsRejectsOutOfRangeCudaIndices) {
+    std::string error;
+    auto device = make_cuda_device(&error);
+    if (!device)
+        GTEST_SKIP() << error;
+    const auto table = make_cuda_tensor(*device, {2, 2}, {0, 1, 2, 3});
+    const auto row_indices = citrius::from_vector(
+        std::vector<std::int64_t>{0, 2}, citrius::Device::cuda());
+
+    EXPECT_THROW(citrius::gather_rows(table, row_indices), std::out_of_range);
 }
 
 TEST(CudaDeviceTest, CublasMatmulMatchesReferenceForNonSquareMatrices) {

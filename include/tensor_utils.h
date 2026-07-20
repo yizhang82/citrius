@@ -24,3 +24,27 @@
             throw std::invalid_argument(#tensor " has an unexpected number of dimensions"); \
         }                                                                            \
     } while (false)
+
+#define ENSURE_TENSOR_DTYPE(tensor, expected_dtype)                                 \
+    do {                                                                             \
+        if ((tensor).dtype() != (expected_dtype)) {                                  \
+            throw std::invalid_argument(#tensor " has an unexpected dtype");       \
+        }                                                                            \
+    } while (false)
+
+#define ENSURE_TENSOR_DEVICE_MATCH_2(first, second)                                 \
+    do {                                                                             \
+        if ((first).device() != (second).device()) {                                 \
+            throw std::invalid_argument(#first " and " #second                     \
+                                        " must be on the same device");             \
+        }                                                                            \
+    } while (false)
+
+#define ENSURE_TENSOR_DEVICE_MATCH_3(first, second, third)                          \
+    do {                                                                             \
+        if ((first).device() != (second).device() ||                                 \
+            (first).device() != (third).device()) {                                  \
+            throw std::invalid_argument(#first ", " #second ", and " #third        \
+                                        " must be on the same device");             \
+        }                                                                            \
+    } while (false)

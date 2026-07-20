@@ -187,9 +187,10 @@ Status: CPU reference implementation complete. ReLU, tanh-approximate GELU,
 functional layer normalization, `nn::LayerNorm`, inference-only `nn::Dropout`,
 registered sequential `nn::ModuleList`, Int64 tensor construction, indexed row
 gather, and `nn::Embedding` are covered by CPU reference tests. Indexed gather
-currently stages through CPU for non-CPU devices. SiLU is deferred until a model
-requires it. LayerNorm composes entirely from native CUDA primitives and has
-device parity coverage; a fused implementation remains a later optimization.
+uses a native CUDA kernel with device parity and bounds-error coverage; other
+non-CPU backends still stage through CPU. SiLU is deferred until a model requires
+it. LayerNorm composes entirely from native CUDA primitives and has device parity
+coverage; a fused implementation remains a later optimization.
 
 Add the following functional operations and modules:
 
@@ -217,8 +218,9 @@ Acceptance criteria:
 
 Readiness: The CPU reference primitives and modules required by this phase are
 complete. CUDA is functionally capable of executing the same composition, but
-transpose, permute, and indexed Embedding lookup still stage through CPU. Those
-performance gaps do not block implementation of the reference Transformer.
+some consumers still materialize transpose and permute views. Indexed Embedding
+lookup remains on CUDA. Those performance gaps do not block implementation of
+the reference Transformer.
 
 Implement `nn::MultiHeadAttention` from existing primitives:
 

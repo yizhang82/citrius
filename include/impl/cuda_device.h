@@ -64,6 +64,7 @@ public:
         float argument = 0.0f) const;
     Tensor masked_fill(const Tensor& tensor, const Tensor& mask, float value) const;
     Tensor contiguous(const Tensor& tensor) const;
+    Tensor gather_rows(const Tensor& table, const Tensor& indices) const;
     virtual void add_out(const Tensor& a, const Tensor& b, Tensor& out) const;
     virtual void sub_out(const Tensor& a, const Tensor& b, Tensor& out) const;
     virtual void matmul_out(const Tensor& a, const Tensor& b, Tensor& out) const;

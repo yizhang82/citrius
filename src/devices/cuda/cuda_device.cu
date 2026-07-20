@@ -3,6 +3,7 @@
 #include "impl/cuda_context.h"
 
 #include "impl/cpu_storage.h"
+#include "tensor_utils.h"
 
 #include <cuda_runtime.h>
 
@@ -283,6 +284,28 @@ __global__ void argmax_f32(const float* input, std::int64_t* output,
         }
         if (threadIdx.x == 0) output[output_index] = indices[0];
         __syncthreads();
+    }
+}
+
+__global__ void gather_rows_f32(
+    const float* table,
+    const std::int64_t* indices,
+    float* output,
+    std::int64_t index_count,
+    std::int64_t row_count,
+    std::int64_t row_size,
+    int* invalid_index) {
+    const auto first = static_cast<std::int64_t>(blockIdx.x) * blockDim.x + threadIdx.x;
+    const auto stride = static_cast<std::int64_t>(blockDim.x) * gridDim.x;
+    const auto output_count = index_count * row_size;
+    for (auto output_index = first; output_index < output_count; output_index += stride) {
+        const auto index_position = output_index / row_size;
+        const auto row = indices[index_position];
+        if (row < 0 || row >= row_count) {
+            atomicExch(invalid_index, 1);
+            continue;
+        }
+        output[output_index] = table[row * row_size + output_index % row_size];
     }
 }
 
@@ -761,6 +784,44 @@ Tensor CudaDeviceImpl::contiguous(const Tensor& tensor) const {
         input, destination, tensor.numel(), rank, device_metadata.data_as<std::int64_t>(),
         device_metadata.data_as<std::int64_t>() + rank, element_size);
     check_cuda(cudaGetLastError(), "failed to launch CUDA contiguous kernel");
+    return output;
+}
+
+Tensor CudaDeviceImpl::gather_rows(const Tensor& table, const Tensor& indices) const {
+    ENSURE_TENSOR_DEFINED(table);
+    ENSURE_TENSOR_DEFINED(indices);
+    ENSURE_TENSOR_DIM(table, 2);
+    ENSURE_TENSOR_DTYPE(table, DType::Float32);
+    ENSURE_TENSOR_DTYPE(indices, DType::Int64);
+    ENSURE_TENSOR_DEVICE_MATCH_2(table, indices);
+    if (table.device() != Device::cuda(device_index_))
+        throw std::invalid_argument("gather_rows inputs must be on the selected CUDA device");
+
+    const Tensor packed_table = contiguous(table);
+    const Tensor packed_indices = contiguous(indices);
+    Shape output_shape = indices.shape();
+    output_shape.push_back(table.shape()[1]);
+    Tensor output = empty(std::move(output_shape), DType::Float32);
+    if (indices.numel() == 0 || table.shape()[1] == 0) return output;
+
+    CudaAllocation invalid_index(sizeof(int), context_);
+    int invalid = 0;
+    invalid_index.copy_from_host_async(&invalid, sizeof(invalid));
+    const auto& table_storage = require_cuda_storage(*packed_table.storage());
+    const auto& index_storage = require_cuda_storage(*packed_indices.storage());
+    auto& output_storage = require_cuda_storage(*output.storage());
+    const auto required_blocks = (output.numel() + 255) / 256;
+    const auto blocks = static_cast<unsigned>(
+        std::min<std::int64_t>(required_blocks, max_elementwise_blocks_));
+    gather_rows_f32<<<blocks, 256, 0, stream(context_)>>>(
+        static_cast<const float*>(table_storage.handle().ptr),
+        static_cast<const std::int64_t*>(index_storage.handle().ptr),
+        data(output_storage), indices.numel(), table.shape()[0], table.shape()[1],
+        invalid_index.data_as<int>());
+    check_cuda(cudaGetLastError(), "failed to launch CUDA gather_rows kernel");
+    invalid_index.copy_to_host_async(&invalid, sizeof(invalid));
+    invalid_index.synchronize();
+    if (invalid != 0) throw std::out_of_range("gather_rows index is out of range");
     return output;
 }
 

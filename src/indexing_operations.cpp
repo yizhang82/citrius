@@ -1,7 +1,11 @@
 #include "indexing_operations.h"
 
 #include "impl/cpu_storage.h"
+#ifdef CITRIUS_HAS_CUDA
+#include "impl/cuda_device.h"
+#endif
 #include "tensor_factory.h"
+#include "tensor_utils.h"
 
 #include <cstring>
 #include <stdexcept>
@@ -9,18 +13,18 @@
 namespace citrius {
 
 Tensor gather_rows(const Tensor& table, const Tensor& indices) {
-    if (!table.defined() || !indices.defined()) {
-        throw std::invalid_argument("gather_rows inputs must be defined");
+    ENSURE_TENSOR_DEFINED(table);
+    ENSURE_TENSOR_DEFINED(indices);
+    ENSURE_TENSOR_DIM(table, 2);
+    ENSURE_TENSOR_DTYPE(table, DType::Float32);
+    ENSURE_TENSOR_DTYPE(indices, DType::Int64);
+    ENSURE_TENSOR_DEVICE_MATCH_2(table, indices);
+
+#ifdef CITRIUS_HAS_CUDA
+    if (table.device().type == DeviceType::CUDA) {
+        return impl::CudaDeviceImpl(table.device().index).gather_rows(table, indices);
     }
-    if (table.dtype() != DType::Float32 || table.ndim() != 2) {
-        throw std::invalid_argument("gather_rows table must be a two-dimensional Float32 tensor");
-    }
-    if (indices.dtype() != DType::Int64) {
-        throw std::invalid_argument("gather_rows indices must be Int64");
-    }
-    if (table.device() != indices.device()) {
-        throw std::invalid_argument("gather_rows inputs must be on the same device");
-    }
+#endif
 
     const Tensor cpu_table = table.to(Device::cpu());
     const Tensor cpu_indices = indices.to(Device::cpu());
