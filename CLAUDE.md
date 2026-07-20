@@ -299,6 +299,22 @@ build\Release\decoder_chat.exe `
 Use `--device cpu` for CPU execution. The CUDA command requires an existing build
 configured with `build.bat --cuda`.
 
+Run the equivalent Hugging Face/PyTorch Qwen3-0.6B comparison with:
+
+```powershell
+$qwenSnapshot = "$env:USERPROFILE\.cache\huggingface\hub\models--Qwen--Qwen3-0.6B\snapshots\c1899de289a04d12100db370d81485cdf75e47ca"
+python benchmarks/run_qwen.py `
+  "Qwen/Qwen3-0.6B" `
+  "$qwenSnapshot\model.safetensors" `
+  "Who are you?"
+```
+
+The runner uses CUDA when available and applies Qwen's chat template with thinking
+enabled. Add `--cpu` to force CPU execution, `--greedy` to disable sampling, and
+`--no-cache` to disable the KV cache for comparison with the current Citrius decoder.
+It reports device, TTFT, end-to-end throughput, post-first-token throughput, and
+total generation time.
+
 `benchmark.bat` incrementally builds only the selected benchmark target and never
 configures CMake. CUDA benchmarks require an existing build configured with
 `build.bat --cuda`.
