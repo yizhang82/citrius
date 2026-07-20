@@ -361,10 +361,11 @@ Run tests with Metal enabled from a clean build:
 ./test.sh --clean --metal
 ```
 
-GoogleTest is required and discovered through:
+GoogleTest is pinned and built with the project through CMake's `FetchContent` so it
+uses the same C++ runtime as Citrius:
 
 ```cmake
-find_package(GTest REQUIRED)
+FetchContent_MakeAvailable(googletest)
 ```
 
 In sandboxed environments, `MTLCreateSystemDefaultDevice()` may return `nil`; Metal tests are written to skip in that case. On a regular macOS terminal with Metal available, the Metal tests should run normally.

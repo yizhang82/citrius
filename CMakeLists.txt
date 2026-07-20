@@ -181,19 +181,18 @@ endif()
 
 enable_testing()
 
-find_package(GTest CONFIG QUIET)
-if(NOT GTest_FOUND)
-    include(FetchContent)
+include(FetchContent)
 
-    # Keep GoogleTest's MSVC runtime consistent with the parent project.
-    set(gtest_force_shared_crt ON CACHE BOOL "" FORCE)
-    FetchContent_Declare(
-        googletest
-        URL https://github.com/google/googletest/archive/refs/tags/v1.15.2.zip
-        DOWNLOAD_EXTRACT_TIMESTAMP TRUE
-    )
-    FetchContent_MakeAvailable(googletest)
-endif()
+# Build GoogleTest with the same toolchain and C++ runtime as Citrius. In particular,
+# a shared GoogleTest installed by Conda on macOS can pull Conda's libc++ into the
+# process alongside the system libc++, which crashes during test discovery.
+set(gtest_force_shared_crt ON CACHE BOOL "" FORCE)
+FetchContent_Declare(
+    googletest
+    URL https://github.com/google/googletest/archive/refs/tags/v1.15.2.zip
+    DOWNLOAD_EXTRACT_TIMESTAMP TRUE
+)
+FetchContent_MakeAvailable(googletest)
 include(GoogleTest)
 
 add_executable(tensor_test
