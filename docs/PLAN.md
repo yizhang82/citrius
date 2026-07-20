@@ -130,7 +130,9 @@ Acceptance criteria:
 Status: CPU reference implementation complete. Sum, mean, maximum, and
 population variance support full, single-dimension, and multi-dimension
 reductions with negative dimensions and optional `keepdim`. CUDA has a native
-general reference kernel for the same reduction variants. Numerically stable
+general reference kernel for the same reduction variants, plus a
+one-block-per-row specialization for contiguous last-dimension sum, mean, and
+maximum. Numerically stable
 softmax is available through `nn::functional::softmax`. CUDA softmax composes
 entirely from native CUDA primitives and has device parity coverage; a fused
 implementation remains a later optimization.
@@ -311,8 +313,8 @@ Current CUDA optimization order:
 2. implement native indexed gather to remove Embedding host staging;
 3. make CUDA GEMM consume transpose/layout metadata or persistent prepacked
    weights so `Linear` never materializes a transposed weight per forward;
-4. specialize contiguous last-dimension sum, mean, and maximum using one block
-   per output row with warp shuffles and shared-memory reduction;
+4. [complete] specialize contiguous last-dimension sum, mean, and maximum using
+   one block per output row with warp shuffles and shared-memory reduction;
 5. add a numerically stable cooperative variance kernel, retaining the current
    general arbitrary-dimension reduction kernel as a fallback;
 6. fuse softmax's maximum, exponential, sum, and division sequence;

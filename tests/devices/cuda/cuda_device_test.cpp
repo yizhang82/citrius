@@ -600,6 +600,42 @@ TEST(CudaDeviceTest, FullReductionsMatchCpuReference) {
     EXPECT_NEAR(values(citrius::variance(cuda_input))[0], 14.138889f, 1e-5f);
 }
 
+TEST(CudaDeviceTest, LastDimensionReductionsHandleIrregularQwenSizedRows) {
+    std::string error;
+    auto device = make_cuda_device(&error);
+    if (!device)
+        GTEST_SKIP() << error;
+    for (const std::int64_t row_size : {37LL, 128LL, 1024LL, 151936LL}) {
+        std::vector<float> input_values(static_cast<std::size_t>(2 * row_size));
+        for (std::int64_t index = 0; index < 2 * row_size; ++index)
+            input_values[static_cast<std::size_t>(index)] =
+                static_cast<float>((index * 17) % 101 - 50) / 7.0f;
+        const citrius::Tensor input(
+            input_values, {2, row_size}, citrius::Device::cuda());
+        std::vector<float> expected_sums(2, 0.0f);
+        std::vector<float> expected_maxima(2, -std::numeric_limits<float>::infinity());
+        for (std::int64_t row = 0; row < 2; ++row) {
+            for (std::int64_t column = 0; column < row_size; ++column) {
+                const float value = input_values[static_cast<std::size_t>(row * row_size + column)];
+                expected_sums[static_cast<std::size_t>(row)] += value;
+                expected_maxima[static_cast<std::size_t>(row)] =
+                    std::max(expected_maxima[static_cast<std::size_t>(row)], value);
+            }
+        }
+
+        const auto sums = values(citrius::sum(input, -1));
+        const auto means = values(citrius::mean(input, -1));
+        const auto maxima = values(citrius::max(input, -1));
+
+        for (std::size_t row = 0; row < 2; ++row) {
+            EXPECT_NEAR(sums[row], expected_sums[row], 2e-3f) << "row size " << row_size;
+            EXPECT_NEAR(means[row], expected_sums[row] / row_size, 2e-5f)
+                << "row size " << row_size;
+            EXPECT_FLOAT_EQ(maxima[row], expected_maxima[row]) << "row size " << row_size;
+        }
+    }
+}
+
 TEST(CudaDeviceTest, UnaryMathOperationsStayOnCuda) {
     std::string error;
     auto device = make_cuda_device(&error);

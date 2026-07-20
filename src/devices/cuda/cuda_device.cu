@@ -286,6 +286,51 @@ __global__ void argmax_f32(const float* input, std::int64_t* output,
     }
 }
 
+__device__ float combine_reduction(
+    float left,
+    float right,
+    CudaReductionOperation operation) {
+    return operation == CudaReductionOperation::Maximum
+        ? (left < right ? right : left)
+        : left + right;
+}
+
+__global__ void reduce_last_dimension_f32(
+    const float* input,
+    float* output,
+    std::int64_t row_count,
+    std::int64_t row_size,
+    CudaReductionOperation operation) {
+    __shared__ float warp_values[32];
+    const auto lane = threadIdx.x & 31;
+    const auto warp = threadIdx.x >> 5;
+    const auto warp_count = (blockDim.x + 31) / 32;
+    const float identity = operation == CudaReductionOperation::Maximum
+        ? -__int_as_float(0x7f800000)
+        : 0.0f;
+    for (std::int64_t row = blockIdx.x; row < row_count; row += gridDim.x) {
+        float value = identity;
+        for (std::int64_t column = threadIdx.x; column < row_size; column += blockDim.x)
+            value = combine_reduction(value, input[row * row_size + column], operation);
+        for (int offset = 16; offset > 0; offset /= 2)
+            value = combine_reduction(value, __shfl_down_sync(0xffffffff, value, offset), operation);
+        if (lane == 0) warp_values[warp] = value;
+        __syncthreads();
+        if (warp == 0) {
+            value = lane < warp_count ? warp_values[lane] : identity;
+            for (int offset = 16; offset > 0; offset /= 2)
+                value = combine_reduction(
+                    value, __shfl_down_sync(0xffffffff, value, offset), operation);
+            if (lane == 0) {
+                if (operation == CudaReductionOperation::Mean)
+                    value /= static_cast<float>(row_size);
+                output[row] = value;
+            }
+        }
+        __syncthreads();
+    }
+}
+
 __global__ void gather_rows_f32(
     const float* table,
     const std::int64_t* indices,
@@ -693,20 +738,35 @@ Tensor CudaDeviceImpl::reduce(
     Tensor output = empty(output_shape, DType::Float32);
     if (output.numel() == 0) return output;
 
-    const Strides input_strides = contiguous_strides(tensor.shape());
+    auto input = ensure_storage(tensor.storage(), ConversionPolicy::CopyToDevice);
+    auto& input_storage = require_cuda_storage(*input);
+    const float* input_data = data(input_storage) + tensor.storage_offset();
+    const bool specialized_last_dimension =
+        tensor.ndim() != 0 && dimensions.size() == 1 &&
+        dimensions.front() == static_cast<std::int64_t>(tensor.ndim() - 1) &&
+        tensor.is_contiguous() && operation != CudaReductionOperation::Variance;
+    if (specialized_last_dimension) {
+        const auto blocks = static_cast<unsigned>(
+            std::min<std::int64_t>(output.numel(), max_elementwise_blocks_));
+        reduce_last_dimension_f32<<<blocks, 256, 0, stream(context_)>>>(
+            input_data, data(require_cuda_storage(*output.storage())), output.numel(),
+            tensor.shape().back(), operation);
+        check_cuda(cudaGetLastError(), "failed to launch CUDA last-dimension reduction kernel");
+        return output;
+    }
+
     const std::size_t rank = tensor.ndim();
     // Keep a valid metadata pointer for rank-zero scalar reductions even though
     // the kernel does not dereference any axis entries in that case.
     std::vector<std::int64_t> metadata(std::max<std::size_t>(rank * 3, 1), 0);
     std::copy(tensor.shape().begin(), tensor.shape().end(), metadata.begin());
-    std::copy(input_strides.begin(), input_strides.end(), metadata.begin() + rank);
+    std::copy(tensor.strides().begin(), tensor.strides().end(), metadata.begin() + rank);
     for (std::size_t axis = 0; axis < rank; ++axis)
         metadata[2 * rank + axis] = reduced[axis] ? 1 : 0;
 
     const std::size_t metadata_bytes = metadata.size() * sizeof(std::int64_t);
     CudaAllocation metadata_allocation(metadata_bytes, context_);
     auto* device_metadata = metadata_allocation.data_as<std::int64_t>();
-    auto input = ensure_storage(tensor.storage(), ConversionPolicy::CopyToDevice);
     {
         if (metadata_bytes != 0) {
             check_cuda(cudaMemcpyAsync(device_metadata, metadata.data(), metadata_bytes,
@@ -717,7 +777,7 @@ Tensor CudaDeviceImpl::reduce(
         const auto blocks = static_cast<unsigned>(
             std::min<std::int64_t>(required_blocks, max_elementwise_blocks_));
         reduce_f32<<<blocks, 256, 0, stream(context_)>>>(
-            data(require_cuda_storage(*input)),
+            input_data,
             data(require_cuda_storage(*output.storage())), output.numel(), reduced_count,
             device_metadata, static_cast<std::int64_t>(rank), operation);
         check_cuda(cudaGetLastError(), "failed to launch CUDA reduction kernel");
