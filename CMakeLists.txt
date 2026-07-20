@@ -197,6 +197,7 @@ endif()
 include(GoogleTest)
 
 add_executable(tensor_test
+    tests/device_operation_conformance_test.cpp
     tests/models/qwen3_test.cpp
     tests/models/qwen3_tokenizer_test.cpp
     tests/devices/cpu/cpu_device_test.cpp
@@ -221,10 +222,12 @@ if(CITRIUS_ENABLE_METAL)
         PRIVATE
             tests/devices/metal/metal_device_test.cpp
     )
+    target_compile_definitions(tensor_test PRIVATE CITRIUS_TEST_HAS_METAL=1)
 endif()
 
 if(CITRIUS_ENABLE_CUDA)
     target_sources(tensor_test PRIVATE tests/devices/cuda/cuda_device_test.cpp)
+    target_compile_definitions(tensor_test PRIVATE CITRIUS_TEST_HAS_CUDA=1)
 endif()
 
 target_link_libraries(tensor_test
@@ -243,4 +246,4 @@ if(GTEST_MAIN_LOCATION)
     set_target_properties(tensor_test PROPERTIES BUILD_RPATH "${GTEST_LIB_DIR}")
 endif()
 
-gtest_discover_tests(tensor_test DISCOVERY_MODE PRE_TEST)
+gtest_discover_tests(tensor_test DISCOVERY_MODE PRE_TEST NO_PRETTY_VALUES)
