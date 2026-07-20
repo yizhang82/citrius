@@ -33,7 +33,8 @@ Tensor causal_mask(std::int64_t sequence_length, Device device) {
 
 Tensor repeat_key_value_heads(const Tensor& tensor, std::int64_t repetitions) {
     if (repetitions == 1) return tensor;
-    const auto heads = split(tensor, 1, 1);
+    const Tensor packed = contiguous(tensor);
+    const auto heads = split(packed, 1, 1);
     std::vector<Tensor> repeated;
     repeated.reserve(heads.size() * static_cast<std::size_t>(repetitions));
     for (const Tensor& head : heads) {
@@ -43,7 +44,8 @@ Tensor repeat_key_value_heads(const Tensor& tensor, std::int64_t repetitions) {
 }
 
 Tensor apply_rope(const Tensor& tensor, float theta) {
-    const auto& shape = tensor.shape();
+    const Tensor packed = contiguous(tensor);
+    const auto& shape = packed.shape();
     const std::int64_t sequence_length = shape[2];
     const std::int64_t head_dim = shape[3];
     if (head_dim % 2 != 0) throw std::invalid_argument("Qwen3 RoPE head_dim must be even");
@@ -64,11 +66,11 @@ Tensor apply_rope(const Tensor& tensor, float theta) {
         }
     }
 
-    const Tensor cos_tensor = from_vector(cosine, {1, 1, sequence_length, head_dim}, tensor.device());
-    const Tensor sin_tensor = from_vector(sine, {1, 1, sequence_length, head_dim}, tensor.device());
-    const auto halves = split(tensor, half, -1);
+    const Tensor cos_tensor = from_vector(cosine, {1, 1, sequence_length, head_dim}, packed.device());
+    const Tensor sin_tensor = from_vector(sine, {1, 1, sequence_length, head_dim}, packed.device());
+    const auto halves = split(packed, half, -1);
     const Tensor rotated = concat({mul(halves[1], -1.0f), halves[0]}, -1);
-    return add(mul(tensor, cos_tensor), mul(rotated, sin_tensor));
+    return add(mul(packed, cos_tensor), mul(rotated, sin_tensor));
 }
 
 } // namespace

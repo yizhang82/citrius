@@ -14,6 +14,7 @@
 #include "tensor_factory.h"
 #include "nn/functional.h"
 #include "nn/layer_norm.h"
+#include "models/qwen3.h"
 
 #include <gtest/gtest.h>
 
@@ -343,6 +344,35 @@ TEST(CudaDeviceTest, CutlassMatmulConsumesTransposedWeightView) {
     const auto output = cutlass.matmul(input, citrius::transpose(weight, 0, 1));
 
     EXPECT_EQ(values(output), std::vector<float>({4, 5, 10, 11}));
+}
+
+TEST(CudaDeviceTest, QwenAttentionHandlesPermutedViewsAndGroupedQueryHeads) {
+    std::string error;
+    auto device = make_cuda_device(&error);
+    if (!device)
+        GTEST_SKIP() << error;
+    citrius::models::Qwen3Config config;
+    config.vocab_size = 32;
+    config.hidden_size = 8;
+    config.intermediate_size = 16;
+    config.num_hidden_layers = 1;
+    config.num_attention_heads = 4;
+    config.num_key_value_heads = 2;
+    config.head_dim = 2;
+    config.max_position_embeddings = 16;
+    config.device = citrius::Device::cuda();
+    citrius::models::Qwen3Attention attention(config);
+    const auto input = make_cuda_tensor(
+        *device, {1, 3, 8},
+        {1, 2, 3, 4, 5, 6, 7, 8,
+         2, 3, 4, 5, 6, 7, 8, 9,
+         3, 4, 5, 6, 7, 8, 9, 10});
+
+    const auto output = attention(input);
+
+    EXPECT_EQ(output.device(), citrius::Device::cuda());
+    EXPECT_EQ(output.shape(), citrius::Shape({1, 3, 8}));
+    for (const float value : values(output)) EXPECT_TRUE(std::isfinite(value));
 }
 
 TEST(CudaDeviceTest, CublasMatmulMatchesReferenceForNonSquareMatrices) {

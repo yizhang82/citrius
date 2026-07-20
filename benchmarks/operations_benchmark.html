@@ -6,80 +6,80 @@
 <h1>Citrius Operations Benchmark</h1><p class="subtitle">Best latency by operation and backend; logarithmic milliseconds. Lower is better.</p>
 <section class="chart"><svg viewBox="0 0 1890 620" role="img" aria-label="Performance comparison for size 128">
 <text class="title" x="85" y="30">N = 128</text>
-<line class="grid" x1="85" x2="1860" y1="470" y2="470"/><text class="axis" text-anchor="end" x="77" y="474">0.0001 ms</text>
-<line class="grid" x1="85" x2="1860" y1="391" y2="391"/><text class="axis" text-anchor="end" x="77" y="395">0.001 ms</text>
-<line class="grid" x1="85" x2="1860" y1="312" y2="312"/><text class="axis" text-anchor="end" x="77" y="316">0.01 ms</text>
-<line class="grid" x1="85" x2="1860" y1="233" y2="233"/><text class="axis" text-anchor="end" x="77" y="237">0.1 ms</text>
-<line class="grid" x1="85" x2="1860" y1="154" y2="154"/><text class="axis" text-anchor="end" x="77" y="158">1 ms</text>
+<line class="grid" x1="85" x2="1860" y1="470" y2="470"/><text class="axis" text-anchor="end" x="77" y="474">0.001 ms</text>
+<line class="grid" x1="85" x2="1860" y1="391" y2="391"/><text class="axis" text-anchor="end" x="77" y="395">0.00631 ms</text>
+<line class="grid" x1="85" x2="1860" y1="312" y2="312"/><text class="axis" text-anchor="end" x="77" y="316">0.0398 ms</text>
+<line class="grid" x1="85" x2="1860" y1="233" y2="233"/><text class="axis" text-anchor="end" x="77" y="237">0.251 ms</text>
+<line class="grid" x1="85" x2="1860" y1="154" y2="154"/><text class="axis" text-anchor="end" x="77" y="158">1.58 ms</text>
 <line class="grid" x1="85" x2="1860" y1="75" y2="75"/><text class="axis" text-anchor="end" x="77" y="79">10 ms</text>
-<rect x="98.8" y="305" width="12.7" height="165" fill="#60a5fa"><title>CPU (reference) · add: 0.0121 ms</title></rect>
-<rect x="113.006" y="394.615" width="12.7" height="75.3852" fill="#34d399"><title>CPU (multi-thread, 24 threads) · add: 0.0009 ms</title></rect>
-<rect x="127.206" y="385.205" width="12.7" height="84.7948" fill="#f59e0b"><title>CUDA (reference) · add: 0.001184 ms</title></rect>
-<rect x="141.406" y="343.437" width="12.7" height="126.563" fill="#f472b6"><title>CUDA (cuBLAS) · add: 0.004 ms</title></rect>
-<rect x="155.606" y="386.145" width="12.7" height="83.8547" fill="#a78bfa"><title>CUDA (CUTLASS) · add: 0.001152 ms</title></rect>
+<rect x="98.8" y="363" width="12.7" height="107" fill="#60a5fa"><title>CPU (reference) · add: 0.012 ms</title></rect>
+<rect x="113.006" y="462.181" width="12.7" height="7.81915" fill="#34d399"><title>CPU (multi-thread, 24 threads) · add: 0.0012 ms</title></rect>
+<rect x="127.206" y="410.547" width="12.7" height="59.4534" fill="#f59e0b"><title>CUDA (reference) · add: 0.004 ms</title></rect>
+<rect x="141.406" y="403.594" width="12.7" height="66.4061" fill="#f472b6"><title>CUDA (cuBLAS) · add: 0.004704 ms</title></rect>
+<rect x="155.606" y="406.929" width="12.7" height="63.0705" fill="#a78bfa"><title>CUDA (CUTLASS) · add: 0.004352 ms</title></rect>
 <text class="label" text-anchor="end" transform="translate(134.306,488) rotate(-45)">add</text>
-<rect x="197.417" y="298.089" width="12.7" height="171.911" fill="#60a5fa"><title>CPU (reference) · sub: 0.015 ms</title></rect>
-<rect x="211.617" y="394.615" width="12.7" height="75.3852" fill="#34d399"><title>CPU (multi-thread, 24 threads) · sub: 0.0009 ms</title></rect>
-<rect x="225.817" y="387.112" width="12.7" height="82.8882" fill="#f59e0b"><title>CUDA (reference) · sub: 0.00112 ms</title></rect>
-<rect x="240.017" y="387.112" width="12.7" height="82.8882" fill="#f472b6"><title>CUDA (cuBLAS) · sub: 0.00112 ms</title></rect>
-<rect x="254.217" y="386.145" width="12.7" height="83.8547" fill="#a78bfa"><title>CUDA (CUTLASS) · sub: 0.001152 ms</title></rect>
+<rect x="197.417" y="363.431" width="12.7" height="106.569" fill="#60a5fa"><title>CPU (reference) · sub: 0.012 ms</title></rect>
+<rect x="211.617" y="462.181" width="12.7" height="7.81915" fill="#34d399"><title>CPU (multi-thread, 24 threads) · sub: 0.0012 ms</title></rect>
+<rect x="225.817" y="408.865" width="12.7" height="61.1355" fill="#f59e0b"><title>CUDA (reference) · sub: 0.00416 ms</title></rect>
+<rect x="240.017" y="414.123" width="12.7" height="55.8775" fill="#f472b6"><title>CUDA (cuBLAS) · sub: 0.00368 ms</title></rect>
+<rect x="254.217" y="416.816" width="12.7" height="53.1842" fill="#a78bfa"><title>CUDA (CUTLASS) · sub: 0.003456 ms</title></rect>
 <text class="label" text-anchor="end" transform="translate(232.917,488) rotate(-45)">sub</text>
-<rect x="296.028" y="167.623" width="12.7" height="302.377" fill="#60a5fa"><title>CPU (reference) · matmul: 0.6723 ms</title></rect>
-<rect x="310.228" y="157.921" width="12.7" height="312.079" fill="#34d399"><title>CPU (multi-thread, 24 threads) · matmul: 0.892 ms</title></rect>
-<rect x="324.428" y="326.97" width="12.7" height="143.03" fill="#f59e0b"><title>CUDA (reference) · matmul: 0.006464 ms</title></rect>
-<rect x="338.628" y="301.37" width="12.7" height="168.63" fill="#f472b6"><title>CUDA (cuBLAS) · matmul: 0.013632 ms</title></rect>
-<rect x="352.828" y="386.145" width="12.7" height="83.8547" fill="#a78bfa"><title>CUDA (CUTLASS) · matmul: 0.001152 ms</title></rect>
+<rect x="296.028" y="185.86" width="12.7" height="284.14" fill="#60a5fa"><title>CPU (reference) · matmul: 0.754 ms</title></rect>
+<rect x="310.228" y="178.893" width="12.7" height="291.107" fill="#34d399"><title>CPU (multi-thread, 24 threads) · matmul: 0.887 ms</title></rect>
+<rect x="324.428" y="382.929" width="12.7" height="87.0705" fill="#f59e0b"><title>CUDA (reference) · matmul: 0.007616 ms</title></rect>
+<rect x="338.628" y="352.399" width="12.7" height="117.601" fill="#f472b6"><title>CUDA (cuBLAS) · matmul: 0.01552 ms</title></rect>
+<rect x="352.828" y="357.362" width="12.7" height="112.638" fill="#a78bfa"><title>CUDA (CUTLASS) · matmul: 0.013824 ms</title></rect>
 <text class="label" text-anchor="end" transform="translate(331.528,488) rotate(-45)">matmul</text>
-<rect x="394.639" y="162.67" width="12.7" height="307.33" fill="#60a5fa"><title>CPU (reference) · matmul-weight-t: 0.7767 ms</title></rect>
-<rect x="408.839" y="153.54" width="12.7" height="316.46" fill="#34d399"><title>CPU (multi-thread, 24 threads) · matmul-weight-t: 1.0135 ms</title></rect>
-<rect x="423.039" y="304.664" width="12.7" height="165.336" fill="#f59e0b"><title>CUDA (reference) · matmul-weight-t: 0.012384 ms</title></rect>
-<rect x="437.239" y="300.338" width="12.7" height="169.662" fill="#f472b6"><title>CUDA (cuBLAS) · matmul-weight-t: 0.014048 ms</title></rect>
-<rect x="451.439" y="380.049" width="12.7" height="89.9509" fill="#a78bfa"><title>CUDA (CUTLASS) · matmul-weight-t: 0.001376 ms</title></rect>
+<rect x="394.639" y="184.268" width="12.7" height="285.732" fill="#60a5fa"><title>CPU (reference) · matmul-weight-t: 0.7825 ms</title></rect>
+<rect x="408.839" y="171.255" width="12.7" height="298.745" fill="#34d399"><title>CPU (multi-thread, 24 threads) · matmul-weight-t: 1.0599 ms</title></rect>
+<rect x="423.039" y="344.802" width="12.7" height="125.198" fill="#f59e0b"><title>CUDA (reference) · matmul-weight-t: 0.018528 ms</title></rect>
+<rect x="437.239" y="365.902" width="12.7" height="104.098" fill="#f472b6"><title>CUDA (cuBLAS) · matmul-weight-t: 0.011328 ms</title></rect>
+<rect x="451.439" y="352.047" width="12.7" height="117.953" fill="#a78bfa"><title>CUDA (CUTLASS) · matmul-weight-t: 0.015648 ms</title></rect>
 <text class="label" text-anchor="end" transform="translate(430.139,488) rotate(-45)">matmul-weight-t</text>
-<rect x="493.25" y="95.099" width="12.7" height="374.901" fill="#60a5fa"><title>CPU (reference) · batch-matmul: 5.5665 ms</title></rect>
-<rect x="507.45" y="143.719" width="12.7" height="326.281" fill="#34d399"><title>CPU (multi-thread, 24 threads) · batch-matmul: 1.3494 ms</title></rect>
-<rect x="521.65" y="305.46" width="12.7" height="164.54" fill="#f59e0b"><title>CUDA (reference) · batch-matmul: 0.0121 ms</title></rect>
-<rect x="535.85" y="288.391" width="12.7" height="181.609" fill="#f472b6"><title>CUDA (cuBLAS) · batch-matmul: 0.0199 ms</title></rect>
-<rect x="550.05" y="270.83" width="12.7" height="199.17" fill="#a78bfa"><title>CUDA (CUTLASS) · batch-matmul: 0.0332 ms</title></rect>
+<rect x="493.25" y="99.6442" width="12.7" height="370.356" fill="#60a5fa"><title>CPU (reference) · batch-matmul: 5.6291 ms</title></rect>
+<rect x="507.45" y="160.299" width="12.7" height="309.701" fill="#34d399"><title>CPU (multi-thread, 24 threads) · batch-matmul: 1.3684 ms</title></rect>
+<rect x="521.65" y="361.68" width="12.7" height="108.32" fill="#f59e0b"><title>CUDA (reference) · batch-matmul: 0.0125 ms</title></rect>
+<rect x="535.85" y="343.949" width="12.7" height="126.051" fill="#f472b6"><title>CUDA (cuBLAS) · batch-matmul: 0.0189 ms</title></rect>
+<rect x="550.05" y="330.107" width="12.7" height="139.893" fill="#a78bfa"><title>CUDA (CUTLASS) · batch-matmul: 0.0261 ms</title></rect>
 <text class="label" text-anchor="end" transform="translate(528.75,488) rotate(-45)">batch-matmul</text>
-<rect x="606.061" y="219.875" width="12.7" height="250.125" fill="#34d399"><title>CPU (multi-thread, 24 threads) · broadcast-add: 0.1466 ms</title></rect>
-<rect x="620.261" y="324.731" width="12.7" height="145.269" fill="#f59e0b"><title>CUDA (reference) · broadcast-add: 0.0069 ms</title></rect>
+<rect x="606.061" y="262.691" width="12.7" height="207.309" fill="#34d399"><title>CPU (multi-thread, 24 threads) · broadcast-add: 0.1257 ms</title></rect>
+<rect x="620.261" y="387.164" width="12.7" height="82.8363" fill="#f59e0b"><title>CUDA (reference) · broadcast-add: 0.0069 ms</title></rect>
 <text class="label" text-anchor="end" transform="translate(627.361,488) rotate(-45)">broadcast-add</text>
-<rect x="704.672" y="219.318" width="12.7" height="250.682" fill="#34d399"><title>CPU (multi-thread, 24 threads) · broadcast-mul: 0.149 ms</title></rect>
-<rect x="718.872" y="325.232" width="12.7" height="144.768" fill="#f59e0b"><title>CUDA (reference) · broadcast-mul: 0.0068 ms</title></rect>
+<rect x="704.672" y="262.691" width="12.7" height="207.309" fill="#34d399"><title>CPU (multi-thread, 24 threads) · broadcast-mul: 0.1257 ms</title></rect>
+<rect x="718.872" y="368.751" width="12.7" height="101.249" fill="#f59e0b"><title>CUDA (reference) · broadcast-mul: 0.0106 ms</title></rect>
 <text class="label" text-anchor="end" transform="translate(725.972,488) rotate(-45)">broadcast-mul</text>
-<rect x="803.283" y="365.545" width="12.7" height="104.455" fill="#34d399"><title>CPU (multi-thread, 24 threads) · scalar-mul: 0.0021 ms</title></rect>
-<rect x="817.483" y="335.781" width="12.7" height="134.219" fill="#f59e0b"><title>CUDA (reference) · scalar-mul: 0.005 ms</title></rect>
+<rect x="803.283" y="335.716" width="12.7" height="134.284" fill="#34d399"><title>CPU (multi-thread, 24 threads) · scalar-mul: 0.0229 ms</title></rect>
+<rect x="817.483" y="412.746" width="12.7" height="57.2536" fill="#f59e0b"><title>CUDA (reference) · scalar-mul: 0.0038 ms</title></rect>
 <text class="label" text-anchor="end" transform="translate(824.583,488) rotate(-45)">scalar-mul</text>
-<rect x="901.894" y="240.485" width="12.7" height="229.515" fill="#34d399"><title>CPU (multi-thread, 24 threads) · reduce-sum: 0.0804 ms</title></rect>
-<rect x="916.094" y="327.312" width="12.7" height="142.688" fill="#f59e0b"><title>CUDA (reference) · reduce-sum: 0.0064 ms</title></rect>
+<rect x="901.894" y="281.431" width="12.7" height="188.569" fill="#34d399"><title>CPU (multi-thread, 24 threads) · reduce-sum: 0.0812 ms</title></rect>
+<rect x="916.094" y="385.338" width="12.7" height="84.6616" fill="#f59e0b"><title>CUDA (reference) · reduce-sum: 0.0072 ms</title></rect>
 <text class="label" text-anchor="end" transform="translate(923.194,488) rotate(-45)">reduce-sum</text>
-<rect x="1000.51" y="240.061" width="12.7" height="229.939" fill="#34d399"><title>CPU (multi-thread, 24 threads) · reduce-mean: 0.0814 ms</title></rect>
-<rect x="1014.71" y="326.78" width="12.7" height="143.22" fill="#f59e0b"><title>CUDA (reference) · reduce-mean: 0.0065 ms</title></rect>
+<rect x="1000.51" y="279.977" width="12.7" height="190.023" fill="#34d399"><title>CPU (multi-thread, 24 threads) · reduce-mean: 0.084 ms</title></rect>
+<rect x="1014.71" y="389.725" width="12.7" height="80.2752" fill="#f59e0b"><title>CUDA (reference) · reduce-mean: 0.0065 ms</title></rect>
 <text class="label" text-anchor="end" transform="translate(1021.81,488) rotate(-45)">reduce-mean</text>
-<rect x="1099.12" y="238.941" width="12.7" height="231.059" fill="#34d399"><title>CPU (multi-thread, 24 threads) · reduce-max: 0.0841 ms</title></rect>
-<rect x="1113.32" y="327.312" width="12.7" height="142.688" fill="#f59e0b"><title>CUDA (reference) · reduce-max: 0.0064 ms</title></rect>
+<rect x="1099.12" y="279.774" width="12.7" height="190.226" fill="#34d399"><title>CPU (multi-thread, 24 threads) · reduce-max: 0.0844 ms</title></rect>
+<rect x="1113.32" y="389.725" width="12.7" height="80.2752" fill="#f59e0b"><title>CUDA (reference) · reduce-max: 0.0065 ms</title></rect>
 <text class="label" text-anchor="end" transform="translate(1120.42,488) rotate(-45)">reduce-max</text>
-<rect x="1197.73" y="216.491" width="12.7" height="253.509" fill="#34d399"><title>CPU (multi-thread, 24 threads) · reduce-var: 0.1618 ms</title></rect>
-<rect x="1211.93" y="326.78" width="12.7" height="143.22" fill="#f59e0b"><title>CUDA (reference) · reduce-var: 0.0065 ms</title></rect>
+<rect x="1197.73" y="251.546" width="12.7" height="218.454" fill="#34d399"><title>CPU (multi-thread, 24 threads) · reduce-var: 0.163 ms</title></rect>
+<rect x="1211.93" y="389.07" width="12.7" height="80.93" fill="#f59e0b"><title>CUDA (reference) · reduce-var: 0.0066 ms</title></rect>
 <text class="label" text-anchor="end" transform="translate(1219.03,488) rotate(-45)">reduce-var</text>
-<rect x="1296.34" y="263.926" width="12.7" height="206.074" fill="#34d399"><title>CPU (multi-thread, 24 threads) · exp: 0.0406 ms</title></rect>
-<rect x="1310.54" y="344.306" width="12.7" height="125.694" fill="#f59e0b"><title>CUDA (reference) · exp: 0.0039 ms</title></rect>
+<rect x="1296.34" y="342.609" width="12.7" height="127.391" fill="#34d399"><title>CPU (multi-thread, 24 threads) · exp: 0.0195 ms</title></rect>
+<rect x="1310.54" y="391.751" width="12.7" height="78.2487" fill="#f59e0b"><title>CUDA (reference) · exp: 0.0062 ms</title></rect>
 <text class="label" text-anchor="end" transform="translate(1317.64,488) rotate(-45)">exp</text>
-<rect x="1394.95" y="276.675" width="12.7" height="193.325" fill="#34d399"><title>CPU (multi-thread, 24 threads) · sqrt: 0.028 ms</title></rect>
-<rect x="1409.15" y="345.197" width="12.7" height="124.803" fill="#f59e0b"><title>CUDA (reference) · sqrt: 0.0038 ms</title></rect>
+<rect x="1394.95" y="403.63" width="12.7" height="66.3697" fill="#34d399"><title>CPU (multi-thread, 24 threads) · sqrt: 0.0047 ms</title></rect>
+<rect x="1409.15" y="399.295" width="12.7" height="70.7053" fill="#f59e0b"><title>CUDA (reference) · sqrt: 0.0052 ms</title></rect>
 <text class="label" text-anchor="end" transform="translate(1416.25,488) rotate(-45)">sqrt</text>
-<rect x="1493.56" y="237.114" width="12.7" height="232.886" fill="#34d399"><title>CPU (multi-thread, 24 threads) · pow: 0.0887 ms</title></rect>
-<rect x="1507.76" y="344.306" width="12.7" height="125.694" fill="#f59e0b"><title>CUDA (reference) · pow: 0.0039 ms</title></rect>
+<rect x="1493.56" y="291.373" width="12.7" height="178.627" fill="#34d399"><title>CPU (multi-thread, 24 threads) · pow: 0.0644 ms</title></rect>
+<rect x="1507.76" y="400.127" width="12.7" height="69.8726" fill="#f59e0b"><title>CUDA (reference) · pow: 0.0051 ms</title></rect>
 <text class="label" text-anchor="end" transform="translate(1514.86,488) rotate(-45)">pow</text>
-<rect x="1592.17" y="229.419" width="12.7" height="240.581" fill="#34d399"><title>CPU (multi-thread, 24 threads) · masked-fill: 0.111 ms</title></rect>
-<rect x="1606.37" y="325.232" width="12.7" height="144.768" fill="#f59e0b"><title>CUDA (reference) · masked-fill: 0.0068 ms</title></rect>
+<rect x="1592.17" y="257.071" width="12.7" height="212.929" fill="#34d399"><title>CPU (multi-thread, 24 threads) · masked-fill: 0.1433 ms</title></rect>
+<rect x="1606.37" y="376.732" width="12.7" height="93.2677" fill="#f59e0b"><title>CUDA (reference) · masked-fill: 0.0088 ms</title></rect>
 <text class="label" text-anchor="end" transform="translate(1613.47,488) rotate(-45)">masked-fill</text>
-<rect x="1690.78" y="179.203" width="12.7" height="290.797" fill="#34d399"><title>CPU (multi-thread, 24 threads) · softmax: 0.4797 ms</title></rect>
-<rect x="1704.98" y="115.009" width="12.7" height="354.991" fill="#f59e0b"><title>CUDA (reference) · softmax: 3.1157 ms</title></rect>
+<rect x="1690.78" y="205.094" width="12.7" height="264.906" fill="#34d399"><title>CPU (multi-thread, 24 threads) · softmax: 0.4815 ms</title></rect>
+<rect x="1704.98" y="117.691" width="12.7" height="352.309" fill="#f59e0b"><title>CUDA (reference) · softmax: 3.6956 ms</title></rect>
 <text class="label" text-anchor="end" transform="translate(1712.08,488) rotate(-45)">softmax</text>
-<rect x="1789.39" y="161.768" width="12.7" height="308.232" fill="#34d399"><title>CPU (multi-thread, 24 threads) · layer-norm: 0.7974 ms</title></rect>
-<rect x="1803.59" y="92.0395" width="12.7" height="377.961" fill="#f59e0b"><title>CUDA (reference) · layer-norm: 6.0857 ms</title></rect>
+<rect x="1789.39" y="183.708" width="12.7" height="286.292" fill="#34d399"><title>CPU (multi-thread, 24 threads) · layer-norm: 0.7928 ms</title></rect>
+<rect x="1803.59" y="88.4106" width="12.7" height="381.589" fill="#f59e0b"><title>CUDA (reference) · layer-norm: 7.3147 ms</title></rect>
 <text class="label" text-anchor="end" transform="translate(1810.69,488) rotate(-45)">layer-norm</text>
 <rect x="85" y="48" width="12" height="12" fill="#60a5fa"/><text class="legend" x="103" y="59">CPU (reference)</text>
 <rect x="233" y="48" width="12" height="12" fill="#34d399"/><text class="legend" x="251" y="59">CPU (multi-thread, 24 threads)</text>
@@ -95,74 +95,74 @@
 <line class="grid" x1="85" x2="1860" y1="233" y2="233"/><text class="axis" text-anchor="end" x="77" y="237">1 ms</text>
 <line class="grid" x1="85" x2="1860" y1="154" y2="154"/><text class="axis" text-anchor="end" x="77" y="158">10 ms</text>
 <line class="grid" x1="85" x2="1860" y1="75" y2="75"/><text class="axis" text-anchor="end" x="77" y="79">100 ms</text>
-<rect x="98.8" y="337" width="12.7" height="133" fill="#60a5fa"><title>CPU (reference) · add: 0.0478 ms</title></rect>
-<rect x="113.006" y="422.437" width="12.7" height="47.5627" fill="#34d399"><title>CPU (multi-thread, 24 threads) · add: 0.004 ms</title></rect>
-<rect x="127.206" y="466.112" width="12.7" height="3.88822" fill="#f59e0b"><title>CUDA (reference) · add: 0.00112 ms</title></rect>
-<rect x="141.406" y="463.29" width="12.7" height="6.70975" fill="#f472b6"><title>CUDA (cuBLAS) · add: 0.001216 ms</title></rect>
-<rect x="155.606" y="465.145" width="12.7" height="4.85475" fill="#a78bfa"><title>CUDA (CUTLASS) · add: 0.001152 ms</title></rect>
+<rect x="98.8" y="322" width="12.7" height="148" fill="#60a5fa"><title>CPU (reference) · add: 0.0741 ms</title></rect>
+<rect x="113.006" y="423.306" width="12.7" height="46.6941" fill="#34d399"><title>CPU (multi-thread, 24 threads) · add: 0.0039 ms</title></rect>
+<rect x="127.206" y="402.577" width="12.7" height="67.4229" fill="#f59e0b"><title>CUDA (reference) · add: 0.007136 ms</title></rect>
+<rect x="141.406" y="426.823" width="12.7" height="43.1769" fill="#f472b6"><title>CUDA (cuBLAS) · add: 0.00352 ms</title></rect>
+<rect x="155.606" y="425.9" width="12.7" height="44.1" fill="#a78bfa"><title>CUDA (CUTLASS) · add: 0.003616 ms</title></rect>
 <text class="label" text-anchor="end" transform="translate(134.306,488) rotate(-45)">add</text>
-<rect x="197.417" y="329.583" width="12.7" height="140.417" fill="#60a5fa"><title>CPU (reference) · sub: 0.0599 ms</title></rect>
-<rect x="211.617" y="422.437" width="12.7" height="47.5627" fill="#34d399"><title>CPU (multi-thread, 24 threads) · sub: 0.004 ms</title></rect>
-<rect x="225.817" y="407.18" width="12.7" height="62.8196" fill="#f59e0b"><title>CUDA (reference) · sub: 0.00624 ms</title></rect>
-<rect x="240.017" y="465.145" width="12.7" height="4.85475" fill="#f472b6"><title>CUDA (cuBLAS) · sub: 0.001152 ms</title></rect>
-<rect x="254.217" y="465.145" width="12.7" height="4.85475" fill="#a78bfa"><title>CUDA (CUTLASS) · sub: 0.001152 ms</title></rect>
+<rect x="197.417" y="337.111" width="12.7" height="132.889" fill="#60a5fa"><title>CPU (reference) · sub: 0.0481 ms</title></rect>
+<rect x="211.617" y="425.112" width="12.7" height="44.8879" fill="#34d399"><title>CPU (multi-thread, 24 threads) · sub: 0.0037 ms</title></rect>
+<rect x="225.817" y="409.737" width="12.7" height="60.2635" fill="#f59e0b"><title>CUDA (reference) · sub: 0.005792 ms</title></rect>
+<rect x="240.017" y="413.541" width="12.7" height="56.4585" fill="#f472b6"><title>CUDA (cuBLAS) · sub: 0.005184 ms</title></rect>
+<rect x="254.217" y="426.513" width="12.7" height="43.4874" fill="#a78bfa"><title>CUDA (CUTLASS) · sub: 0.003552 ms</title></rect>
 <text class="label" text-anchor="end" transform="translate(232.917,488) rotate(-45)">sub</text>
-<rect x="296.028" y="156.427" width="12.7" height="313.573" fill="#60a5fa"><title>CPU (reference) · matmul: 9.317 ms</title></rect>
-<rect x="310.228" y="221.5" width="12.7" height="248.5" fill="#34d399"><title>CPU (multi-thread, 24 threads) · matmul: 1.3982 ms</title></rect>
-<rect x="324.428" y="463.29" width="12.7" height="6.70975" fill="#f59e0b"><title>CUDA (reference) · matmul: 0.001216 ms</title></rect>
+<rect x="296.028" y="154.305" width="12.7" height="315.695" fill="#60a5fa"><title>CPU (reference) · matmul: 9.9114 ms</title></rect>
+<rect x="310.228" y="221.778" width="12.7" height="248.222" fill="#34d399"><title>CPU (multi-thread, 24 threads) · matmul: 1.3869 ms</title></rect>
+<rect x="324.428" y="377.144" width="12.7" height="92.8563" fill="#f59e0b"><title>CUDA (reference) · matmul: 0.014976 ms</title></rect>
 <rect x="338.628" y="391.721" width="12.7" height="78.2788" fill="#f472b6"><title>CUDA (cuBLAS) · matmul: 0.009792 ms</title></rect>
-<rect x="352.828" y="464.205" width="12.7" height="5.79479" fill="#a78bfa"><title>CUDA (CUTLASS) · matmul: 0.001184 ms</title></rect>
+<rect x="352.828" y="364.936" width="12.7" height="105.064" fill="#a78bfa"><title>CUDA (CUTLASS) · matmul: 0.021376 ms</title></rect>
 <text class="label" text-anchor="end" transform="translate(331.528,488) rotate(-45)">matmul</text>
-<rect x="394.639" y="152.69" width="12.7" height="317.31" fill="#60a5fa"><title>CPU (reference) · matmul-weight-t: 10.3891 ms</title></rect>
-<rect x="408.839" y="211.484" width="12.7" height="258.516" fill="#34d399"><title>CPU (multi-thread, 24 threads) · matmul-weight-t: 1.8722 ms</title></rect>
-<rect x="423.039" y="370.742" width="12.7" height="99.2579" fill="#f59e0b"><title>CUDA (reference) · matmul-weight-t: 0.018048 ms</title></rect>
-<rect x="437.239" y="389.235" width="12.7" height="80.7653" fill="#f472b6"><title>CUDA (cuBLAS) · matmul-weight-t: 0.010528 ms</title></rect>
-<rect x="451.439" y="463.29" width="12.7" height="6.70975" fill="#a78bfa"><title>CUDA (CUTLASS) · matmul-weight-t: 0.001216 ms</title></rect>
+<rect x="394.639" y="152.844" width="12.7" height="317.156" fill="#60a5fa"><title>CPU (reference) · matmul-weight-t: 10.3427 ms</title></rect>
+<rect x="408.839" y="211.521" width="12.7" height="258.479" fill="#34d399"><title>CPU (multi-thread, 24 threads) · matmul-weight-t: 1.8702 ms</title></rect>
+<rect x="423.039" y="360.872" width="12.7" height="109.128" fill="#f59e0b"><title>CUDA (reference) · matmul-weight-t: 0.024064 ms</title></rect>
+<rect x="437.239" y="385.485" width="12.7" height="84.5155" fill="#f472b6"><title>CUDA (cuBLAS) · matmul-weight-t: 0.011744 ms</title></rect>
+<rect x="451.439" y="360.645" width="12.7" height="109.355" fill="#a78bfa"><title>CUDA (CUTLASS) · matmul-weight-t: 0.024224 ms</title></rect>
 <text class="label" text-anchor="end" transform="translate(430.139,488) rotate(-45)">matmul-weight-t</text>
-<rect x="493.25" y="82.7577" width="12.7" height="387.242" fill="#60a5fa"><title>CPU (reference) · batch-matmul: 79.763 ms</title></rect>
-<rect x="507.45" y="162.94" width="12.7" height="307.06" fill="#34d399"><title>CPU (multi-thread, 24 threads) · batch-matmul: 7.7061 ms</title></rect>
-<rect x="521.65" y="282.627" width="12.7" height="187.373" fill="#f59e0b"><title>CUDA (reference) · batch-matmul: 0.2354 ms</title></rect>
-<rect x="535.85" y="279.535" width="12.7" height="190.465" fill="#f472b6"><title>CUDA (cuBLAS) · batch-matmul: 0.2576 ms</title></rect>
-<rect x="550.05" y="276.662" width="12.7" height="193.338" fill="#a78bfa"><title>CUDA (CUTLASS) · batch-matmul: 0.2801 ms</title></rect>
+<rect x="493.25" y="82.3493" width="12.7" height="387.651" fill="#60a5fa"><title>CPU (reference) · batch-matmul: 80.7181 ms</title></rect>
+<rect x="507.45" y="163.694" width="12.7" height="306.306" fill="#34d399"><title>CPU (multi-thread, 24 threads) · batch-matmul: 7.5387 ms</title></rect>
+<rect x="521.65" y="281.721" width="12.7" height="188.279" fill="#f59e0b"><title>CUDA (reference) · batch-matmul: 0.2417 ms</title></rect>
+<rect x="535.85" y="281.284" width="12.7" height="188.716" fill="#f472b6"><title>CUDA (cuBLAS) · batch-matmul: 0.2448 ms</title></rect>
+<rect x="550.05" y="279.178" width="12.7" height="190.822" fill="#a78bfa"><title>CUDA (CUTLASS) · batch-matmul: 0.2603 ms</title></rect>
 <text class="label" text-anchor="end" transform="translate(528.75,488) rotate(-45)">batch-matmul</text>
-<rect x="606.061" y="256.183" width="12.7" height="213.817" fill="#34d399"><title>CPU (multi-thread, 24 threads) · broadcast-add: 0.5088 ms</title></rect>
-<rect x="620.261" y="401.331" width="12.7" height="68.6693" fill="#f59e0b"><title>CUDA (reference) · broadcast-add: 0.0074 ms</title></rect>
+<rect x="606.061" y="254.601" width="12.7" height="215.399" fill="#34d399"><title>CPU (multi-thread, 24 threads) · broadcast-add: 0.5328 ms</title></rect>
+<rect x="620.261" y="390.659" width="12.7" height="79.3414" fill="#f59e0b"><title>CUDA (reference) · broadcast-add: 0.0101 ms</title></rect>
 <text class="label" text-anchor="end" transform="translate(627.361,488) rotate(-45)">broadcast-add</text>
-<rect x="704.672" y="256.338" width="12.7" height="213.662" fill="#34d399"><title>CPU (multi-thread, 24 threads) · broadcast-mul: 0.5065 ms</title></rect>
-<rect x="718.872" y="386.807" width="12.7" height="83.1932" fill="#f59e0b"><title>CUDA (reference) · broadcast-mul: 0.0113 ms</title></rect>
+<rect x="704.672" y="254.698" width="12.7" height="215.302" fill="#34d399"><title>CPU (multi-thread, 24 threads) · broadcast-mul: 0.5313 ms</title></rect>
+<rect x="718.872" y="400.87" width="12.7" height="69.1298" fill="#f59e0b"><title>CUDA (reference) · broadcast-mul: 0.0075 ms</title></rect>
 <text class="label" text-anchor="end" transform="translate(725.972,488) rotate(-45)">broadcast-mul</text>
-<rect x="803.283" y="392.76" width="12.7" height="77.2402" fill="#34d399"><title>CPU (multi-thread, 24 threads) · scalar-mul: 0.0095 ms</title></rect>
-<rect x="817.483" y="410.893" width="12.7" height="59.1069" fill="#f59e0b"><title>CUDA (reference) · scalar-mul: 0.0056 ms</title></rect>
+<rect x="803.283" y="347.532" width="12.7" height="122.468" fill="#34d399"><title>CPU (multi-thread, 24 threads) · scalar-mul: 0.0355 ms</title></rect>
+<rect x="817.483" y="403.237" width="12.7" height="66.7627" fill="#f59e0b"><title>CUDA (reference) · scalar-mul: 0.007 ms</title></rect>
 <text class="label" text-anchor="end" transform="translate(824.583,488) rotate(-45)">scalar-mul</text>
-<rect x="901.894" y="271.382" width="12.7" height="198.618" fill="#34d399"><title>CPU (multi-thread, 24 threads) · reduce-sum: 0.3267 ms</title></rect>
+<rect x="901.894" y="271.911" width="12.7" height="198.089" fill="#34d399"><title>CPU (multi-thread, 24 threads) · reduce-sum: 0.3217 ms</title></rect>
 <rect x="916.094" y="405.256" width="12.7" height="64.744" fill="#f59e0b"><title>CUDA (reference) · reduce-sum: 0.0066 ms</title></rect>
 <text class="label" text-anchor="end" transform="translate(923.194,488) rotate(-45)">reduce-sum</text>
-<rect x="1000.51" y="271.466" width="12.7" height="198.534" fill="#34d399"><title>CPU (multi-thread, 24 threads) · reduce-mean: 0.3259 ms</title></rect>
-<rect x="1014.71" y="384.745" width="12.7" height="85.2553" fill="#f59e0b"><title>CUDA (reference) · reduce-mean: 0.012 ms</title></rect>
+<rect x="1000.51" y="271.731" width="12.7" height="198.269" fill="#34d399"><title>CPU (multi-thread, 24 threads) · reduce-mean: 0.3234 ms</title></rect>
+<rect x="1014.71" y="404.74" width="12.7" height="65.2599" fill="#f59e0b"><title>CUDA (reference) · reduce-mean: 0.0067 ms</title></rect>
 <text class="label" text-anchor="end" transform="translate(1021.81,488) rotate(-45)">reduce-mean</text>
-<rect x="1099.12" y="271.372" width="12.7" height="198.628" fill="#34d399"><title>CPU (multi-thread, 24 threads) · reduce-max: 0.3268 ms</title></rect>
+<rect x="1099.12" y="271.762" width="12.7" height="198.238" fill="#34d399"><title>CPU (multi-thread, 24 threads) · reduce-max: 0.3231 ms</title></rect>
 <rect x="1113.32" y="405.256" width="12.7" height="64.744" fill="#f59e0b"><title>CUDA (reference) · reduce-max: 0.0066 ms</title></rect>
 <text class="label" text-anchor="end" transform="translate(1120.42,488) rotate(-45)">reduce-max</text>
-<rect x="1197.73" y="247.622" width="12.7" height="222.378" fill="#34d399"><title>CPU (multi-thread, 24 threads) · reduce-var: 0.653 ms</title></rect>
-<rect x="1211.93" y="404.74" width="12.7" height="65.2599" fill="#f59e0b"><title>CUDA (reference) · reduce-var: 0.0067 ms</title></rect>
+<rect x="1197.73" y="247.769" width="12.7" height="222.231" fill="#34d399"><title>CPU (multi-thread, 24 threads) · reduce-var: 0.6502 ms</title></rect>
+<rect x="1211.93" y="403.731" width="12.7" height="66.2691" fill="#f59e0b"><title>CUDA (reference) · reduce-var: 0.0069 ms</title></rect>
 <text class="label" text-anchor="end" transform="translate(1219.03,488) rotate(-45)">reduce-var</text>
-<rect x="1296.34" y="320.701" width="12.7" height="149.299" fill="#34d399"><title>CPU (multi-thread, 24 threads) · exp: 0.0776 ms</title></rect>
-<rect x="1310.54" y="418.396" width="12.7" height="51.6038" fill="#f59e0b"><title>CUDA (reference) · exp: 0.0045 ms</title></rect>
+<rect x="1296.34" y="320.834" width="12.7" height="149.166" fill="#34d399"><title>CPU (multi-thread, 24 threads) · exp: 0.0773 ms</title></rect>
+<rect x="1310.54" y="417.642" width="12.7" height="52.3579" fill="#f59e0b"><title>CUDA (reference) · exp: 0.0046 ms</title></rect>
 <text class="label" text-anchor="end" transform="translate(1317.64,488) rotate(-45)">exp</text>
-<rect x="1394.95" y="367.912" width="12.7" height="102.088" fill="#34d399"><title>CPU (multi-thread, 24 threads) · sqrt: 0.0196 ms</title></rect>
-<rect x="1409.15" y="416.904" width="12.7" height="53.0957" fill="#f59e0b"><title>CUDA (reference) · sqrt: 0.0047 ms</title></rect>
+<rect x="1394.95" y="370.266" width="12.7" height="99.7336" fill="#34d399"><title>CPU (multi-thread, 24 threads) · sqrt: 0.0183 ms</title></rect>
+<rect x="1409.15" y="418.396" width="12.7" height="51.6038" fill="#f59e0b"><title>CUDA (reference) · sqrt: 0.0045 ms</title></rect>
 <text class="label" text-anchor="end" transform="translate(1416.25,488) rotate(-45)">sqrt</text>
-<rect x="1493.56" y="279.629" width="12.7" height="190.371" fill="#34d399"><title>CPU (multi-thread, 24 threads) · pow: 0.2569 ms</title></rect>
-<rect x="1507.76" y="418.396" width="12.7" height="51.6038" fill="#f59e0b"><title>CUDA (reference) · pow: 0.0045 ms</title></rect>
+<rect x="1493.56" y="279.951" width="12.7" height="190.049" fill="#34d399"><title>CPU (multi-thread, 24 threads) · pow: 0.2545 ms</title></rect>
+<rect x="1507.76" y="402.271" width="12.7" height="67.7293" fill="#f59e0b"><title>CUDA (reference) · pow: 0.0072 ms</title></rect>
 <text class="label" text-anchor="end" transform="translate(1514.86,488) rotate(-45)">pow</text>
-<rect x="1592.17" y="260.71" width="12.7" height="209.29" fill="#34d399"><title>CPU (multi-thread, 24 threads) · masked-fill: 0.4459 ms</title></rect>
-<rect x="1606.37" y="401.331" width="12.7" height="68.6693" fill="#f59e0b"><title>CUDA (reference) · masked-fill: 0.0074 ms</title></rect>
+<rect x="1592.17" y="257.982" width="12.7" height="212.018" fill="#34d399"><title>CPU (multi-thread, 24 threads) · masked-fill: 0.4828 ms</title></rect>
+<rect x="1606.37" y="400.87" width="12.7" height="69.1298" fill="#f59e0b"><title>CUDA (reference) · masked-fill: 0.0075 ms</title></rect>
 <text class="label" text-anchor="end" transform="translate(1613.47,488) rotate(-45)">masked-fill</text>
-<rect x="1690.78" y="210.798" width="12.7" height="259.202" fill="#34d399"><title>CPU (multi-thread, 24 threads) · softmax: 1.91 ms</title></rect>
-<rect x="1704.98" y="192.74" width="12.7" height="277.26" fill="#f59e0b"><title>CUDA (reference) · softmax: 3.2331 ms</title></rect>
+<rect x="1690.78" y="210.788" width="12.7" height="259.212" fill="#34d399"><title>CPU (multi-thread, 24 threads) · softmax: 1.9106 ms</title></rect>
+<rect x="1704.98" y="189.574" width="12.7" height="280.426" fill="#f59e0b"><title>CUDA (reference) · softmax: 3.5457 ms</title></rect>
 <text class="label" text-anchor="end" transform="translate(1712.08,488) rotate(-45)">softmax</text>
-<rect x="1789.39" y="193.156" width="12.7" height="276.844" fill="#34d399"><title>CPU (multi-thread, 24 threads) · layer-norm: 3.1941 ms</title></rect>
-<rect x="1803.59" y="170.803" width="12.7" height="299.197" fill="#f59e0b"><title>CUDA (reference) · layer-norm: 6.1278 ms</title></rect>
+<rect x="1789.39" y="193.011" width="12.7" height="276.989" fill="#34d399"><title>CPU (multi-thread, 24 threads) · layer-norm: 3.2077 ms</title></rect>
+<rect x="1803.59" y="164.612" width="12.7" height="305.388" fill="#f59e0b"><title>CUDA (reference) · layer-norm: 7.3395 ms</title></rect>
 <text class="label" text-anchor="end" transform="translate(1810.69,488) rotate(-45)">layer-norm</text>
 <rect x="85" y="48" width="12" height="12" fill="#60a5fa"/><text class="legend" x="103" y="59">CPU (reference)</text>
 <rect x="233" y="48" width="12" height="12" fill="#34d399"/><text class="legend" x="251" y="59">CPU (multi-thread, 24 threads)</text>
@@ -178,74 +178,74 @@
 <line class="grid" x1="85" x2="1860" y1="233" y2="233"/><text class="axis" text-anchor="end" x="77" y="237">3.98 ms</text>
 <line class="grid" x1="85" x2="1860" y1="154" y2="154"/><text class="axis" text-anchor="end" x="77" y="158">63.1 ms</text>
 <line class="grid" x1="85" x2="1860" y1="75" y2="75"/><text class="axis" text-anchor="end" x="77" y="79">1e+03 ms</text>
-<rect x="98.8" y="320" width="12.7" height="150" fill="#60a5fa"><title>CPU (reference) · add: 0.1913 ms</title></rect>
-<rect x="113.006" y="335.247" width="12.7" height="134.753" fill="#34d399"><title>CPU (multi-thread, 24 threads) · add: 0.1114 ms</title></rect>
-<rect x="127.206" y="424.773" width="12.7" height="45.2271" fill="#f59e0b"><title>CUDA (reference) · add: 0.004864 ms</title></rect>
-<rect x="141.406" y="466.76" width="12.7" height="3.24019" fill="#f472b6"><title>CUDA (cuBLAS) · add: 0.00112 ms</title></rect>
-<rect x="155.606" y="465.171" width="12.7" height="4.82899" fill="#a78bfa"><title>CUDA (CUTLASS) · add: 0.001184 ms</title></rect>
+<rect x="98.8" y="320" width="12.7" height="150" fill="#60a5fa"><title>CPU (reference) · add: 0.1914 ms</title></rect>
+<rect x="113.006" y="336.64" width="12.7" height="133.36" fill="#34d399"><title>CPU (multi-thread, 24 threads) · add: 0.1061 ms</title></rect>
+<rect x="127.206" y="427.744" width="12.7" height="42.2565" fill="#f59e0b"><title>CUDA (reference) · add: 0.004384 ms</title></rect>
+<rect x="141.406" y="428.807" width="12.7" height="41.1935" fill="#f472b6"><title>CUDA (cuBLAS) · add: 0.004224 ms</title></rect>
+<rect x="155.606" y="423.486" width="12.7" height="46.5144" fill="#a78bfa"><title>CUDA (CUTLASS) · add: 0.005088 ms</title></rect>
 <text class="label" text-anchor="end" transform="translate(134.306,488) rotate(-45)">add</text>
-<rect x="197.417" y="313.542" width="12.7" height="156.458" fill="#60a5fa"><title>CPU (reference) · sub: 0.238 ms</title></rect>
-<rect x="211.617" y="335.608" width="12.7" height="134.392" fill="#34d399"><title>CPU (multi-thread, 24 threads) · sub: 0.11 ms</title></rect>
-<rect x="225.817" y="435.349" width="12.7" height="34.6507" fill="#f59e0b"><title>CUDA (reference) · sub: 0.00336 ms</title></rect>
-<rect x="240.017" y="465.171" width="12.7" height="4.82899" fill="#f472b6"><title>CUDA (cuBLAS) · sub: 0.001184 ms</title></rect>
-<rect x="254.217" y="463.666" width="12.7" height="6.33413" fill="#a78bfa"><title>CUDA (CUTLASS) · sub: 0.001248 ms</title></rect>
+<rect x="197.417" y="319.847" width="12.7" height="150.153" fill="#60a5fa"><title>CPU (reference) · sub: 0.1909 ms</title></rect>
+<rect x="211.617" y="331.635" width="12.7" height="138.365" fill="#34d399"><title>CPU (multi-thread, 24 threads) · sub: 0.1264 ms</title></rect>
+<rect x="225.817" y="427.953" width="12.7" height="42.047" fill="#f59e0b"><title>CUDA (reference) · sub: 0.004352 ms</title></rect>
+<rect x="240.017" y="423.848" width="12.7" height="46.1524" fill="#f472b6"><title>CUDA (cuBLAS) · sub: 0.005024 ms</title></rect>
+<rect x="254.217" y="410.319" width="12.7" height="59.6812" fill="#a78bfa"><title>CUDA (CUTLASS) · sub: 0.008064 ms</title></rect>
 <text class="label" text-anchor="end" transform="translate(232.917,488) rotate(-45)">sub</text>
-<rect x="296.028" y="136.11" width="12.7" height="333.89" fill="#60a5fa"><title>CPU (reference) · matmul: 117.964 ms</title></rect>
-<rect x="310.228" y="213.157" width="12.7" height="256.843" fill="#34d399"><title>CPU (multi-thread, 24 threads) · matmul: 7.9693 ms</title></rect>
-<rect x="324.428" y="429.686" width="12.7" height="40.3137" fill="#f59e0b"><title>CUDA (reference) · matmul: 0.004096 ms</title></rect>
-<rect x="338.628" y="464.409" width="12.7" height="5.59146" fill="#f472b6"><title>CUDA (cuBLAS) · matmul: 0.001216 ms</title></rect>
-<rect x="352.828" y="451.349" width="12.7" height="18.6507" fill="#a78bfa"><title>CUDA (CUTLASS) · matmul: 0.00192 ms</title></rect>
+<rect x="296.028" y="136.421" width="12.7" height="333.579" fill="#60a5fa"><title>CPU (reference) · matmul: 116.686 ms</title></rect>
+<rect x="310.228" y="212.693" width="12.7" height="257.307" fill="#34d399"><title>CPU (multi-thread, 24 threads) · matmul: 8.0995 ms</title></rect>
+<rect x="324.428" y="346.409" width="12.7" height="123.591" fill="#f59e0b"><title>CUDA (reference) · matmul: 0.075392 ms</title></rect>
+<rect x="338.628" y="382.106" width="12.7" height="87.8939" fill="#f472b6"><title>CUDA (cuBLAS) · matmul: 0.021632 ms</title></rect>
+<rect x="352.828" y="364.145" width="12.7" height="105.855" fill="#a78bfa"><title>CUDA (CUTLASS) · matmul: 0.040544 ms</title></rect>
 <text class="label" text-anchor="end" transform="translate(331.528,488) rotate(-45)">matmul</text>
-<rect x="394.639" y="135.933" width="12.7" height="334.067" fill="#60a5fa"><title>CPU (reference) · matmul-weight-t: 118.696 ms</title></rect>
-<rect x="408.839" y="206.295" width="12.7" height="263.705" fill="#34d399"><title>CPU (multi-thread, 24 threads) · matmul-weight-t: 10.1307 ms</title></rect>
-<rect x="423.039" y="326.428" width="12.7" height="143.572" fill="#f59e0b"><title>CUDA (reference) · matmul-weight-t: 0.151648 ms</title></rect>
-<rect x="437.239" y="410.093" width="12.7" height="59.9073" fill="#f472b6"><title>CUDA (cuBLAS) · matmul-weight-t: 0.008128 ms</title></rect>
-<rect x="451.439" y="462.236" width="12.7" height="7.76398" fill="#a78bfa"><title>CUDA (CUTLASS) · matmul-weight-t: 0.001312 ms</title></rect>
+<rect x="394.639" y="135.701" width="12.7" height="334.299" fill="#60a5fa"><title>CPU (reference) · matmul-weight-t: 119.664 ms</title></rect>
+<rect x="408.839" y="207.382" width="12.7" height="262.618" fill="#34d399"><title>CPU (multi-thread, 24 threads) · matmul-weight-t: 9.753 ms</title></rect>
+<rect x="423.039" y="324.764" width="12.7" height="145.236" fill="#f59e0b"><title>CUDA (reference) · matmul-weight-t: 0.160736 ms</title></rect>
+<rect x="437.239" y="377.291" width="12.7" height="92.7091" fill="#f472b6"><title>CUDA (cuBLAS) · matmul-weight-t: 0.0256 ms</title></rect>
+<rect x="451.439" y="361.785" width="12.7" height="108.215" fill="#a78bfa"><title>CUDA (CUTLASS) · matmul-weight-t: 0.044032 ms</title></rect>
 <text class="label" text-anchor="end" transform="translate(430.139,488) rotate(-45)">matmul-weight-t</text>
-<rect x="493.25" y="76.9536" width="12.7" height="393.046" fill="#60a5fa"><title>CPU (reference) · batch-matmul: 933.952 ms</title></rect>
-<rect x="507.45" y="154.194" width="12.7" height="315.806" fill="#34d399"><title>CPU (multi-thread, 24 threads) · batch-matmul: 62.669 ms</title></rect>
-<rect x="521.65" y="277.55" width="12.7" height="192.45" fill="#f59e0b"><title>CUDA (reference) · batch-matmul: 0.8381 ms</title></rect>
-<rect x="535.85" y="275.037" width="12.7" height="194.963" fill="#f472b6"><title>CUDA (cuBLAS) · batch-matmul: 0.9151 ms</title></rect>
-<rect x="550.05" y="273.849" width="12.7" height="196.151" fill="#a78bfa"><title>CUDA (CUTLASS) · batch-matmul: 0.9539 ms</title></rect>
+<rect x="493.25" y="76.8895" width="12.7" height="393.11" fill="#60a5fa"><title>CPU (reference) · batch-matmul: 936.048 ms</title></rect>
+<rect x="507.45" y="153.039" width="12.7" height="316.961" fill="#34d399"><title>CPU (multi-thread, 24 threads) · batch-matmul: 65.252 ms</title></rect>
+<rect x="521.65" y="276.809" width="12.7" height="193.191" fill="#f59e0b"><title>CUDA (reference) · batch-matmul: 0.8601 ms</title></rect>
+<rect x="535.85" y="275.2" width="12.7" height="194.8" fill="#f472b6"><title>CUDA (cuBLAS) · batch-matmul: 0.9099 ms</title></rect>
+<rect x="550.05" y="276.796" width="12.7" height="193.204" fill="#a78bfa"><title>CUDA (CUTLASS) · batch-matmul: 0.8605 ms</title></rect>
 <text class="label" text-anchor="end" transform="translate(528.75,488) rotate(-45)">batch-matmul</text>
-<rect x="606.061" y="249.197" width="12.7" height="220.803" fill="#34d399"><title>CPU (multi-thread, 24 threads) · broadcast-add: 2.2593 ms</title></rect>
-<rect x="620.261" y="332.137" width="12.7" height="137.863" fill="#f59e0b"><title>CUDA (reference) · broadcast-add: 0.1242 ms</title></rect>
+<rect x="606.061" y="249.127" width="12.7" height="220.873" fill="#34d399"><title>CPU (multi-thread, 24 threads) · broadcast-add: 2.2648 ms</title></rect>
+<rect x="620.261" y="328.348" width="12.7" height="141.652" fill="#f59e0b"><title>CUDA (reference) · broadcast-add: 0.1418 ms</title></rect>
 <text class="label" text-anchor="end" transform="translate(627.361,488) rotate(-45)">broadcast-add</text>
-<rect x="704.672" y="249.043" width="12.7" height="220.957" fill="#34d399"><title>CPU (multi-thread, 24 threads) · broadcast-mul: 2.2715 ms</title></rect>
-<rect x="718.872" y="331.976" width="12.7" height="138.024" fill="#f59e0b"><title>CUDA (reference) · broadcast-mul: 0.1249 ms</title></rect>
+<rect x="704.672" y="249.052" width="12.7" height="220.948" fill="#34d399"><title>CPU (multi-thread, 24 threads) · broadcast-mul: 2.2708 ms</title></rect>
+<rect x="718.872" y="328.167" width="12.7" height="141.833" fill="#f59e0b"><title>CUDA (reference) · broadcast-mul: 0.1427 ms</title></rect>
 <text class="label" text-anchor="end" transform="translate(725.972,488) rotate(-45)">broadcast-mul</text>
-<rect x="803.283" y="309.018" width="12.7" height="160.982" fill="#34d399"><title>CPU (multi-thread, 24 threads) · scalar-mul: 0.2788 ms</title></rect>
-<rect x="817.483" y="333.192" width="12.7" height="136.808" fill="#f59e0b"><title>CUDA (reference) · scalar-mul: 0.1197 ms</title></rect>
+<rect x="803.283" y="308.309" width="12.7" height="161.691" fill="#34d399"><title>CPU (multi-thread, 24 threads) · scalar-mul: 0.2858 ms</title></rect>
+<rect x="817.483" y="330.461" width="12.7" height="139.539" fill="#f59e0b"><title>CUDA (reference) · scalar-mul: 0.1317 ms</title></rect>
 <text class="label" text-anchor="end" transform="translate(824.583,488) rotate(-45)">scalar-mul</text>
-<rect x="901.894" y="265.034" width="12.7" height="204.966" fill="#34d399"><title>CPU (multi-thread, 24 threads) · reduce-sum: 1.2984 ms</title></rect>
-<rect x="916.094" y="416.047" width="12.7" height="53.9533" fill="#f59e0b"><title>CUDA (reference) · reduce-sum: 0.0066 ms</title></rect>
+<rect x="901.894" y="265.005" width="12.7" height="204.995" fill="#34d399"><title>CPU (multi-thread, 24 threads) · reduce-sum: 1.2997 ms</title></rect>
+<rect x="916.094" y="414.776" width="12.7" height="55.2242" fill="#f59e0b"><title>CUDA (reference) · reduce-sum: 0.0069 ms</title></rect>
 <text class="label" text-anchor="end" transform="translate(923.194,488) rotate(-45)">reduce-sum</text>
-<rect x="1000.51" y="264.871" width="12.7" height="205.129" fill="#34d399"><title>CPU (multi-thread, 24 threads) · reduce-mean: 1.3058 ms</title></rect>
+<rect x="1000.51" y="264.797" width="12.7" height="205.203" fill="#34d399"><title>CPU (multi-thread, 24 threads) · reduce-mean: 1.3092 ms</title></rect>
 <rect x="1014.71" y="415.617" width="12.7" height="54.3833" fill="#f59e0b"><title>CUDA (reference) · reduce-mean: 0.0067 ms</title></rect>
 <text class="label" text-anchor="end" transform="translate(1021.81,488) rotate(-45)">reduce-mean</text>
-<rect x="1099.12" y="265.052" width="12.7" height="204.948" fill="#34d399"><title>CPU (multi-thread, 24 threads) · reduce-max: 1.2976 ms</title></rect>
+<rect x="1099.12" y="264.983" width="12.7" height="205.017" fill="#34d399"><title>CPU (multi-thread, 24 threads) · reduce-max: 1.3007 ms</title></rect>
 <rect x="1113.32" y="415.617" width="12.7" height="54.3833" fill="#f59e0b"><title>CUDA (reference) · reduce-max: 0.0067 ms</title></rect>
 <text class="label" text-anchor="end" transform="translate(1120.42,488) rotate(-45)">reduce-max</text>
-<rect x="1197.73" y="245.212" width="12.7" height="224.788" fill="#34d399"><title>CPU (multi-thread, 24 threads) · reduce-var: 2.5972 ms</title></rect>
-<rect x="1211.93" y="416.047" width="12.7" height="53.9533" fill="#f59e0b"><title>CUDA (reference) · reduce-var: 0.0066 ms</title></rect>
+<rect x="1197.73" y="245.051" width="12.7" height="224.949" fill="#34d399"><title>CPU (multi-thread, 24 threads) · reduce-var: 2.6118 ms</title></rect>
+<rect x="1211.93" y="414.776" width="12.7" height="55.2242" fill="#f59e0b"><title>CUDA (reference) · reduce-var: 0.0069 ms</title></rect>
 <text class="label" text-anchor="end" transform="translate(1219.03,488) rotate(-45)">reduce-var</text>
-<rect x="1296.34" y="289.329" width="12.7" height="180.671" fill="#34d399"><title>CPU (multi-thread, 24 threads) · exp: 0.5551 ms</title></rect>
-<rect x="1310.54" y="333.002" width="12.7" height="136.998" fill="#f59e0b"><title>CUDA (reference) · exp: 0.1205 ms</title></rect>
+<rect x="1296.34" y="288.456" width="12.7" height="181.544" fill="#34d399"><title>CPU (multi-thread, 24 threads) · exp: 0.5723 ms</title></rect>
+<rect x="1310.54" y="329.668" width="12.7" height="140.332" fill="#f59e0b"><title>CUDA (reference) · exp: 0.1354 ms</title></rect>
 <text class="label" text-anchor="end" transform="translate(1317.64,488) rotate(-45)">exp</text>
-<rect x="1394.95" y="304.494" width="12.7" height="165.506" fill="#34d399"><title>CPU (multi-thread, 24 threads) · sqrt: 0.3266 ms</title></rect>
-<rect x="1409.15" y="333.504" width="12.7" height="136.496" fill="#f59e0b"><title>CUDA (reference) · sqrt: 0.1184 ms</title></rect>
+<rect x="1394.95" y="303.982" width="12.7" height="166.018" fill="#34d399"><title>CPU (multi-thread, 24 threads) · sqrt: 0.3325 ms</title></rect>
+<rect x="1409.15" y="328.877" width="12.7" height="141.123" fill="#f59e0b"><title>CUDA (reference) · sqrt: 0.1392 ms</title></rect>
 <text class="label" text-anchor="end" transform="translate(1416.25,488) rotate(-45)">sqrt</text>
-<rect x="1493.56" y="265.507" width="12.7" height="204.493" fill="#34d399"><title>CPU (multi-thread, 24 threads) · pow: 1.2771 ms</title></rect>
-<rect x="1507.76" y="333.408" width="12.7" height="136.592" fill="#f59e0b"><title>CUDA (reference) · pow: 0.1188 ms</title></rect>
+<rect x="1493.56" y="265.001" width="12.7" height="204.999" fill="#34d399"><title>CPU (multi-thread, 24 threads) · pow: 1.2999 ms</title></rect>
+<rect x="1507.76" y="330.051" width="12.7" height="139.949" fill="#f59e0b"><title>CUDA (reference) · pow: 0.1336 ms</title></rect>
 <text class="label" text-anchor="end" transform="translate(1514.86,488) rotate(-45)">pow</text>
-<rect x="1592.17" y="252.327" width="12.7" height="217.673" fill="#34d399"><title>CPU (multi-thread, 24 threads) · masked-fill: 2.025 ms</title></rect>
-<rect x="1606.37" y="331.635" width="12.7" height="138.365" fill="#f59e0b"><title>CUDA (reference) · masked-fill: 0.1264 ms</title></rect>
+<rect x="1592.17" y="250.319" width="12.7" height="219.681" fill="#34d399"><title>CPU (multi-thread, 24 threads) · masked-fill: 2.1723 ms</title></rect>
+<rect x="1606.37" y="329.838" width="12.7" height="140.162" fill="#f59e0b"><title>CUDA (reference) · masked-fill: 0.1346 ms</title></rect>
 <text class="label" text-anchor="end" transform="translate(1613.47,488) rotate(-45)">masked-fill</text>
-<rect x="1690.78" y="213.745" width="12.7" height="256.255" fill="#34d399"><title>CPU (multi-thread, 24 threads) · softmax: 7.807 ms</title></rect>
-<rect x="1704.98" y="238.849" width="12.7" height="231.151" fill="#f59e0b"><title>CUDA (reference) · softmax: 3.2446 ms</title></rect>
+<rect x="1690.78" y="213.688" width="12.7" height="256.312" fill="#34d399"><title>CPU (multi-thread, 24 threads) · softmax: 7.8225 ms</title></rect>
+<rect x="1704.98" y="235.113" width="12.7" height="234.887" fill="#f59e0b"><title>CUDA (reference) · softmax: 3.6974 ms</title></rect>
 <text class="label" text-anchor="end" transform="translate(1712.08,488) rotate(-45)">softmax</text>
-<rect x="1789.39" y="199.05" width="12.7" height="270.95" fill="#34d399"><title>CPU (multi-thread, 24 threads) · layer-norm: 13.0528 ms</title></rect>
-<rect x="1803.59" y="219.28" width="12.7" height="250.72" fill="#f59e0b"><title>CUDA (reference) · layer-norm: 6.4329 ms</title></rect>
+<rect x="1789.39" y="199.003" width="12.7" height="270.997" fill="#34d399"><title>CPU (multi-thread, 24 threads) · layer-norm: 13.0739 ms</title></rect>
+<rect x="1803.59" y="215.349" width="12.7" height="254.651" fill="#f59e0b"><title>CUDA (reference) · layer-norm: 7.3811 ms</title></rect>
 <text class="label" text-anchor="end" transform="translate(1810.69,488) rotate(-45)">layer-norm</text>
 <rect x="85" y="48" width="12" height="12" fill="#60a5fa"/><text class="legend" x="103" y="59">CPU (reference)</text>
 <rect x="233" y="48" width="12" height="12" fill="#34d399"/><text class="legend" x="251" y="59">CPU (multi-thread, 24 threads)</text>
@@ -261,73 +261,73 @@
 <line class="grid" x1="85" x2="1860" y1="233" y2="233"/><text class="axis" text-anchor="end" x="77" y="237">15.8 ms</text>
 <line class="grid" x1="85" x2="1860" y1="154" y2="154"/><text class="axis" text-anchor="end" x="77" y="158">398 ms</text>
 <line class="grid" x1="85" x2="1860" y1="75" y2="75"/><text class="axis" text-anchor="end" x="77" y="79">1e+04 ms</text>
-<rect x="98.8" y="307" width="12.7" height="163" fill="#60a5fa"><title>CPU (reference) · add: 0.7805 ms</title></rect>
-<rect x="113.006" y="311.309" width="12.7" height="158.691" fill="#34d399"><title>CPU (multi-thread, 24 threads) · add: 0.649 ms</title></rect>
-<rect x="127.206" y="467.223" width="12.7" height="2.7773" fill="#f59e0b"><title>CUDA (reference) · add: 0.00112 ms</title></rect>
-<rect x="141.406" y="466.532" width="12.7" height="3.46768" fill="#f472b6"><title>CUDA (cuBLAS) · add: 0.001152 ms</title></rect>
-<rect x="155.606" y="467.223" width="12.7" height="2.7773" fill="#a78bfa"><title>CUDA (CUTLASS) · add: 0.00112 ms</title></rect>
+<rect x="98.8" y="307" width="12.7" height="163" fill="#60a5fa"><title>CPU (reference) · add: 0.7632 ms</title></rect>
+<rect x="113.006" y="311.586" width="12.7" height="158.414" fill="#34d399"><title>CPU (multi-thread, 24 threads) · add: 0.6417 ms</title></rect>
+<rect x="127.206" y="418.459" width="12.7" height="51.5413" fill="#f59e0b"><title>CUDA (reference) · add: 0.008192 ms</title></rect>
+<rect x="141.406" y="418.459" width="12.7" height="51.5413" fill="#f472b6"><title>CUDA (cuBLAS) · add: 0.008192 ms</title></rect>
+<rect x="155.606" y="419.336" width="12.7" height="50.6642" fill="#a78bfa"><title>CUDA (CUTLASS) · add: 0.007904 ms</title></rect>
 <text class="label" text-anchor="end" transform="translate(134.306,488) rotate(-45)">add</text>
-<rect x="197.417" y="300.616" width="12.7" height="169.384" fill="#60a5fa"><title>CPU (reference) · sub: 1.004 ms</title></rect>
-<rect x="211.617" y="311.813" width="12.7" height="158.187" fill="#34d399"><title>CPU (multi-thread, 24 threads) · sub: 0.6358 ms</title></rect>
-<rect x="225.817" y="465.861" width="12.7" height="4.13913" fill="#f59e0b"><title>CUDA (reference) · sub: 0.001184 ms</title></rect>
-<rect x="240.017" y="465.861" width="12.7" height="4.13913" fill="#f472b6"><title>CUDA (cuBLAS) · sub: 0.001184 ms</title></rect>
-<rect x="254.217" y="461.064" width="12.7" height="8.93617" fill="#a78bfa"><title>CUDA (CUTLASS) · sub: 0.00144 ms</title></rect>
+<rect x="197.417" y="307.081" width="12.7" height="162.919" fill="#60a5fa"><title>CPU (reference) · sub: 0.7712 ms</title></rect>
+<rect x="211.617" y="311.537" width="12.7" height="158.463" fill="#34d399"><title>CPU (multi-thread, 24 threads) · sub: 0.643 ms</title></rect>
+<rect x="225.817" y="418.459" width="12.7" height="51.5413" fill="#f59e0b"><title>CUDA (reference) · sub: 0.008192 ms</title></rect>
+<rect x="240.017" y="415.915" width="12.7" height="54.085" fill="#f472b6"><title>CUDA (cuBLAS) · sub: 0.009088 ms</title></rect>
+<rect x="254.217" y="419.336" width="12.7" height="50.6642" fill="#a78bfa"><title>CUDA (CUTLASS) · sub: 0.007904 ms</title></rect>
 <text class="label" text-anchor="end" transform="translate(232.917,488) rotate(-45)">sub</text>
-<rect x="296.028" y="103.723" width="12.7" height="366.277" fill="#60a5fa"><title>CPU (reference) · matmul: 3097.37 ms</title></rect>
-<rect x="310.228" y="179.363" width="12.7" height="290.637" fill="#34d399"><title>CPU (multi-thread, 24 threads) · matmul: 141.424 ms</title></rect>
-<rect x="324.428" y="421.622" width="12.7" height="48.378" fill="#f59e0b"><title>CUDA (reference) · matmul: 0.0072 ms</title></rect>
-<rect x="338.628" y="412.838" width="12.7" height="57.1625" fill="#f472b6"><title>CUDA (cuBLAS) · matmul: 0.010304 ms</title></rect>
-<rect x="352.828" y="466.532" width="12.7" height="3.46768" fill="#a78bfa"><title>CUDA (CUTLASS) · matmul: 0.001152 ms</title></rect>
+<rect x="296.028" y="107.319" width="12.7" height="362.681" fill="#60a5fa"><title>CPU (reference) · matmul: 2674.61 ms</title></rect>
+<rect x="310.228" y="176.398" width="12.7" height="293.602" fill="#34d399"><title>CPU (multi-thread, 24 threads) · matmul: 159.614 ms</title></rect>
+<rect x="324.428" y="316.198" width="12.7" height="153.802" fill="#f59e0b"><title>CUDA (reference) · matmul: 0.531616 ms</title></rect>
+<rect x="338.628" y="361.434" width="12.7" height="108.566" fill="#f472b6"><title>CUDA (cuBLAS) · matmul: 0.083936 ms</title></rect>
+<rect x="352.828" y="363.642" width="12.7" height="106.358" fill="#a78bfa"><title>CUDA (CUTLASS) · matmul: 0.076704 ms</title></rect>
 <text class="label" text-anchor="end" transform="translate(331.528,488) rotate(-45)">matmul</text>
-<rect x="394.639" y="107.867" width="12.7" height="362.133" fill="#60a5fa"><title>CPU (reference) · matmul-weight-t: 2615.5 ms</title></rect>
-<rect x="408.839" y="178.246" width="12.7" height="291.754" fill="#34d399"><title>CPU (multi-thread, 24 threads) · matmul-weight-t: 148.02 ms</title></rect>
-<rect x="423.039" y="317.352" width="12.7" height="152.648" fill="#f59e0b"><title>CUDA (reference) · matmul-weight-t: 0.507168 ms</title></rect>
-<rect x="437.239" y="411.218" width="12.7" height="58.7821" fill="#f472b6"><title>CUDA (cuBLAS) · matmul-weight-t: 0.011008 ms</title></rect>
-<rect x="451.439" y="464.571" width="12.7" height="5.42925" fill="#a78bfa"><title>CUDA (CUTLASS) · matmul-weight-t: 0.001248 ms</title></rect>
+<rect x="394.639" y="105.502" width="12.7" height="364.498" fill="#60a5fa"><title>CPU (reference) · matmul-weight-t: 2880.47 ms</title></rect>
+<rect x="408.839" y="179.384" width="12.7" height="290.616" fill="#34d399"><title>CPU (multi-thread, 24 threads) · matmul-weight-t: 141.306 ms</title></rect>
+<rect x="423.039" y="313.237" width="12.7" height="156.763" fill="#f59e0b"><title>CUDA (reference) · matmul-weight-t: 0.599904 ms</title></rect>
+<rect x="437.239" y="357.61" width="12.7" height="112.39" fill="#f472b6"><title>CUDA (cuBLAS) · matmul-weight-t: 0.098112 ms</title></rect>
+<rect x="451.439" y="361.481" width="12.7" height="108.519" fill="#a78bfa"><title>CUDA (CUTLASS) · matmul-weight-t: 0.083776 ms</title></rect>
 <text class="label" text-anchor="end" transform="translate(430.139,488) rotate(-45)">matmul-weight-t</text>
-<rect x="507.45" y="246.206" width="12.7" height="223.794" fill="#34d399"><title>CPU (multi-thread, 24 threads) · broadcast-add: 9.2464 ms</title></rect>
-<rect x="521.65" y="319.862" width="12.7" height="150.138" fill="#f59e0b"><title>CUDA (reference) · broadcast-add: 0.4578 ms</title></rect>
+<rect x="507.45" y="245.842" width="12.7" height="224.158" fill="#34d399"><title>CPU (multi-thread, 24 threads) · broadcast-add: 9.3848 ms</title></rect>
+<rect x="521.65" y="320.185" width="12.7" height="149.815" fill="#f59e0b"><title>CUDA (reference) · broadcast-add: 0.4518 ms</title></rect>
 <text class="label" text-anchor="end" transform="translate(528.75,488) rotate(-45)">broadcast-add</text>
-<rect x="606.061" y="246.482" width="12.7" height="223.518" fill="#34d399"><title>CPU (multi-thread, 24 threads) · broadcast-mul: 9.1428 ms</title></rect>
-<rect x="620.261" y="319.75" width="12.7" height="150.25" fill="#f59e0b"><title>CUDA (reference) · broadcast-mul: 0.4599 ms</title></rect>
+<rect x="606.061" y="245.957" width="12.7" height="224.043" fill="#34d399"><title>CPU (multi-thread, 24 threads) · broadcast-mul: 9.3406 ms</title></rect>
+<rect x="620.261" y="320.441" width="12.7" height="149.559" fill="#f59e0b"><title>CUDA (reference) · broadcast-mul: 0.4471 ms</title></rect>
 <text class="label" text-anchor="end" transform="translate(627.361,488) rotate(-45)">broadcast-mul</text>
-<rect x="704.672" y="298.272" width="12.7" height="171.728" fill="#34d399"><title>CPU (multi-thread, 24 threads) · scalar-mul: 1.1048 ms</title></rect>
-<rect x="718.872" y="320.305" width="12.7" height="149.695" fill="#f59e0b"><title>CUDA (reference) · scalar-mul: 0.4496 ms</title></rect>
+<rect x="704.672" y="297.557" width="12.7" height="172.443" fill="#34d399"><title>CPU (multi-thread, 24 threads) · scalar-mul: 1.1375 ms</title></rect>
+<rect x="718.872" y="319.134" width="12.7" height="150.866" fill="#f59e0b"><title>CUDA (reference) · scalar-mul: 0.4716 ms</title></rect>
 <text class="label" text-anchor="end" transform="translate(725.972,488) rotate(-45)">scalar-mul</text>
-<rect x="803.283" y="260.003" width="12.7" height="209.997" fill="#34d399"><title>CPU (multi-thread, 24 threads) · reduce-sum: 5.2658 ms</title></rect>
-<rect x="817.483" y="421.622" width="12.7" height="48.378" fill="#f59e0b"><title>CUDA (reference) · reduce-sum: 0.0072 ms</title></rect>
+<rect x="803.283" y="258.978" width="12.7" height="211.022" fill="#34d399"><title>CPU (multi-thread, 24 threads) · reduce-sum: 5.4907 ms</title></rect>
+<rect x="817.483" y="422.312" width="12.7" height="47.6877" fill="#f59e0b"><title>CUDA (reference) · reduce-sum: 0.007 ms</title></rect>
 <text class="label" text-anchor="end" transform="translate(824.583,488) rotate(-45)">reduce-sum</text>
-<rect x="901.894" y="259.74" width="12.7" height="210.26" fill="#34d399"><title>CPU (multi-thread, 24 threads) · reduce-mean: 5.3227 ms</title></rect>
-<rect x="916.094" y="422.312" width="12.7" height="47.6877" fill="#f59e0b"><title>CUDA (reference) · reduce-mean: 0.007 ms</title></rect>
+<rect x="901.894" y="259.012" width="12.7" height="210.988" fill="#34d399"><title>CPU (multi-thread, 24 threads) · reduce-mean: 5.4832 ms</title></rect>
+<rect x="916.094" y="421.965" width="12.7" height="48.0353" fill="#f59e0b"><title>CUDA (reference) · reduce-mean: 0.0071 ms</title></rect>
 <text class="label" text-anchor="end" transform="translate(923.194,488) rotate(-45)">reduce-mean</text>
-<rect x="1000.51" y="259.061" width="12.7" height="210.939" fill="#34d399"><title>CPU (multi-thread, 24 threads) · reduce-max: 5.4722 ms</title></rect>
-<rect x="1014.71" y="421.622" width="12.7" height="48.378" fill="#f59e0b"><title>CUDA (reference) · reduce-max: 0.0072 ms</title></rect>
+<rect x="1000.51" y="259.357" width="12.7" height="210.643" fill="#34d399"><title>CPU (multi-thread, 24 threads) · reduce-max: 5.4064 ms</title></rect>
+<rect x="1014.71" y="423.023" width="12.7" height="46.9773" fill="#f59e0b"><title>CUDA (reference) · reduce-max: 0.0068 ms</title></rect>
 <text class="label" text-anchor="end" transform="translate(1021.81,488) rotate(-45)">reduce-max</text>
-<rect x="1099.12" y="242.999" width="12.7" height="227.001" fill="#34d399"><title>CPU (multi-thread, 24 threads) · reduce-var: 10.5389 ms</title></rect>
-<rect x="1113.32" y="421.622" width="12.7" height="48.378" fill="#f59e0b"><title>CUDA (reference) · reduce-var: 0.0072 ms</title></rect>
+<rect x="1099.12" y="242.55" width="12.7" height="227.45" fill="#34d399"><title>CPU (multi-thread, 24 threads) · reduce-var: 10.7338 ms</title></rect>
+<rect x="1113.32" y="414.067" width="12.7" height="55.9335" fill="#f59e0b"><title>CUDA (reference) · reduce-var: 0.0098 ms</title></rect>
 <text class="label" text-anchor="end" transform="translate(1120.42,488) rotate(-45)">reduce-var</text>
-<rect x="1197.73" y="281.375" width="12.7" height="188.625" fill="#34d399"><title>CPU (multi-thread, 24 threads) · exp: 2.2015 ms</title></rect>
-<rect x="1211.93" y="320.001" width="12.7" height="149.999" fill="#f59e0b"><title>CUDA (reference) · exp: 0.4552 ms</title></rect>
+<rect x="1197.73" y="280.815" width="12.7" height="189.185" fill="#34d399"><title>CPU (multi-thread, 24 threads) · exp: 2.2524 ms</title></rect>
+<rect x="1211.93" y="318.544" width="12.7" height="151.456" fill="#f59e0b"><title>CUDA (reference) · exp: 0.4831 ms</title></rect>
 <text class="label" text-anchor="end" transform="translate(1219.03,488) rotate(-45)">exp</text>
-<rect x="1296.34" y="295.581" width="12.7" height="174.419" fill="#34d399"><title>CPU (multi-thread, 24 threads) · sqrt: 1.233 ms</title></rect>
-<rect x="1310.54" y="320.077" width="12.7" height="149.923" fill="#f59e0b"><title>CUDA (reference) · sqrt: 0.4538 ms</title></rect>
+<rect x="1296.34" y="293.694" width="12.7" height="176.306" fill="#34d399"><title>CPU (multi-thread, 24 threads) · sqrt: 1.3317 ms</title></rect>
+<rect x="1310.54" y="319.098" width="12.7" height="150.902" fill="#f59e0b"><title>CUDA (reference) · sqrt: 0.4723 ms</title></rect>
 <text class="label" text-anchor="end" transform="translate(1317.64,488) rotate(-45)">sqrt</text>
-<rect x="1394.95" y="260.865" width="12.7" height="209.135" fill="#34d399"><title>CPU (multi-thread, 24 threads) · pow: 5.0838 ms</title></rect>
-<rect x="1409.15" y="320.034" width="12.7" height="149.966" fill="#f59e0b"><title>CUDA (reference) · pow: 0.4546 ms</title></rect>
+<rect x="1394.95" y="259.971" width="12.7" height="210.029" fill="#34d399"><title>CPU (multi-thread, 24 threads) · pow: 5.2726 ms</title></rect>
+<rect x="1409.15" y="318.989" width="12.7" height="151.011" fill="#f59e0b"><title>CUDA (reference) · pow: 0.4744 ms</title></rect>
 <text class="label" text-anchor="end" transform="translate(1416.25,488) rotate(-45)">pow</text>
-<rect x="1493.56" y="248.523" width="12.7" height="221.477" fill="#34d399"><title>CPU (multi-thread, 24 threads) · masked-fill: 8.4123 ms</title></rect>
-<rect x="1507.76" y="319.437" width="12.7" height="150.563" fill="#f59e0b"><title>CUDA (reference) · masked-fill: 0.4658 ms</title></rect>
+<rect x="1493.56" y="246.854" width="12.7" height="223.146" fill="#34d399"><title>CPU (multi-thread, 24 threads) · masked-fill: 9.0049 ms</title></rect>
+<rect x="1507.76" y="318.579" width="12.7" height="151.421" fill="#f59e0b"><title>CUDA (reference) · masked-fill: 0.4824 ms</title></rect>
 <text class="label" text-anchor="end" transform="translate(1514.86,488) rotate(-45)">masked-fill</text>
-<rect x="1592.17" y="216.362" width="12.7" height="253.638" fill="#34d399"><title>CPU (multi-thread, 24 threads) · softmax: 31.2505 ms</title></rect>
-<rect x="1606.37" y="272.712" width="12.7" height="197.288" fill="#f59e0b"><title>CUDA (reference) · softmax: 3.1351 ms</title></rect>
+<rect x="1592.17" y="215.845" width="12.7" height="254.155" fill="#34d399"><title>CPU (multi-thread, 24 threads) · softmax: 31.9165 ms</title></rect>
+<rect x="1606.37" y="268.452" width="12.7" height="201.548" fill="#f59e0b"><title>CUDA (reference) · softmax: 3.7302 ms</title></rect>
 <text class="label" text-anchor="end" transform="translate(1613.47,488) rotate(-45)">softmax</text>
-<rect x="1690.78" y="203.775" width="12.7" height="266.225" fill="#34d399"><title>CPU (multi-thread, 24 threads) · layer-norm: 52.2295 ms</title></rect>
-<rect x="1704.98" y="254.949" width="12.7" height="215.051" fill="#f59e0b"><title>CUDA (reference) · layer-norm: 6.4718 ms</title></rect>
+<rect x="1690.78" y="203.235" width="12.7" height="266.765" fill="#34d399"><title>CPU (multi-thread, 24 threads) · layer-norm: 53.393 ms</title></rect>
+<rect x="1704.98" y="252.495" width="12.7" height="217.505" fill="#f59e0b"><title>CUDA (reference) · layer-norm: 7.1535 ms</title></rect>
 <text class="label" text-anchor="end" transform="translate(1712.08,488) rotate(-45)">layer-norm</text>
-<rect x="1789.39" y="123.956" width="12.7" height="346.044" fill="#34d399"><title>CPU (multi-thread, 24 threads) · batch-matmul: 1356.54 ms</title></rect>
-<rect x="1803.59" y="271.456" width="12.7" height="198.544" fill="#f59e0b"><title>CUDA (reference) · batch-matmul: 3.2999 ms</title></rect>
-<rect x="1817.79" y="270.438" width="12.7" height="199.562" fill="#f472b6"><title>CUDA (cuBLAS) · batch-matmul: 3.4399 ms</title></rect>
-<rect x="1831.99" y="271.293" width="12.7" height="198.707" fill="#a78bfa"><title>CUDA (CUTLASS) · batch-matmul: 3.3219 ms</title></rect>
+<rect x="1789.39" y="123.143" width="12.7" height="346.857" fill="#34d399"><title>CPU (multi-thread, 24 threads) · batch-matmul: 1402.29 ms</title></rect>
+<rect x="1803.59" y="271.116" width="12.7" height="198.884" fill="#f59e0b"><title>CUDA (reference) · batch-matmul: 3.346 ms</title></rect>
+<rect x="1817.79" y="271.507" width="12.7" height="198.493" fill="#f472b6"><title>CUDA (cuBLAS) · batch-matmul: 3.2931 ms</title></rect>
+<rect x="1831.99" y="270.729" width="12.7" height="199.271" fill="#a78bfa"><title>CUDA (CUTLASS) · batch-matmul: 3.3992 ms</title></rect>
 <text class="label" text-anchor="end" transform="translate(1810.69,488) rotate(-45)">batch-matmul</text>
 <rect x="85" y="48" width="12" height="12" fill="#60a5fa"/><text class="legend" x="103" y="59">CPU (reference)</text>
 <rect x="233" y="48" width="12" height="12" fill="#34d399"/><text class="legend" x="251" y="59">CPU (multi-thread, 24 threads)</text>
@@ -344,219 +344,219 @@ CUDA: 50 runs per workload, including batched matmul
 
 CPU (reference)
 Operation           N    Runs      Best ms       Avg ms     Total ms      GFLOP/s       Checksum
-add               128       1        0.012        0.012        0.012        1.354          3.375
-sub               128       1        0.015        0.015        0.015        1.092         -0.125
-matmul            128       1        0.672        0.672        0.672        6.239          8.594
-matmul-weight-t    128       1        0.777        0.777        0.777        5.400       -222.250
-batch-matmul      128       1        5.566        5.566        5.566        6.028         10.984
-add               256       1        0.048        0.048        0.048        1.371         -0.750
-sub               256       1        0.060        0.060        0.060        1.094         -0.500
-matmul            256       1        9.317        9.317        9.317        3.601         -7.891
-matmul-weight-t    256       1       10.389       10.389       10.389        3.230         -7.891
-batch-matmul      256       1       79.763       79.763       79.763        3.365        -63.562
+add               128       1        0.012        0.012        0.012        1.365          3.375
+sub               128       1        0.012        0.012        0.012        1.365         -0.125
+matmul            128       1        0.754        0.754        0.754        5.563          8.594
+matmul-weight-t    128       1        0.782        0.782        0.782        5.360       -222.250
+batch-matmul      128       1        5.629        5.629        5.629        5.961         10.984
+add               256       1        0.074        0.074        0.074        0.884         -0.750
+sub               256       1        0.048        0.048        0.048        1.362         -0.500
+matmul            256       1        9.911        9.911        9.911        3.385         -7.891
+matmul-weight-t    256       1       10.343       10.343       10.343        3.244         -7.891
+batch-matmul      256       1       80.718       80.718       80.718        3.326        -63.562
 add               512       1        0.191        0.191        0.191        1.370         -1.500
-sub               512       1        0.238        0.238        0.238        1.101         -2.000
-matmul            512       1      117.964      117.964      117.964        2.276        151.250
-matmul-weight-t    512       1      118.696      118.696      118.696        2.262        -32.062
-batch-matmul      512       1      933.952      933.952      933.952        2.299       -152.922
-add              1024       1        0.780        0.780        0.780        1.343          1.000
-sub              1024       1        1.004        1.004        1.004        1.044          0.500
-matmul           1024       1     3097.368     3097.368     3097.368        0.693         66.406
-matmul-weight-t   1024       1     2615.504     2615.504     2615.504        0.821        256.562
+sub               512       1        0.191        0.191        0.191        1.373         -2.000
+matmul            512       1      116.686      116.686      116.686        2.300        151.250
+matmul-weight-t    512       1      119.664      119.664      119.664        2.243        -32.062
+batch-matmul      512       1      936.048      936.048      936.048        2.294       -152.922
+add              1024       1        0.763        0.763        0.763        1.374          1.000
+sub              1024       1        0.771        0.771        0.771        1.360          0.500
+matmul           1024       1     2674.609     2674.609     2674.609        0.803         66.406
+matmul-weight-t   1024       1     2880.471     2880.471     2880.471        0.746        256.562
 
 CPU (multi-thread, 24 threads)
 Operation           N    Runs      Best ms       Avg ms     Total ms      GFLOP/s       Checksum
-add               128      50        0.001        0.001        0.050       18.204          3.375
-sub               128      50        0.001        0.001        0.050       18.204         -0.125
-broadcast-add     128      50        0.147        0.167        8.361        0.112        433.625
-broadcast-mul     128      50        0.149        0.162        8.091        0.110         21.797
-scalar-mul        128      50        0.002        0.003        0.135        7.802          2.438
-reduce-sum        128      50        0.080        0.082        4.110        0.204          1.625
-reduce-mean       128      50        0.081        0.084        4.187        0.201          0.013
-reduce-max        128      50        0.084        0.086        4.278        0.195        128.000
-reduce-var        128      50        0.162        0.194        9.680        0.101         47.934
-exp               128      50        0.041        0.050        2.498        0.404      19633.658
-sqrt              128      50        0.028        0.042        2.097        0.585      11325.015
-pow               128      50        0.089        0.093        4.635        0.185       6142.172
-masked-fill       128      50        0.111        0.116        5.788        0.148    -550400.250
-softmax           128      50        0.480        0.530       26.496        0.034        128.000
-layer-norm        128      50        0.797        0.861       43.034        0.021          0.000
-matmul            128      50        0.892        1.026       51.315        4.702          8.594
-matmul-weight-t    128      50        1.014        1.176       58.803        4.138       -222.250
-batch-matmul      128      10        1.349        1.465       14.646       24.866         10.984
-add               256      50        0.004        0.004        0.201       16.384         -0.750
-sub               256      50        0.004        0.004        0.203       16.384         -0.500
-broadcast-add     256      50        0.509        0.577       28.844        0.129        -32.625
-broadcast-mul     256      50        0.506        0.571       28.563        0.129         -7.891
-scalar-mul        256      50        0.009        0.069        3.433        6.899         -0.938
-reduce-sum        256      50        0.327        0.329       16.446        0.201         -0.625
-reduce-mean       256      50        0.326        0.335       16.746        0.201         -0.002
-reduce-max        256      50        0.327        0.346       17.283        0.201        256.000
-reduce-var        256      50        0.653        0.688       34.421        0.100         95.999
-exp               256      50        0.078        0.110        5.519        0.845      78522.227
-sqrt              256      50        0.020        0.050        2.524        3.344      45315.387
-pow               256      50        0.257        0.287       14.353        0.255      24576.016
-masked-fill       256      50        0.446        0.516       25.807        0.147   -2201600.750
-softmax           256      50        1.910        2.041      102.041        0.034        256.007
-layer-norm        256      50        3.194        3.335      166.738        0.021          0.000
-matmul            256      50        1.398        1.536       76.780       23.998         -7.891
-matmul-weight-t    256      50        1.872        2.046      102.285       17.922         -7.891
-batch-matmul      256       5        7.706        7.927       39.633       34.834        -63.562
-add               512      50        0.111        0.161        8.051        2.353         -1.500
-sub               512      50        0.110        0.148        7.399        2.383         -2.000
-broadcast-add     512      50        2.259        2.319      115.930        0.116        -65.750
-broadcast-mul     512      50        2.272        2.380      119.007        0.115         55.906
-scalar-mul        512      50        0.279        0.307       15.326        0.940         -2.625
-reduce-sum        512      50        1.298        1.355       67.732        0.202         -1.750
-reduce-mean       512      50        1.306        1.352       67.587        0.201         -0.003
-reduce-max        512      50        1.298        1.311       65.550        0.202        512.000
-reduce-var        512      50        2.597        2.636      131.785        0.101        191.996
-exp               512      50        0.555        0.589       29.447        0.472     314241.469
-sqrt              512      50        0.327        0.353       17.644        0.803     181309.078
-pow               512      50        1.277        1.304       65.197        0.205      98303.344
-masked-fill       512      50        2.025        2.093      104.671        0.129   -8755638.000
-softmax           512      50        7.807        7.941      397.032        0.034        512.046
-layer-norm        512      50       13.053       13.202      660.121        0.020         -0.001
-matmul            512      50        7.969        8.768      438.392       33.684        151.250
-matmul-weight-t    512      50       10.131       10.556      527.818       26.497        -32.062
-batch-matmul      512       1       62.669       62.669       62.669       34.267       -152.922
-add              1024       5        0.649        0.695        3.477        1.616          1.000
-sub              1024       5        0.636        0.685        3.426        1.649          0.500
-broadcast-add    1024       5        9.246        9.303       46.517        0.113        256.750
-broadcast-mul    1024       5        9.143        9.181       45.905        0.115        127.328
-scalar-mul       1024       5        1.105        1.132        5.661        0.949          1.125
-reduce-sum       1024       5        5.266        5.278       26.392        0.199          0.750
-reduce-mean      1024       5        5.323        5.406       27.029        0.197          0.001
-reduce-max       1024       5        5.472        5.629       28.146        0.192       1024.000
-reduce-var       1024       5       10.539       10.691       53.455        0.099        383.996
-exp              1024       5        2.201        2.219       11.094        0.476    1255528.875
-sqrt             1024       5        1.233        1.253        6.265        0.850     724387.688
-pow              1024       5        5.084        5.116       25.580        0.206     390645.812
-masked-fill      1024       5        8.412        8.452       42.258        0.125  -35030556.000
-softmax          1024       5       31.250       31.489      157.446        0.034       1020.422
-layer-norm       1024       5       52.230       52.779      263.894        0.020         -0.000
-matmul           1024       5      141.424      142.937      714.684       15.185         66.406
-matmul-weight-t   1024       5      148.020      166.031      830.154       14.508        256.562
-batch-matmul     1024       1     1356.540     1356.540     1356.540       12.664       1342.562
+add               128      50        0.001        0.001        0.062       13.653          3.375
+sub               128      50        0.001        0.001        0.062       13.653         -0.125
+broadcast-add     128      50        0.126        0.127        6.353        0.130        433.625
+broadcast-mul     128      50        0.126        0.127        6.350        0.130         21.797
+scalar-mul        128      50        0.023        0.034        1.675        0.715          2.438
+reduce-sum        128      50        0.081        0.084        4.195        0.202          1.625
+reduce-mean       128      50        0.084        0.089        4.462        0.195          0.013
+reduce-max        128      50        0.084        0.095        4.746        0.194        128.000
+reduce-var        128      50        0.163        0.176        8.802        0.101         47.934
+exp               128      50        0.019        0.020        0.994        0.840      19633.658
+sqrt              128      50        0.005        0.005        0.257        3.486      11325.015
+pow               128      50        0.064        0.066        3.297        0.254       6142.172
+masked-fill       128      50        0.143        0.158        7.884        0.114    -550400.250
+softmax           128      50        0.481        0.515       25.769        0.034        128.000
+layer-norm        128      50        0.793        0.868       43.394        0.021          0.000
+matmul            128      50        0.887        1.028       51.420        4.729          8.594
+matmul-weight-t    128      50        1.060        1.171       58.527        3.957       -222.250
+batch-matmul      128      10        1.368        1.446       14.461       24.521         10.984
+add               256      50        0.004        0.004        0.198       16.804         -0.750
+sub               256      50        0.004        0.004        0.187       17.712         -0.500
+broadcast-add     256      50        0.533        0.610       30.487        0.123        -32.625
+broadcast-mul     256      50        0.531        0.566       28.310        0.123         -7.891
+scalar-mul        256      50        0.035        0.068        3.419        1.846         -0.938
+reduce-sum        256      50        0.322        0.339       16.944        0.204         -0.625
+reduce-mean       256      50        0.323        0.361       18.027        0.203         -0.002
+reduce-max        256      50        0.323        0.333       16.672        0.203        256.000
+reduce-var        256      50        0.650        0.725       36.238        0.101         95.999
+exp               256      50        0.077        0.114        5.708        0.848      78522.227
+sqrt              256      50        0.018        0.045        2.263        3.581      45315.387
+pow               256      50        0.255        0.293       14.658        0.258      24576.016
+masked-fill       256      50        0.483        0.554       27.694        0.136   -2201600.750
+softmax           256      50        1.911        2.041      102.062        0.034        256.007
+layer-norm        256      50        3.208        3.264      163.201        0.020          0.000
+matmul            256      50        1.387        1.554       77.689       24.194         -7.891
+matmul-weight-t    256      50        1.870        2.050      102.478       17.942         -7.891
+batch-matmul      256       5        7.539        7.912       39.560       35.608        -63.562
+add               512      50        0.106        0.158        7.881        2.471         -1.500
+sub               512      50        0.126        0.158        7.920        2.074         -2.000
+broadcast-add     512      50        2.265        2.377      118.862        0.116        -65.750
+broadcast-mul     512      50        2.271        2.399      119.948        0.115         55.906
+scalar-mul        512      50        0.286        0.314       15.696        0.917         -2.625
+reduce-sum        512      50        1.300        1.372       68.582        0.202         -1.750
+reduce-mean       512      50        1.309        1.351       67.573        0.200         -0.003
+reduce-max        512      50        1.301        1.339       66.948        0.202        512.000
+reduce-var        512      50        2.612        2.635      131.768        0.100        191.996
+exp               512      50        0.572        0.603       30.144        0.458     314241.469
+sqrt              512      50        0.333        0.359       17.960        0.788     181309.078
+pow               512      50        1.300        1.355       67.765        0.202      98303.344
+masked-fill       512      50        2.172        2.270      113.483        0.121   -8755638.000
+softmax           512      50        7.822        8.133      406.661        0.034        512.046
+layer-norm        512      50       13.074       13.422      671.104        0.020         -0.001
+matmul            512      50        8.100        8.785      439.242       33.142        151.250
+matmul-weight-t    512      50        9.753       11.055      552.726       27.523        -32.062
+batch-matmul      512       1       65.252       65.252       65.252       32.911       -152.922
+add              1024       5        0.642        0.731        3.657        1.634          1.000
+sub              1024       5        0.643        0.658        3.290        1.631          0.500
+broadcast-add    1024       5        9.385        9.489       47.445        0.112        256.750
+broadcast-mul    1024       5        9.341        9.471       47.357        0.112        127.328
+scalar-mul       1024       5        1.137        1.199        5.996        0.922          1.125
+reduce-sum       1024       5        5.491        5.789       28.944        0.191          0.750
+reduce-mean      1024       5        5.483        5.720       28.601        0.191          0.001
+reduce-max       1024       5        5.406        5.680       28.398        0.194       1024.000
+reduce-var       1024       5       10.734       11.354       56.771        0.098        383.996
+exp              1024       5        2.252        2.552       12.761        0.466    1255528.875
+sqrt             1024       5        1.332        1.463        7.314        0.787     724387.688
+pow              1024       5        5.273        6.178       30.889        0.199     390645.812
+masked-fill      1024       5        9.005        9.097       45.483        0.116  -35030556.000
+softmax          1024       5       31.916       33.282      166.410        0.033       1020.422
+layer-norm       1024       5       53.393       53.832      269.162        0.020         -0.000
+matmul           1024       5      159.614      161.518      807.590       13.454         66.406
+matmul-weight-t   1024       5      141.306      161.138      805.688       15.197        256.562
+batch-matmul     1024       1     1402.289     1402.289     1402.289       12.251       1342.562
 
 CUDA (reference)
 Operation           N    Runs      Best ms       Avg ms     Total ms      GFLOP/s       Checksum
-add               128      50        0.001        0.007        0.375       13.838          3.375
-sub               128      50        0.001        0.007        0.347       14.629         -0.125
-broadcast-add     128      50        0.007        0.013        0.651        2.374        433.625
-broadcast-mul     128      50        0.007        0.013        0.655        2.409         21.797
-scalar-mul        128      50        0.005        0.008        0.401        3.277          2.438
-reduce-sum        128      50        0.006        0.009        0.472        2.560          1.625
-reduce-mean       128      50        0.006        0.008        0.406        2.521          0.013
-reduce-max        128      50        0.006        0.008        0.418        2.560        128.000
-reduce-var        128      50        0.006        0.008        0.405        2.521         47.934
-exp               128      50        0.004        0.007        0.330        4.201      19633.658
-sqrt              128      50        0.004        0.006        0.314        4.312      11325.015
-pow               128      50        0.004        0.006        0.305        4.201       6142.172
-masked-fill       128      50        0.007        0.012        0.607        2.409    -550400.250
-softmax           128      50        3.116        3.372      168.589        0.005        128.000
-layer-norm        128      50        6.086        6.599      329.954        0.003          0.000
-matmul            128      50        0.006        0.009        0.461      648.871          8.594
-matmul-weight-t    128      50        0.012        0.021        1.045      338.687       -222.250
-batch-matmul      128      50        0.012        0.021        1.026     2773.094         10.984
-add               256      50        0.001        0.009        0.472       58.514         -0.750
-sub               256      50        0.006        0.009        0.454       10.503         -0.500
-broadcast-add     256      50        0.007        0.014        0.696        8.856        -32.625
-broadcast-mul     256      50        0.011        0.017        0.858        5.800         -7.891
-scalar-mul        256      50        0.006        0.008        0.375       11.703         -0.938
-reduce-sum        256      50        0.007        0.009        0.448        9.930         -0.625
-reduce-mean       256      50        0.012        0.015        0.745        5.461         -0.002
-reduce-max        256      50        0.007        0.008        0.396        9.930        256.000
-reduce-var        256      50        0.007        0.008        0.399        9.781         95.999
-exp               256      50        0.004        0.007        0.355       14.564      78522.227
-sqrt              256      50        0.005        0.007        0.363       13.944      45315.387
-pow               256      50        0.004        0.008        0.379       14.564      24576.016
-masked-fill       256      50        0.007        0.012        0.607        8.856   -2201600.750
-softmax           256      50        3.233        3.403      170.147        0.020        256.007
-layer-norm        256      50        6.128        6.776      338.818        0.011          0.000
-matmul            256      50        0.001        0.008        0.421    27594.106         -7.891
-matmul-weight-t    256      50        0.018        0.030        1.496     1859.177         -7.891
-batch-matmul      256      50        0.235        0.250       12.517     1140.338        -63.562
-add               512      50        0.005        0.008        0.424       53.895         -1.500
-sub               512      50        0.003        0.008        0.386       78.019         -2.000
-broadcast-add     512      50        0.124        0.137        6.849        2.111        -65.750
-broadcast-mul     512      50        0.125        0.138        6.899        2.099         55.906
-scalar-mul        512      50        0.120        0.140        7.017        2.190         -2.625
-reduce-sum        512      50        0.007        0.010        0.504       39.719         -1.750
-reduce-mean       512      50        0.007        0.009        0.450       39.126         -0.003
-reduce-max        512      50        0.007        0.008        0.411       39.126        512.000
-reduce-var        512      50        0.007        0.008        0.416       39.719        191.996
-exp               512      50        0.120        0.134        6.692        2.175     314241.469
-sqrt              512      50        0.118        0.139        6.964        2.214     181309.078
-pow               512      50        0.119        0.132        6.576        2.207      98303.344
-masked-fill       512      50        0.126        0.156        7.803        2.074   -8755638.000
-softmax           512      50        3.245        3.390      169.502        0.081        512.046
-layer-norm        512      50        6.433        6.701      335.047        0.041         -0.000
-matmul            512      50        0.004        0.008        0.396    65536.000        151.250
-matmul-weight-t    512      50        0.152        0.165        8.237     1770.122        -32.062
-batch-matmul      512      50        0.838        0.881       44.047     2562.324       -152.922
-add              1024      50        0.001        0.008        0.380      936.229          1.000
-sub              1024      50        0.001        0.008        0.381      885.622          0.500
-broadcast-add    1024      50        0.458        0.478       23.892        2.290        256.750
-broadcast-mul    1024      50        0.460        0.483       24.129        2.280        127.328
-scalar-mul       1024      50        0.450        0.477       23.841        2.332          1.125
-reduce-sum       1024      50        0.007        0.010        0.505      145.636          0.750
-reduce-mean      1024      50        0.007        0.009        0.442      149.797          0.001
-reduce-max       1024      50        0.007        0.009        0.460      145.636       1024.000
-reduce-var       1024      50        0.007        0.010        0.477      145.636        383.996
-exp              1024      50        0.455        0.479       23.969        2.304    1255528.875
-sqrt             1024      50        0.454        0.480       24.024        2.311     724387.688
-pow              1024      50        0.455        0.480       24.008        2.307     390645.812
-masked-fill      1024      50        0.466        0.574       28.706        2.251  -35030556.000
-softmax          1024      50        3.135        3.442      172.106        0.334       1020.422
-layer-norm       1024      50        6.472        6.735      336.775        0.162         -0.000
-matmul           1024      50        0.007        0.012        0.600   298261.623         66.406
-matmul-weight-t   1024      50        0.507        0.612       30.586     4234.265        256.562
-batch-matmul     1024      50        3.300        3.405      170.266     5206.179       1342.562
+add               128      50        0.004        0.013        0.656        4.096          3.375
+sub               128      50        0.004        0.027        1.338        3.938         -0.125
+broadcast-add     128      50        0.007        0.013        0.648        2.374        433.625
+broadcast-mul     128      50        0.011        0.034        1.723        1.546         21.797
+scalar-mul        128      50        0.004        0.006        0.303        4.312          2.438
+reduce-sum        128      50        0.007        0.011        0.550        2.276          1.625
+reduce-mean       128      50        0.006        0.009        0.429        2.521          0.013
+reduce-max        128      50        0.006        0.009        0.432        2.521        128.000
+reduce-var        128      50        0.007        0.011        0.534        2.482         47.934
+exp               128      50        0.006        0.009        0.457        2.643      19633.658
+sqrt              128      50        0.005        0.009        0.438        3.151      11325.015
+pow               128      50        0.005        0.019        0.947        3.213       6142.172
+masked-fill       128      50        0.009        0.015        0.767        1.862    -550400.250
+softmax           128      50        3.696        4.101      205.064        0.004        128.000
+layer-norm        128      50        7.315        7.586      379.309        0.002          0.000
+matmul            128      50        0.008        0.014        0.678      550.723          8.594
+matmul-weight-t    128      50        0.019        0.028        1.406      226.377       -222.250
+batch-matmul      128      50        0.013        0.019        0.959     2684.355         10.984
+add               256      50        0.007        0.013        0.673        9.184         -0.750
+sub               256      50        0.006        0.013        0.631       11.315         -0.500
+broadcast-add     256      50        0.010        0.016        0.812        6.489        -32.625
+broadcast-mul     256      50        0.007        0.012        0.623        8.738         -7.891
+scalar-mul        256      50        0.007        0.010        0.507        9.362         -0.938
+reduce-sum        256      50        0.007        0.009        0.473        9.930         -0.625
+reduce-mean       256      50        0.007        0.009        0.435        9.781         -0.002
+reduce-max        256      50        0.007        0.008        0.415        9.930        256.000
+reduce-var        256      50        0.007        0.008        0.405        9.498         95.999
+exp               256      50        0.005        0.008        0.402       14.247      78522.227
+sqrt              256      50        0.004        0.008        0.386       14.564      45315.387
+pow               256      50        0.007        0.012        0.585        9.102      24576.016
+masked-fill       256      50        0.007        0.014        0.714        8.738   -2201600.750
+softmax           256      50        3.546        3.894      194.716        0.018        256.007
+layer-norm        256      50        7.340        7.698      384.920        0.009          0.000
+matmul            256      50        0.015        0.017        0.867     2240.547         -7.891
+matmul-weight-t    256      50        0.024        0.040        1.981     1394.383         -7.891
+batch-matmul      256      50        0.242        0.264       13.198     1110.614        -63.562
+add               512      50        0.004        0.010        0.483       59.796         -1.500
+sub               512      50        0.004        0.012        0.606       60.235         -2.000
+broadcast-add     512      50        0.142        0.160        7.984        1.849        -65.750
+broadcast-mul     512      50        0.143        0.160        8.004        1.837         55.906
+scalar-mul        512      50        0.132        0.144        7.189        1.990         -2.625
+reduce-sum        512      50        0.007        0.010        0.504       37.992         -1.750
+reduce-mean       512      50        0.007        0.008        0.422       39.126         -0.003
+reduce-max        512      50        0.007        0.008        0.425       39.126        512.000
+reduce-var        512      50        0.007        0.008        0.405       37.992        191.996
+exp               512      50        0.135        0.151        7.536        1.936     314241.469
+sqrt              512      50        0.139        0.157        7.852        1.883     181309.078
+pow               512      50        0.134        0.147        7.327        1.962      98303.344
+masked-fill       512      50        0.135        0.152        7.620        1.948   -8755638.000
+softmax           512      50        3.697        3.873      193.639        0.071        512.046
+layer-norm        512      50        7.381        7.636      381.780        0.036         -0.000
+matmul            512      50        0.075        0.076        3.808     3560.530        151.250
+matmul-weight-t    512      50        0.161        0.238       11.879     1670.039        -32.062
+batch-matmul      512      50        0.860        0.893       44.626     2496.784       -152.922
+add              1024      50        0.008        0.014        0.702      128.000          1.000
+sub              1024      50        0.008        0.015        0.744      128.000          0.500
+broadcast-add    1024      50        0.452        0.481       24.032        2.321        256.750
+broadcast-mul    1024      50        0.447        0.488       24.399        2.345        127.328
+scalar-mul       1024      50        0.472        0.494       24.724        2.223          1.125
+reduce-sum       1024      50        0.007        0.009        0.456      149.797          0.750
+reduce-mean      1024      50        0.007        0.009        0.436      147.687          0.001
+reduce-max       1024      50        0.007        0.009        0.435      154.202       1024.000
+reduce-var       1024      50        0.010        0.012        0.584      106.998        383.996
+exp              1024      50        0.483        0.505       25.247        2.171    1255528.875
+sqrt             1024      50        0.472        0.493       24.655        2.220     724387.688
+pow              1024      50        0.474        0.497       24.853        2.210     390645.812
+masked-fill      1024      50        0.482        0.506       25.307        2.174  -35030556.000
+softmax          1024      50        3.730        3.960      198.009        0.281       1020.422
+layer-norm       1024      50        7.154        7.640      381.986        0.147         -0.000
+matmul           1024      50        0.532        0.544       27.201     4039.539         66.406
+matmul-weight-t   1024      50        0.600        1.069       53.447     3579.712        256.562
+batch-matmul     1024      50        3.346        3.421      171.027     5134.450       1342.562
 
 CUDA (cuBLAS)
 Operation           N    Runs      Best ms       Avg ms     Total ms      GFLOP/s       Checksum
-add               128      50        0.004        0.022        1.077        4.096          3.375
-sub               128      50        0.001        0.007        0.341       14.629         -0.125
-matmul            128      50        0.014        0.019        0.968      307.681          8.594
-matmul-weight-t    128      50        0.014        0.017        0.841      298.569       -222.250
-batch-matmul      128      50        0.020        0.030        1.488     1686.152         10.984
-add               256      50        0.001        0.009        0.462       53.895         -0.750
-sub               256      50        0.001        0.009        0.474       56.889         -0.500
-matmul            256      50        0.010        0.015        0.727     3426.719         -7.891
-matmul-weight-t    256      50        0.011        0.014        0.689     3187.161         -7.891
-batch-matmul      256      50        0.258        0.276       13.813     1042.063        -63.562
-add               512      50        0.001        0.007        0.345      234.057         -1.500
-sub               512      50        0.001        0.014        0.679      221.405         -2.000
-matmul            512      50        0.001        0.017        0.839   220752.852        151.250
-matmul-weight-t    512      50        0.008        0.016        0.816    33026.014        -32.062
-batch-matmul      512      50        0.915        0.962       48.116     2346.720       -152.922
-add              1024      50        0.001        0.009        0.437      910.222          1.000
-sub              1024      50        0.001        0.007        0.336      885.622          0.500
-matmul           1024      50        0.010        0.016        0.784   208412.616         66.406
-matmul-weight-t   1024      50        0.011        0.016        0.818   195083.907        256.562
-batch-matmul     1024      50        3.440        3.556      177.824     4994.293       1342.562
+add               128      50        0.005        0.023        1.174        3.483          3.375
+sub               128      50        0.004        0.013        0.645        4.452         -0.125
+matmul            128      50        0.016        0.022        1.085      270.252          8.594
+matmul-weight-t    128      50        0.011        0.017        0.843      370.260       -222.250
+batch-matmul      128      50        0.019        0.030        1.500     1775.367         10.984
+add               256      50        0.004        0.011        0.535       18.618         -0.750
+sub               256      50        0.005        0.014        0.718       12.642         -0.500
+matmul            256      50        0.010        0.022        1.078     3426.719         -7.891
+matmul-weight-t    256      50        0.012        0.019        0.958     2857.155         -7.891
+batch-matmul      256      50        0.245        0.265       13.258     1096.550        -63.562
+add               512      50        0.004        0.010        0.519       62.061         -1.500
+sub               512      50        0.005        0.012        0.606       52.178         -2.000
+matmul            512      50        0.022        0.028        1.413    12409.183        151.250
+matmul-weight-t    512      50        0.026        0.033        1.675    10485.760        -32.062
+batch-matmul      512      50        0.910        0.946       47.291     2360.131       -152.922
+add              1024      50        0.008        0.015        0.727      128.000          1.000
+sub              1024      50        0.009        0.022        1.117      115.380          0.500
+matmul           1024      50        0.084        0.094        4.699    25584.775         66.406
+matmul-weight-t   1024      50        0.098        0.105        5.243    21888.083        256.562
+batch-matmul     1024      50        3.293        4.061      203.059     5216.929       1342.562
 
 CUDA (CUTLASS)
 Operation           N    Runs      Best ms       Avg ms     Total ms      GFLOP/s       Checksum
-add               128      50        0.001        0.008        0.422       14.222          3.375
-sub               128      50        0.001        0.009        0.446       14.222         -0.125
-matmul            128      50        0.001        0.008        0.416     3640.889          8.594
-matmul-weight-t    128      50        0.001        0.012        0.598     3048.186       -222.250
-batch-matmul      128      50        0.033        0.052        2.579     1010.676         10.984
-add               256      50        0.001        0.008        0.387       56.889         -0.750
-sub               256      50        0.001        0.010        0.488       56.889         -0.500
-matmul            256      50        0.001        0.008        0.396    28339.891         -7.891
-matmul-weight-t    256      50        0.001        0.007        0.335    27594.106         -7.891
-batch-matmul      256      50        0.280        0.301       15.028      958.356        -63.562
-add               512      50        0.001        0.009        0.432      221.405         -1.500
-sub               512      50        0.001        0.007        0.352      210.051         -2.000
-matmul            512      50        0.002        0.009        0.468   139810.137        151.250
-matmul-weight-t    512      50        0.001        0.011        0.534   204600.198        -32.062
-batch-matmul      512      50        0.954        0.989       49.473     2251.267       -152.922
-add              1024      50        0.001        0.009        0.428      936.229          1.000
-sub              1024      50        0.001        0.008        0.398      728.178          0.500
-matmul           1024      50        0.001        0.008        0.393  1864135.045         66.406
-matmul-weight-t   1024      50        0.001        0.008        0.399  1720740.162        256.562
-batch-matmul     1024      50        3.322        3.774      188.698     5171.700       1342.562
+add               128      50        0.004        0.024        1.192        3.765          3.375
+sub               128      50        0.003        0.011        0.567        4.741         -0.125
+matmul            128      50        0.014        0.017        0.867      303.407          8.594
+matmul-weight-t    128      50        0.016        0.018        0.891      268.041       -222.250
+batch-matmul      128      50        0.026        0.034        1.699     1285.610         10.984
+add               256      50        0.004        0.010        0.497       18.124         -0.750
+sub               256      50        0.004        0.007        0.374       18.450         -0.500
+matmul            256      50        0.021        0.025        1.259     1569.724         -7.891
+matmul-weight-t    256      50        0.024        0.028        1.394     1385.173         -7.891
+batch-matmul      256      50        0.260        0.273       13.668     1031.254        -63.562
+add               512      50        0.005        0.012        0.606       51.522         -1.500
+sub               512      50        0.008        0.016        0.778       32.508         -2.000
+matmul            512      50        0.041        0.045        2.231     6620.843        151.250
+matmul-weight-t    512      50        0.044        0.055        2.749     6096.372        -32.062
+batch-matmul      512      50        0.861        0.901       45.053     2495.623       -152.922
+add              1024      50        0.008        0.014        0.701      132.664          1.000
+sub              1024      50        0.008        0.015        0.735      132.664          0.500
+matmul           1024      50        0.077        0.085        4.241    27997.022         66.406
+matmul-weight-t   1024      50        0.084        0.087        4.360    25633.639        256.562
+batch-matmul     1024      50        3.399        3.517      175.873     5054.092       1342.562
 </pre></details></main></body></html>

@@ -13,6 +13,7 @@
 
 #ifdef CITRIUS_HAS_CUDA
 #include "impl/cublas_cuda_device.h"
+#include "impl/cuda_context.h"
 #include "impl/cuda_device.h"
 #include "impl/cutlass_cuda_device.h"
 #include <cuda_runtime.h>
@@ -709,15 +710,19 @@ Result benchmark_cuda(const CudaDevice& device, Operation operation, std::int64_
     };
 
     run();
+    const auto execution_stream = static_cast<cudaStream_t>(
+        device.execution_context()->stream());
     cudaEvent_t start = nullptr, stop = nullptr;
     check_cuda(cudaEventCreate(&start), "failed to create CUDA start event");
     check_cuda(cudaEventCreate(&stop), "failed to create CUDA stop event");
     std::vector<double> timings;
     timings.reserve(static_cast<std::size_t>(iterations));
     for (int iteration = 0; iteration < iterations; ++iteration) {
-        check_cuda(cudaEventRecord(start), "failed to record CUDA start event");
+        check_cuda(cudaEventRecord(start, execution_stream),
+                   "failed to record CUDA start event");
         run();
-        check_cuda(cudaEventRecord(stop), "failed to record CUDA stop event");
+        check_cuda(cudaEventRecord(stop, execution_stream),
+                   "failed to record CUDA stop event");
         check_cuda(cudaEventSynchronize(stop), "failed to synchronize CUDA stop event");
         float elapsed_ms = 0.0f;
         check_cuda(cudaEventElapsedTime(&elapsed_ms, start, stop),
