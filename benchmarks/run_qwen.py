@@ -28,6 +28,9 @@ def main():
     parser.add_argument("model_name", type=str, help="Hugging Face model identifier or local path to configuration/tokenizer")
     parser.add_argument("tensor", type=str, help="Path to the model.safetensors file")
     parser.add_argument("prompt", type=str, help="Text prompt to run the model on")
+    parser.add_argument("--cpu", action="store_true", help="Force CPU execution even when CUDA is available")
+    parser.add_argument("--no-cache", action="store_true", help="Disable the KV cache during generation")
+    parser.add_argument("--greedy", action="store_true", help="Select the highest-probability token instead of sampling")
     
     args = parser.parse_args()
     
@@ -55,8 +58,8 @@ def main():
     if unexpected_keys:
         print(f"Note: Unexpected keys in state dict: {len(unexpected_keys)} keys unexpected.")
     
-    # Check for device allocation (use GPU if available, otherwise CPU)
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    # Use CUDA when available unless CPU execution was explicitly requested.
+    device = torch.device("cpu" if args.cpu or not torch.cuda.is_available() else "cuda")
     print(f"Moving model to device: {device}")
     model = model.to(device)
     model.eval()
@@ -76,16 +79,17 @@ def main():
     timing_streamer = TimingStreamer(synchronize)
     synchronize()
     generation_start = time.perf_counter()
+    generation_options = {
+        "max_new_tokens": 50,
+        "do_sample": not args.greedy,
+        "use_cache": not args.no_cache,
+        "pad_token_id": tokenizer.eos_token_id,
+        "streamer": timing_streamer,
+    }
+    if not args.greedy:
+        generation_options.update(temperature=0.7, top_p=0.9)
     with torch.no_grad():
-        outputs = model.generate(
-            **inputs,
-            max_new_tokens=50,
-            do_sample=True,
-            temperature=0.7,
-            top_p=0.9,
-            pad_token_id=tokenizer.eos_token_id,
-            streamer=timing_streamer
-        )
+        outputs = model.generate(**inputs, **generation_options)
     synchronize()
     generation_end = time.perf_counter()
 
@@ -117,6 +121,8 @@ def main():
     print("\n=== Performance ===")
     print(f"Device: {device_description}")
     print("Thinking: enabled")
+    print(f"Decoding: {'greedy' if args.greedy else 'sampling'}")
+    print(f"KV cache: {'disabled' if args.no_cache else 'enabled'}")
     print(f"Prompt tokens: {prompt_tokens}")
     print(f"Generated tokens: {generated_tokens}")
     print(f"TTFT: {ttft_seconds * 1000:.3f} ms")
