@@ -824,6 +824,46 @@ Tensor CudaDeviceImpl::gather_rows(const Tensor& table, const Tensor& indices) c
     return output;
 }
 
+Tensor CudaDeviceImpl::concat(
+    const std::vector<Tensor>& tensors,
+    std::int64_t dimension) const {
+    if (tensors.empty()) throw std::invalid_argument("concat expects at least one tensor");
+    Shape output_shape = tensors.front().shape();
+    output_shape[static_cast<std::size_t>(dimension)] = 0;
+    for (const Tensor& tensor : tensors)
+        output_shape[static_cast<std::size_t>(dimension)] +=
+            tensor.shape()[static_cast<std::size_t>(dimension)];
+    Tensor output = empty(output_shape, tensors.front().dtype());
+    const auto axis = static_cast<std::size_t>(dimension);
+    const auto inner = std::accumulate(
+        output_shape.begin() + static_cast<std::ptrdiff_t>(axis + 1), output_shape.end(),
+        std::int64_t{1}, std::multiplies<>());
+    const auto outer = std::accumulate(
+        output_shape.begin(), output_shape.begin() + static_cast<std::ptrdiff_t>(axis),
+        std::int64_t{1}, std::multiplies<>());
+    const auto element_size = dtype_size(output.dtype());
+    const auto output_pitch = static_cast<std::size_t>(output_shape[axis] * inner) * element_size;
+    auto* output_data = static_cast<unsigned char*>(
+        require_cuda_storage(*output.storage()).handle().ptr);
+    std::int64_t dimension_offset = 0;
+    for (const Tensor& tensor : tensors) {
+        const Tensor packed = contiguous(tensor);
+        const auto& storage = require_cuda_storage(*packed.storage());
+        const auto* source = static_cast<const unsigned char*>(storage.handle().ptr) +
+            packed.storage_offset() * element_size;
+        const auto width = static_cast<std::size_t>(tensor.shape()[axis] * inner) * element_size;
+        if (width != 0 && outer != 0) {
+            check_cuda(cudaMemcpy2DAsync(
+                output_data + dimension_offset * inner * element_size,
+                output_pitch, source, width, width, static_cast<std::size_t>(outer),
+                cudaMemcpyDeviceToDevice, stream(context_)),
+                "failed to concatenate CUDA tensors");
+        }
+        dimension_offset += tensor.shape()[axis];
+    }
+    return output;
+}
+
 Tensor CudaDeviceImpl::argmax(const Tensor& tensor) const {
     require_defined(tensor, "argmax input");
     require_float32(tensor, "argmax input");

@@ -60,8 +60,10 @@ TEST(ShapeOperationsTest, SplitsChunksAndConcatenates) {
 
     ASSERT_EQ(parts.size(), 2u);
     EXPECT_EQ(parts[0].shape(), citrius::Shape({2, 2}));
-    EXPECT_EQ(values(parts[0]), std::vector<float>({1, 2, 4, 5}));
-    EXPECT_EQ(values(parts[1]), std::vector<float>({3, 6}));
+    EXPECT_EQ(parts[0].storage(), input.storage());
+    EXPECT_EQ(parts[1].storage(), input.storage());
+    EXPECT_EQ(values(citrius::contiguous(parts[0])), std::vector<float>({1, 2, 4, 5}));
+    EXPECT_EQ(values(citrius::contiguous(parts[1])), std::vector<float>({3, 6}));
     EXPECT_EQ(values(citrius::concat(parts, 1)), values(input));
 
     const auto chunks = citrius::chunk(input, 3, 1);

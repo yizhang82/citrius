@@ -711,6 +711,5 @@ batch-matmul     1024      50        4.584        5.129      256.454     3747.70
 * argmax
 * async cuda streams and materialization
 * tensor: strides, offset, select, slice
-* matmul for strides
-* benchmark [qwen3 0.6 CUDA, TTFT=2129.780ms, Throughput: 0.516 tokens/s], 10x improvement
-
+* matmul for strides benchmark [qwen3 0.6 CUDA, TTFT=2129.780ms, Throughput: 0.516 tokens/s], 10x improvement
+* concat [benchmark no change]

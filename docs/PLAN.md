@@ -64,10 +64,10 @@ The initial milestone does not include:
 ### 1.1 Tensor shape and view operations
 
 Status: Strides and storage offsets are implemented. Transpose, permute, select,
-and slice return metadata-only views; reshape materializes non-contiguous inputs
-when necessary. CPU and CUDA provide native contiguous materialization. Split,
-chunk, and concat still return materialized results, and Metal lacks native
-strided contiguous materialization.
+slice, split, and chunk return metadata-only views; reshape materializes
+non-contiguous inputs when necessary. CPU and CUDA provide native contiguous
+materialization, and CUDA concat remains on-device. Metal lacks native strided
+contiguous materialization.
 
 Implement the metadata and data-layout operations needed to form attention
 heads:

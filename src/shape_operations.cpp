@@ -242,21 +242,7 @@ std::vector<Tensor> split(const Tensor& tensor, std::int64_t split_size, std::in
     std::vector<Tensor> result;
     for (std::int64_t offset = 0; offset < tensor.shape()[dim]; offset += split_size) {
         const std::int64_t size = std::min(split_size, tensor.shape()[dim] - offset);
-        Shape part_shape = tensor.shape();
-        part_shape[dim] = size;
-        Tensor part = empty(part_shape, tensor.dtype(), Device::cpu());
-        const Tensor source = tensor.to(Device::cpu());
-        const std::int64_t inner = product(tensor.shape(), static_cast<std::size_t>(dim + 1), tensor.ndim());
-        const std::int64_t outer = product(tensor.shape(), 0, static_cast<std::size_t>(dim));
-        const std::size_t element_size = dtype_size(tensor.dtype());
-        for (std::int64_t outer_index = 0; outer_index < outer; ++outer_index) {
-            const auto source_index = (outer_index * tensor.shape()[dim] + offset) * inner;
-            const auto destination_index = outer_index * size * inner;
-            std::memcpy(cpu_bytes(part) + destination_index * element_size,
-                        cpu_bytes(source) + source_index * element_size,
-                        static_cast<std::size_t>(size * inner) * element_size);
-        }
-        result.push_back(part.to(tensor.device()));
+        result.push_back(slice(tensor, dim, offset, offset + size));
     }
     return result;
 }
@@ -287,13 +273,18 @@ Tensor concat(const std::vector<Tensor>& tensors, std::int64_t dim) {
         }
         output_shape[dim] += tensor.shape()[dim];
     }
+#ifdef CITRIUS_HAS_CUDA
+    if (first.device().type == DeviceType::CUDA) {
+        return impl::CudaDeviceImpl(first.device().index).concat(tensors, dim);
+    }
+#endif
     Tensor output = empty(output_shape, first.dtype(), Device::cpu());
     const std::int64_t inner = product(first.shape(), static_cast<std::size_t>(dim + 1), first.ndim());
     const std::int64_t outer = product(first.shape(), 0, static_cast<std::size_t>(dim));
     const std::size_t element_size = dtype_size(first.dtype());
     std::int64_t dim_offset = 0;
     for (const Tensor& tensor : tensors) {
-        const Tensor source = tensor.to(Device::cpu());
+        const Tensor source = contiguous(tensor).to(Device::cpu());
         for (std::int64_t outer_index = 0; outer_index < outer; ++outer_index) {
             const auto source_index = outer_index * tensor.shape()[dim] * inner;
             const auto destination_index = (outer_index * output_shape[dim] + dim_offset) * inner;

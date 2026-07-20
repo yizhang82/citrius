@@ -375,6 +375,21 @@ TEST(CudaDeviceTest, QwenAttentionHandlesPermutedViewsAndGroupedQueryHeads) {
     for (const float value : values(output)) EXPECT_TRUE(std::isfinite(value));
 }
 
+TEST(CudaDeviceTest, ConcatMaterializesSplitViewsNativelyOnCuda) {
+    std::string error;
+    auto device = make_cuda_device(&error);
+    if (!device)
+        GTEST_SKIP() << error;
+    const auto input = make_cuda_tensor(*device, {2, 4}, {1, 2, 3, 4, 5, 6, 7, 8});
+    const auto parts = citrius::split(input, 2, 1);
+
+    const auto output = citrius::concat({parts[1], parts[0]}, 1);
+
+    EXPECT_EQ(output.device(), citrius::Device::cuda());
+    EXPECT_EQ(output.shape(), citrius::Shape({2, 4}));
+    EXPECT_EQ(values(output), std::vector<float>({3, 4, 1, 2, 7, 8, 5, 6}));
+}
+
 TEST(CudaDeviceTest, CublasMatmulMatchesReferenceForNonSquareMatrices) {
     std::string error;
     auto baseline = make_cuda_device(&error);

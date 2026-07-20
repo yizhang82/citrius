@@ -127,8 +127,8 @@ Tensor contiguous(const Tensor& tensor);
 /// @param tensor Defined input tensor.
 /// @param split_size Maximum length of each section along `dim`; must be positive.
 /// @param dim Dimension along which to split; negative indices are accepted.
-/// @return Materialized contiguous tensors on the input device. The final tensor may
-///         be shorter than `split_size`.
+/// @return Metadata-only views sharing the input storage. The final tensor may be
+///         shorter than `split_size`.
 /// @throws std::invalid_argument If `tensor` is undefined or `split_size` is not positive.
 /// @throws std::out_of_range If `dim` is outside the tensor rank.
 /// @code
@@ -140,7 +140,7 @@ std::vector<Tensor> split(const Tensor& tensor, std::int64_t split_size, std::in
 /// @param tensor Defined input tensor.
 /// @param chunks Maximum requested number of sections; must be positive.
 /// @param dim Dimension along which to split; negative indices are accepted.
-/// @return At most `chunks` materialized contiguous tensors on the input device.
+/// @return At most `chunks` metadata-only views sharing the input storage.
 /// @throws std::invalid_argument If `tensor` is undefined or `chunks` is not positive.
 /// @throws std::out_of_range If `dim` is outside the tensor rank.
 /// @code
