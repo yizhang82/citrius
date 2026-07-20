@@ -23,9 +23,10 @@ Tensor slice(
     std::int64_t step = 1);
 
 /// Changes a tensor's shape without changing its element order.
-/// @param tensor Defined contiguous input tensor.
+/// @param tensor Defined input tensor. Non-contiguous inputs are materialized first.
 /// @param shape Requested output shape; at most one dimension may be `-1` for inference.
-/// @return A tensor with the requested shape that shares storage with `tensor`.
+/// @return A tensor with the requested shape. Contiguous inputs share storage;
+///         non-contiguous inputs are materialized on their current device.
 /// @throws std::invalid_argument If `tensor` is undefined, dimensions are invalid, or
 ///         the requested shape does not preserve the element count.
 /// @code
@@ -91,8 +92,7 @@ Tensor squeeze(const Tensor& tensor, std::int64_t dim);
 /// @param tensor Defined input tensor.
 /// @param dimensions A permutation containing each input dimension exactly once;
 ///        negative indices are accepted.
-/// @return A materialized contiguous tensor with reordered shape and values on the
-///         same device as `tensor`.
+/// @return A storage-sharing metadata-only view with reordered shape and strides.
 /// @throws std::invalid_argument If `tensor` is undefined, the permutation rank is
 ///         wrong, or a dimension occurs more than once.
 /// @throws std::out_of_range If a dimension is outside the tensor rank.
@@ -105,7 +105,7 @@ Tensor permute(const Tensor& tensor, std::vector<std::int64_t> dimensions);
 /// @param tensor Defined input tensor.
 /// @param dim0 First dimension; negative indices are accepted.
 /// @param dim1 Second dimension; negative indices are accepted.
-/// @return A materialized contiguous tensor with the two dimensions exchanged.
+/// @return A storage-sharing metadata-only view with the two dimensions exchanged.
 /// @throws std::invalid_argument If `tensor` is undefined.
 /// @throws std::out_of_range If either dimension is outside the tensor rank.
 /// @code

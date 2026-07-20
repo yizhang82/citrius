@@ -3,6 +3,7 @@
 #include "impl/multi_thread_cpu_device.h"
 #include "operations.h"
 #include "reduction_operations.h"
+#include "shape_operations.h"
 #include "tensor_factory.h"
 #include "nn/functional.h"
 
@@ -228,6 +229,7 @@ enum class Operation {
     Softmax,
     LayerNorm,
     Matmul,
+    TransposedMatmul,
     BatchedMatmul,
 };
 
@@ -267,6 +269,8 @@ const char* operation_name(Operation operation) {
         return "layer-norm";
     case Operation::Matmul:
         return "matmul";
+    case Operation::TransposedMatmul:
+        return "matmul-weight-t";
     case Operation::BatchedMatmul:
         return "batch-matmul";
     }
@@ -274,7 +278,7 @@ const char* operation_name(Operation operation) {
 }
 
 double operation_count(Operation operation, std::int64_t size) {
-    if (operation == Operation::Matmul) {
+    if (operation == Operation::Matmul || operation == Operation::TransposedMatmul) {
         return 2.0 * static_cast<double>(size) * size * size;
     }
     if (operation == Operation::BatchedMatmul) {
@@ -458,6 +462,8 @@ Result benchmark_cpu(const citrius::impl::CpuDeviceImpl& device, Operation opera
     const auto b_values = input_values(size * size, 7);
     citrius::Tensor a(a_values, {size, size});
     auto b = citrius::from_vector(b_values, {size, size});
+    const auto right = operation == Operation::TransposedMatmul
+        ? citrius::transpose(b, 0, 1) : b;
     auto out = device.empty({size, size}, citrius::DType::Float32);
     auto result = measure(operation_count(operation, size), iterations, [&] {
         switch (operation) {
@@ -468,7 +474,8 @@ Result benchmark_cpu(const citrius::impl::CpuDeviceImpl& device, Operation opera
             device.sub_out(a, b, out);
             break;
         case Operation::Matmul:
-            device.matmul_out(a, b, out);
+        case Operation::TransposedMatmul:
+            device.matmul_out(a, right, out);
             break;
         case Operation::BroadcastAdd:
         case Operation::BroadcastMul:
@@ -667,6 +674,8 @@ Result benchmark_cuda(const CudaDevice& device, Operation operation, std::int64_
     const auto b_values = input_values(size * size, 7);
     citrius::Tensor a(a_values, {size, size}, citrius::Device::cuda());
     auto b = citrius::from_vector(b_values, {size, size}, citrius::Device::cuda());
+    const auto right = operation == Operation::TransposedMatmul
+        ? citrius::transpose(b, 0, 1) : b;
     auto out = device.empty({size, size}, citrius::DType::Float32);
     const auto run = [&] {
         switch (operation) {
@@ -677,7 +686,8 @@ Result benchmark_cuda(const CudaDevice& device, Operation operation, std::int64_
             device.sub_out(a, b, out);
             return;
         case Operation::Matmul:
-            device.matmul_out(a, b, out);
+        case Operation::TransposedMatmul:
+            device.matmul_out(a, right, out);
             return;
         case Operation::BroadcastAdd:
         case Operation::BroadcastMul:
@@ -822,7 +832,8 @@ int main(int argc, char** argv) {
                              Operation::LayerNorm});
                     }
                     operations.insert(
-                        operations.end(), {Operation::Matmul, Operation::BatchedMatmul});
+                        operations.end(), {Operation::Matmul, Operation::TransposedMatmul,
+                                           Operation::BatchedMatmul});
                     for (Operation operation : operations) {
                         const int runs =
                             reference_only ? 1 : benchmark_iterations(operation, size, iterations);
@@ -878,7 +889,8 @@ int main(int argc, char** argv) {
                              Operation::LayerNorm});
                     }
                     operations.insert(
-                        operations.end(), {Operation::Matmul, Operation::BatchedMatmul});
+                        operations.end(), {Operation::Matmul, Operation::TransposedMatmul,
+                                           Operation::BatchedMatmul});
                     for (Operation operation : operations) {
                         print_result(operation, size, iterations,
                                      benchmark_cuda(device, operation, size, iterations));

@@ -1,5 +1,6 @@
 #include "impl/batched_matmul_layout.h"
 #include "impl/cublas_cuda_device.h"
+#include "impl/cuda_matmul_layout.h"
 #include "tensor_utils.h"
 #include "impl/cuda_allocation.h"
 #include "impl/cuda_context.h"
@@ -92,8 +93,20 @@ void CublasCudaDeviceImpl::matmul_out(const Tensor& a, const Tensor& b, Tensor& 
         return;
     }
 
-    auto ap = ensure_storage(a.storage(), ConversionPolicy::CopyToDevice);
-    auto bp = ensure_storage(b.storage(), ConversionPolicy::CopyToDevice);
+    Tensor packed_a = cuda_matrix_layout(a).supported() ? a : contiguous(a);
+    Tensor packed_b = cuda_matrix_layout(b).supported() ? b : contiguous(b);
+    const auto a_layout = cuda_matrix_layout(packed_a);
+    const auto b_layout = cuda_matrix_layout(packed_b);
+    if (a_layout.leading_dimension > INT_MAX || b_layout.leading_dimension > INT_MAX)
+        throw std::invalid_argument("cuBLAS matmul strides are too large");
+    auto ap = ensure_storage(packed_a.storage(), ConversionPolicy::CopyToDevice);
+    auto bp = ensure_storage(packed_b.storage(), ConversionPolicy::CopyToDevice);
+    auto* a_data = data(*ap) + a_layout.storage_offset;
+    auto* b_data = data(*bp) + b_layout.storage_offset;
+    const auto a_operation = a_layout.type == CudaMatrixLayoutType::RowMajor
+                                 ? CUBLAS_OP_N : CUBLAS_OP_T;
+    const auto b_operation = b_layout.type == CudaMatrixLayoutType::RowMajor
+                                 ? CUBLAS_OP_N : CUBLAS_OP_T;
     const float alpha = 1.0f;
     const float beta = 0.0f;
 
@@ -106,18 +119,16 @@ void CublasCudaDeviceImpl::matmul_out(const Tensor& a, const Tensor& b, Tensor& 
     // This accounts for the (n, m, k) problem dimensions and leading
     // dimensions n for B^T, k for A^T, and n for C^T below.
     check_cublas(cublasSgemm(impl_->handle,       // cuBLAS context for the selected CUDA device
-                             CUBLAS_OP_N,         // use the column-major B^T view without another
-                                                  // transpose
-                             CUBLAS_OP_N,         // use the column-major A^T view without another
-                                                  // transpose
+                             b_operation,
+                             a_operation,
                              static_cast<int>(n), // rows of the column-major result C^T
                              static_cast<int>(m), // columns of the column-major result C^T
                              static_cast<int>(k), // shared dimension of B^T and A^T
                              &alpha,              // scale applied to B^T * A^T (1.0)
-                             data(*bp), // row-major B bytes, interpreted as column-major B^T
-                             static_cast<int>(n), // leading dimension of B^T
-                             data(*ap), // row-major A bytes, interpreted as column-major A^T
-                             static_cast<int>(k), // leading dimension of A^T
+                             b_data,
+                             static_cast<int>(b_layout.leading_dimension),
+                             a_data,
+                             static_cast<int>(a_layout.leading_dimension),
                              &beta, // scale applied to the previous output contents (0.0)
                              data(*out.storage()), // column-major C^T bytes, equivalent to
                                                    // row-major C

@@ -2,6 +2,7 @@
 #include "impl/cpu_storage.h"
 #include "impl/cuda_allocation.h"
 #include "impl/cuda_context.h"
+#include "impl/cuda_matmul_layout.h"
 #include "impl/cublas_cuda_device.h"
 #include "impl/cuda_device.h"
 #include "impl/cuda_storage.h"
@@ -302,6 +303,46 @@ TEST(CudaDeviceTest, GatherRowsRejectsOutOfRangeCudaIndices) {
         std::vector<std::int64_t>{0, 2}, citrius::Device::cuda());
 
     EXPECT_THROW(citrius::gather_rows(table, row_indices), std::out_of_range);
+}
+
+TEST(CudaDeviceTest, RecognizesRowAndColumnMajorCudaMatrixViews) {
+    const citrius::Tensor matrix({2, 3}, citrius::DType::Float32);
+    const auto row_layout = citrius::impl::cuda_matrix_layout(matrix);
+    const auto column_layout = citrius::impl::cuda_matrix_layout(
+        citrius::transpose(matrix, 0, 1));
+
+    EXPECT_EQ(row_layout.type, citrius::impl::CudaMatrixLayoutType::RowMajor);
+    EXPECT_EQ(row_layout.leading_dimension, 3);
+    EXPECT_EQ(column_layout.type, citrius::impl::CudaMatrixLayoutType::ColumnMajor);
+    EXPECT_EQ(column_layout.leading_dimension, 3);
+}
+
+TEST(CudaDeviceTest, CublasMatmulConsumesTransposedWeightView) {
+    std::string error;
+    auto baseline = make_cuda_device(&error);
+    if (!baseline)
+        GTEST_SKIP() << error;
+    citrius::impl::CublasCudaDeviceImpl cublas;
+    const auto input = make_cuda_tensor(*baseline, {2, 3}, {1, 2, 3, 4, 5, 6});
+    const auto weight = make_cuda_tensor(*baseline, {2, 3}, {1, 0, 1, 0, 1, 1});
+
+    const auto output = cublas.matmul(input, citrius::transpose(weight, 0, 1));
+
+    EXPECT_EQ(values(output), std::vector<float>({4, 5, 10, 11}));
+}
+
+TEST(CudaDeviceTest, CutlassMatmulConsumesTransposedWeightView) {
+    std::string error;
+    auto baseline = make_cuda_device(&error);
+    if (!baseline)
+        GTEST_SKIP() << error;
+    citrius::impl::CutlassCudaDeviceImpl cutlass;
+    const auto input = make_cuda_tensor(*baseline, {2, 3}, {1, 2, 3, 4, 5, 6});
+    const auto weight = make_cuda_tensor(*baseline, {2, 3}, {1, 0, 1, 0, 1, 1});
+
+    const auto output = cutlass.matmul(input, citrius::transpose(weight, 0, 1));
+
+    EXPECT_EQ(values(output), std::vector<float>({4, 5, 10, 11}));
 }
 
 TEST(CudaDeviceTest, CublasMatmulMatchesReferenceForNonSquareMatrices) {

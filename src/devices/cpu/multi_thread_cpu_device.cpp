@@ -1,5 +1,6 @@
 #include "impl/multi_thread_cpu_device.h"
 #include "tensor_utils.h"
+#include "shape_operations.h"
 
 #include <algorithm>
 #include <charconv>
@@ -112,10 +113,14 @@ void MultiThreadCpuDeviceImpl::matmul_out(const Tensor& a, const Tensor& b, Tens
     if (a.shape()[1] != b.shape()[0]) throw std::invalid_argument("matmul inner dimensions must match");
     const auto m = a.shape()[0], k = a.shape()[1], n = b.shape()[1];
     ENSURE_TENSOR_SHAPE(output, Shape({m, n}));
-    const auto& as = static_cast<const CpuMemTensorStorageImpl&>(*ensure_storage(a.storage()));
-    const auto& bs = static_cast<const CpuMemTensorStorageImpl&>(*ensure_storage(b.storage()));
+    const Tensor packed_a = a.is_contiguous() ? a : contiguous(a);
+    const Tensor packed_b = b.is_contiguous() ? b : contiguous(b);
+    const auto& as = static_cast<const CpuMemTensorStorageImpl&>(*ensure_storage(packed_a.storage()));
+    const auto& bs = static_cast<const CpuMemTensorStorageImpl&>(*ensure_storage(packed_b.storage()));
     auto& os = output_storage(output);
-    const float* ap = as.data_as<float>(); const float* bp = bs.data_as<float>(); float* op = os.data_as<float>();
+    const float* ap = as.data_as<float>() + packed_a.storage_offset();
+    const float* bp = bs.data_as<float>() + packed_b.storage_offset();
+    float* op = os.data_as<float>();
     parallel_for(0, m, thread_count_, 1, [&](std::int64_t begin, std::int64_t end) {
         for (auto row = begin; row < end; ++row) {
             for (std::int64_t col = 0; col < n; ++col) {

@@ -1,5 +1,6 @@
 #include "impl/cpu_device.h"
 #include "tensor_utils.h"
+#include "shape_operations.h"
 
 #include <algorithm>
 #include <numeric>
@@ -209,12 +210,14 @@ void CpuDeviceImpl::matmul_out(const Tensor& a, const Tensor& b, Tensor& output)
     require_defined(output, "output");
     require_float32(output, "output");
     ENSURE_TENSOR_SHAPE(output, Shape({m, n}));
-    const auto& a_storage = require_cpu_storage(*ensure_storage(a.storage()));
-    const auto& b_storage = require_cpu_storage(*ensure_storage(b.storage()));
+    const Tensor packed_a = a.is_contiguous() ? a : contiguous(a);
+    const Tensor packed_b = b.is_contiguous() ? b : contiguous(b);
+    const auto& a_storage = require_cpu_storage(*ensure_storage(packed_a.storage()));
+    const auto& b_storage = require_cpu_storage(*ensure_storage(packed_b.storage()));
     auto& output_storage = require_cpu_storage(*output.storage());
 
-    const float* a_data = a_storage.data_as<float>();
-    const float* b_data = b_storage.data_as<float>();
+    const float* a_data = a_storage.data_as<float>() + packed_a.storage_offset();
+    const float* b_data = b_storage.data_as<float>() + packed_b.storage_offset();
     float* output_data = output_storage.data_as<float>();
 
     for (std::int64_t row = 0; row < m; ++row) {

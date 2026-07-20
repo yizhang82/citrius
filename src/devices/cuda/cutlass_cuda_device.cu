@@ -1,5 +1,6 @@
 #include "impl/batched_matmul_layout.h"
 #include "impl/cutlass_cuda_device.h"
+#include "impl/cuda_matmul_layout.h"
 #include "tensor_utils.h"
 #include "impl/cuda_context.h"
 
@@ -46,6 +47,20 @@ cudaStream_t stream(const std::shared_ptr<CudaExecutionContext>& context) {
     return static_cast<cudaStream_t>(context->stream());
 }
 
+template <typename LayoutA, typename LayoutB>
+void launch_gemm(
+    float* a, int lda, float* b, int ldb, float* output,
+    int m, int n, int k, cudaStream_t execution_stream) {
+    using RowMajor = cutlass::layout::RowMajor;
+    using Gemm = cutlass::gemm::device::Gemm<
+        float, LayoutA, float, LayoutB, float, RowMajor>;
+    typename Gemm::Arguments arguments(
+        {m, n, k}, {a, lda}, {b, ldb}, {output, n}, {output, n}, {1.0f, 0.0f});
+    Gemm gemm;
+    check_cutlass(gemm.can_implement(arguments), "CUTLASS cannot implement matmul");
+    check_cutlass(gemm(arguments, nullptr, execution_stream), "CUTLASS matmul failed");
+}
+
 } // namespace
 
 CutlassCudaDeviceImpl::CutlassCudaDeviceImpl(int device_index) : CudaDeviceImpl(device_index) {}
@@ -72,37 +87,37 @@ void CutlassCudaDeviceImpl::matmul_out(const Tensor& a, const Tensor& b, Tensor&
         return;
     }
 
-    auto ap = ensure_storage(a.storage(), ConversionPolicy::CopyToDevice);
-    auto bp = ensure_storage(b.storage(), ConversionPolicy::CopyToDevice);
+    Tensor packed_a = cuda_matrix_layout(a).supported() ? a : contiguous(a);
+    Tensor packed_b = cuda_matrix_layout(b).supported() ? b : contiguous(b);
+    const auto a_layout = cuda_matrix_layout(packed_a);
+    const auto b_layout = cuda_matrix_layout(packed_b);
+    if (a_layout.leading_dimension > INT_MAX || b_layout.leading_dimension > INT_MAX)
+        throw std::invalid_argument("CUTLASS matmul strides are too large");
+    auto ap = ensure_storage(packed_a.storage(), ConversionPolicy::CopyToDevice);
+    auto bp = ensure_storage(packed_b.storage(), ConversionPolicy::CopyToDevice);
+    auto* a_data = data(*ap) + a_layout.storage_offset;
+    auto* b_data = data(*bp) + b_layout.storage_offset;
 
     // Unlike the traditional cuBLAS API, CUTLASS lets us declare the physical
     // layout of every operand explicitly. All three layouts are RowMajor, so
     // CUTLASS computes C[m x n] = A[m x k] * B[k x n] directly; no operand
     // reversal or transpose reinterpretation is required.
     using RowMajor = cutlass::layout::RowMajor;
-    // Template arguments describe the element type and layout of A, B, and C.
-    // The accumulator defaults to float for this Float32 GEMM specialization.
-    using Gemm = cutlass::gemm::device::Gemm<float, RowMajor, float, RowMajor, float, RowMajor>;
-
-    // CUTLASS represents each matrix as {device pointer, leading dimension}.
-    // For packed row-major storage, the leading dimension is the number of
-    // columns: k for A and n for B, the source C, and destination D.
-    typename Gemm::Arguments arguments(
-        {static_cast<int>(m), static_cast<int>(n),
-         static_cast<int>(k)},                       // GEMM problem size {m, n, k}
-        {data(*ap), static_cast<int>(k)},            // A[m x k], row stride k
-        {data(*bp), static_cast<int>(n)},            // B[k x n], row stride n
-        {data(*out.storage()), static_cast<int>(n)}, // source C[m x n], row stride n
-        {data(*out.storage()), static_cast<int>(n)}, // destination D[m x n], row stride n
-        {1.0f, 0.0f});                               // D = 1 * (A * B) + 0 * C
-
-    Gemm gemm;
-    // Reject shapes, alignments, or device capabilities unsupported by this
-    // generated kernel before attempting to launch it.
-    check_cutlass(gemm.can_implement(arguments), "CUTLASS cannot implement matmul");
-    // Initialize and launch the selected CUTLASS GEMM kernel on the context
-    // stream. The call reports setup/launch errors through cutlass::Status.
-    check_cutlass(gemm(arguments, nullptr, stream(execution_context())), "CUTLASS matmul failed");
+    using ColumnMajor = cutlass::layout::ColumnMajor;
+    const auto lda = static_cast<int>(a_layout.leading_dimension);
+    const auto ldb = static_cast<int>(b_layout.leading_dimension);
+    auto* output = data(*out.storage());
+    const auto execution_stream = stream(execution_context());
+    if (a_layout.type == CudaMatrixLayoutType::RowMajor &&
+        b_layout.type == CudaMatrixLayoutType::RowMajor) {
+        launch_gemm<RowMajor, RowMajor>(a_data, lda, b_data, ldb, output, m, n, k, execution_stream);
+    } else if (a_layout.type == CudaMatrixLayoutType::RowMajor) {
+        launch_gemm<RowMajor, ColumnMajor>(a_data, lda, b_data, ldb, output, m, n, k, execution_stream);
+    } else if (b_layout.type == CudaMatrixLayoutType::RowMajor) {
+        launch_gemm<ColumnMajor, RowMajor>(a_data, lda, b_data, ldb, output, m, n, k, execution_stream);
+    } else {
+        launch_gemm<ColumnMajor, ColumnMajor>(a_data, lda, b_data, ldb, output, m, n, k, execution_stream);
+    }
 }
 
 Tensor CutlassCudaDeviceImpl::batched_matmul(const Tensor& a, const Tensor& b) const {

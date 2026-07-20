@@ -44,11 +44,14 @@ TEST(ShapeOperationsTest, TransposesAndPermutesValues) {
     const auto transposed = citrius::transpose(input, 0, 1);
 
     EXPECT_EQ(transposed.shape(), citrius::Shape({3, 2}));
-    EXPECT_EQ(values(transposed), std::vector<float>({1, 4, 2, 5, 3, 6}));
+    EXPECT_EQ(transposed.storage(), input.storage());
+    EXPECT_FALSE(transposed.is_contiguous());
+    EXPECT_EQ(values(citrius::contiguous(transposed)), std::vector<float>({1, 4, 2, 5, 3, 6}));
 
     const citrius::Tensor cube(std::vector<float>{1, 2, 3, 4, 5, 6, 7, 8}, {2, 2, 2});
     const auto permuted = citrius::permute(cube, {1, 0, 2});
-    EXPECT_EQ(values(permuted), std::vector<float>({1, 2, 5, 6, 3, 4, 7, 8}));
+    EXPECT_EQ(permuted.storage(), cube.storage());
+    EXPECT_EQ(values(citrius::contiguous(permuted)), std::vector<float>({1, 2, 5, 6, 3, 4, 7, 8}));
 }
 
 TEST(ShapeOperationsTest, SplitsChunksAndConcatenates) {

@@ -978,8 +978,10 @@ void CudaDeviceImpl::matmul_out(const Tensor& a, const Tensor& b, Tensor& out) c
     require_defined(out, "output");
     require_float32(out, "output");
     ENSURE_TENSOR_SHAPE(out, Shape({m, n}));
-    auto ap = ensure_storage(a.storage(), ConversionPolicy::CopyToDevice);
-    auto bp = ensure_storage(b.storage(), ConversionPolicy::CopyToDevice);
+    const Tensor packed_a = a.is_contiguous() ? a : contiguous(a);
+    const Tensor packed_b = b.is_contiguous() ? b : contiguous(b);
+    auto ap = ensure_storage(packed_a.storage(), ConversionPolicy::CopyToDevice);
+    auto bp = ensure_storage(packed_b.storage(), ConversionPolicy::CopyToDevice);
     if (m != 0 && n != 0) {
         // One 16x16 thread block computes one 16x16 tile of the [m, n]
         // output. Each thread accumulates one output element while all threads
@@ -992,7 +994,8 @@ void CudaDeviceImpl::matmul_out(const Tensor& a, const Tensor& b, Tensor& out) c
         const dim3 blocks(static_cast<unsigned>((n + matmul_tile_size - 1) / matmul_tile_size),
                           static_cast<unsigned>((m + matmul_tile_size - 1) / matmul_tile_size));
         matmul_f32<<<blocks, threads, 0, stream(context_)>>>(
-            data(require_cuda_storage(*ap)), data(require_cuda_storage(*bp)),
+            data(require_cuda_storage(*ap)) + packed_a.storage_offset(),
+            data(require_cuda_storage(*bp)) + packed_b.storage_offset(),
             data(require_cuda_storage(*out.storage())), m, k, n);
     }
     check_cuda(cudaGetLastError(), "failed to launch CUDA matmul kernel");

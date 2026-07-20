@@ -85,7 +85,8 @@ device index in its constructor and preserves that index in tensors and storage.
 Current operation constraints:
 
 - `Float32` only
-- contiguous layout is assumed
+- most kernels require contiguous layout; cuBLAS and CUTLASS 2D matmul consume
+  row-major and transposed column-major views directly
 - add/sub require identical shapes
 - matmul supports 2D tensors only
 - broadcasting, strides, dtype dispatch, and autograd are not implemented yet

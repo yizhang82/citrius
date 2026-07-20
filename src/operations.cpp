@@ -4,6 +4,7 @@
 #include "impl/multi_thread_cpu_device.h"
 #include "impl/cpu_storage.h"
 #include "exceptions.h"
+#include "shape_operations.h"
 #include "tensor_factory.h"
 #include "tensor_utils.h"
 
@@ -227,7 +228,9 @@ Tensor sub(const Tensor& left, const Tensor& right) {
 
 Tensor matmul(const Tensor& left, const Tensor& right) {
     if (left.ndim() != 2 || right.ndim() != 2) {
-        return dispatch(left, right, [](const auto& device, const Tensor& a, const Tensor& b) {
+        const Tensor packed_left = left.is_contiguous() ? left : contiguous(left);
+        const Tensor packed_right = right.is_contiguous() ? right : contiguous(right);
+        return dispatch(packed_left, packed_right, [](const auto& device, const Tensor& a, const Tensor& b) {
             return device.batched_matmul(a, b);
         });
     }

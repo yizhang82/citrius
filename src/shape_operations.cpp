@@ -73,33 +73,6 @@ std::byte* cpu_bytes(Tensor& tensor) {
         std::static_pointer_cast<impl::CpuMemTensorStorageImpl>(tensor.storage())->data());
 }
 
-Tensor materialize_permutation(const Tensor& tensor, const std::vector<std::int64_t>& dimensions) {
-    const Tensor source = tensor.to(Device::cpu());
-    Shape output_shape(dimensions.size());
-    for (std::size_t index = 0; index < dimensions.size(); ++index) {
-        output_shape[index] = tensor.shape()[static_cast<std::size_t>(dimensions[index])];
-    }
-    Tensor output = empty(output_shape, tensor.dtype(), Device::cpu());
-    const Strides input_strides = contiguous_strides(tensor.shape());
-    const Strides output_strides = contiguous_strides(output_shape);
-    const std::size_t element_size = dtype_size(tensor.dtype());
-
-    for (std::int64_t output_index = 0; output_index < output.numel(); ++output_index) {
-        std::int64_t remainder = output_index;
-        std::int64_t input_index = 0;
-        for (std::size_t axis = 0; axis < output_shape.size(); ++axis) {
-            const std::int64_t coordinate = remainder / output_strides[axis];
-            remainder %= output_strides[axis];
-            input_index += coordinate * input_strides[static_cast<std::size_t>(dimensions[axis])];
-        }
-        std::memcpy(
-            cpu_bytes(output) + output_index * element_size,
-            cpu_bytes(source) + input_index * element_size,
-            element_size);
-    }
-    return output.to(tensor.device());
-}
-
 } // namespace
 
 Tensor select(const Tensor& tensor, std::int64_t dim, std::int64_t index) {
@@ -168,13 +141,11 @@ Tensor slice(
 
 Tensor reshape(const Tensor& tensor, Shape shape) {
     ENSURE_TENSOR_DEFINED(tensor);
-    if (!tensor.is_contiguous()) {
-        throw std::invalid_argument("reshaping a non-contiguous tensor requires contiguous()");
-    }
     shape = resolved_shape(tensor, std::move(shape));
+    const Tensor source = tensor.is_contiguous() ? tensor : contiguous(tensor);
     auto strides = contiguous_strides(shape);
-    return Tensor(std::move(shape), std::move(strides), tensor.storage_offset(),
-                  tensor.dtype(), tensor.device(), tensor.storage());
+    return Tensor(std::move(shape), std::move(strides), source.storage_offset(),
+                  source.dtype(), source.device(), source.storage());
 }
 
 Tensor view(const Tensor& tensor, Shape shape) {
@@ -228,7 +199,15 @@ Tensor permute(const Tensor& tensor, std::vector<std::int64_t> dimensions) {
         if (seen[static_cast<std::size_t>(dimension)]) throw std::invalid_argument("permute dimensions must be unique");
         seen[static_cast<std::size_t>(dimension)] = true;
     }
-    return materialize_permutation(tensor, dimensions);
+    Shape shape(dimensions.size());
+    Strides strides(dimensions.size());
+    for (std::size_t index = 0; index < dimensions.size(); ++index) {
+        const auto source = static_cast<std::size_t>(dimensions[index]);
+        shape[index] = tensor.shape()[source];
+        strides[index] = tensor.strides()[source];
+    }
+    return Tensor(std::move(shape), std::move(strides), tensor.storage_offset(),
+                  tensor.dtype(), tensor.device(), tensor.storage());
 }
 
 Tensor transpose(const Tensor& tensor, std::int64_t dim0, std::int64_t dim1) {
