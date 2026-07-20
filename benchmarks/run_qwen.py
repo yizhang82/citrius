@@ -23,6 +23,14 @@ class TimingStreamer:
     def end(self):
         pass
 
+
+def positive_int(value):
+    parsed = int(value)
+    if parsed <= 0:
+        raise argparse.ArgumentTypeError("must be a positive integer")
+    return parsed
+
+
 def main():
     parser = argparse.ArgumentParser(description="Run Qwen 0.6B using PyTorch and safetensors.")
     parser.add_argument("model_name", type=str, help="Hugging Face model identifier or local path to configuration/tokenizer")
@@ -31,6 +39,7 @@ def main():
     parser.add_argument("--cpu", action="store_true", help="Force CPU execution even when CUDA is available")
     parser.add_argument("--no-cache", action="store_true", help="Disable the KV cache during generation")
     parser.add_argument("--greedy", action="store_true", help="Select the highest-probability token instead of sampling")
+    parser.add_argument("--max-token", type=positive_int, default=50, help="Maximum number of new tokens to generate (default: 50)")
     
     args = parser.parse_args()
     
@@ -80,7 +89,7 @@ def main():
     synchronize()
     generation_start = time.perf_counter()
     generation_options = {
-        "max_new_tokens": 50,
+        "max_new_tokens": args.max_token,
         "do_sample": not args.greedy,
         "use_cache": not args.no_cache,
         "pad_token_id": tokenizer.eos_token_id,

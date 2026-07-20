@@ -306,12 +306,14 @@ $qwenSnapshot = "$env:USERPROFILE\.cache\huggingface\hub\models--Qwen--Qwen3-0.6
 python benchmarks/run_qwen.py `
   "Qwen/Qwen3-0.6B" `
   "$qwenSnapshot\model.safetensors" `
-  "Who are you?"
+  "Who are you?" `
+  --max-token 50
 ```
 
 The runner uses CUDA when available and applies Qwen's chat template with thinking
 enabled. Add `--cpu` to force CPU execution, `--greedy` to disable sampling, and
 `--no-cache` to disable the KV cache for comparison with the current Citrius decoder.
+Use `--max-token N` to set the maximum number of newly generated tokens.
 It reports device, TTFT, end-to-end throughput, post-first-token throughput, and
 total generation time.
 
