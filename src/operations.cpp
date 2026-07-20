@@ -23,9 +23,11 @@
 #include <cstdlib>
 #include <functional>
 #include <memory>
+#include <mutex>
+#include <shared_mutex>
 #include <stdexcept>
 #include <string>
-#include <string_view>
+#include <unordered_map>
 #include <vector>
 
 namespace citrius {
@@ -129,22 +131,46 @@ Tensor unary(const Tensor& tensor, Operation operation) {
 }
 
 #ifdef CITRIUS_HAS_CUDA
-std::unique_ptr<impl::IDevice> cuda_device(int device_index) {
+std::shared_ptr<impl::IDevice> cuda_device(int device_index) {
+    std::string backend;
     const char* configured_backend = std::getenv("CITRIUS_CUDA_BACKEND");
     if (configured_backend) {
-        const std::string_view backend(configured_backend);
-        if (backend == "cublas") return std::make_unique<CublasCudaDeviceImpl>(device_index);
-        if (backend == "reference") return std::make_unique<CudaDeviceImpl>(device_index);
-        if (backend == "cutlass") return std::make_unique<CutlassCudaDeviceImpl>(device_index);
-        throw CitriusException(
-            "CITRIUS_CUDA_BACKEND must be 'cublas', 'cutlass', or 'reference', got '" +
-            std::string(backend) + "'");
-    }
+        backend = configured_backend;
+        if (backend != "cublas" && backend != "reference" && backend != "cutlass") {
+            throw CitriusException(
+                "CITRIUS_CUDA_BACKEND must be 'cublas', 'cutlass', or 'reference', got '" +
+                backend + "'");
+        }
+    } else {
 #ifdef CITRIUS_CUDA_DEFAULT_CUBLAS
-    return std::make_unique<CublasCudaDeviceImpl>(device_index);
+        backend = "cublas";
 #else
-    return std::make_unique<CudaDeviceImpl>(device_index);
+        backend = "reference";
 #endif
+    }
+
+    static std::shared_mutex mutex;
+    static std::unordered_map<std::string, std::shared_ptr<impl::IDevice>> devices;
+    const std::string key = backend + ':' + std::to_string(device_index);
+    {
+        std::shared_lock lock(mutex);
+        if (const auto existing = devices.find(key); existing != devices.end())
+            return existing->second;
+    }
+
+    std::unique_lock lock(mutex);
+    if (const auto existing = devices.find(key); existing != devices.end())
+        return existing->second;
+
+    std::shared_ptr<impl::IDevice> device;
+    if (backend == "cublas")
+        device = std::make_shared<CublasCudaDeviceImpl>(device_index);
+    else if (backend == "cutlass")
+        device = std::make_shared<CutlassCudaDeviceImpl>(device_index);
+    else
+        device = std::make_shared<CudaDeviceImpl>(device_index);
+    devices.emplace(key, device);
+    return device;
 }
 
 Tensor cuda_broadcast_elementwise(

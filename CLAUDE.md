@@ -284,6 +284,21 @@ The benchmark excludes model construction, reports time to first token (TTFT),
 end-to-end tokens per second, and post-first-token tokens per second. CUDA requires
 an existing build configured with `build.bat --cuda`.
 
+Run checkpoint-backed Qwen3-0.6B chat decoding from PowerShell with:
+
+```powershell
+$qwenSnapshot = "$env:USERPROFILE\.cache\huggingface\hub\models--Qwen--Qwen3-0.6B\snapshots\c1899de289a04d12100db370d81485cdf75e47ca"
+build\Release\decoder_chat.exe `
+  --checkpoint "$qwenSnapshot\model.safetensors" `
+  --tokenizer "$qwenSnapshot" `
+  --prompt "Who are you?" `
+  --max-new-tokens 50 `
+  --device cuda
+```
+
+Use `--device cpu` for CPU execution. The CUDA command requires an existing build
+configured with `build.bat --cuda`.
+
 `benchmark.bat` incrementally builds only the selected benchmark target and never
 configures CMake. CUDA benchmarks require an existing build configured with
 `build.bat --cuda`.
