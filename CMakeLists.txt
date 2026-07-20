@@ -197,6 +197,7 @@ endif()
 include(GoogleTest)
 
 add_executable(tensor_test
+    tests/device_nn_conformance_test.cpp
     tests/device_operation_conformance_test.cpp
     tests/models/qwen3_test.cpp
     tests/models/qwen3_tokenizer_test.cpp
