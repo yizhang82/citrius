@@ -1,8 +1,27 @@
 import argparse
 import os
+import time
 import torch
 from transformers import AutoConfig, AutoTokenizer, AutoModelForCausalLM
 from safetensors.torch import load_file
+
+
+class TimingStreamer:
+    def __init__(self, synchronize):
+        self.synchronize = synchronize
+        self.skip_prompt = True
+        self.first_token_time = None
+
+    def put(self, value):
+        if self.skip_prompt:
+            self.skip_prompt = False
+            return
+        if self.first_token_time is None:
+            self.synchronize()
+            self.first_token_time = time.perf_counter()
+
+    def end(self):
+        pass
 
 def main():
     parser = argparse.ArgumentParser(description="Run Qwen 0.6B using PyTorch and safetensors.")
@@ -42,10 +61,21 @@ def main():
     model = model.to(device)
     model.eval()
     
-    print("Tokenizing prompt...")
-    inputs = tokenizer(args.prompt, return_tensors="pt").to(device)
+    print("Tokenizing chat prompt with thinking enabled...")
+    inputs = tokenizer.apply_chat_template(
+        [{"role": "user", "content": args.prompt}],
+        tokenize=True,
+        add_generation_prompt=True,
+        enable_thinking=True,
+        return_tensors="pt",
+        return_dict=True,
+    ).to(device)
     
     print("Running inference...")
+    synchronize = torch.cuda.synchronize if device.type == "cuda" else lambda: None
+    timing_streamer = TimingStreamer(synchronize)
+    synchronize()
+    generation_start = time.perf_counter()
     with torch.no_grad():
         outputs = model.generate(
             **inputs,
@@ -53,8 +83,29 @@ def main():
             do_sample=True,
             temperature=0.7,
             top_p=0.9,
-            pad_token_id=tokenizer.eos_token_id
+            pad_token_id=tokenizer.eos_token_id,
+            streamer=timing_streamer
         )
+    synchronize()
+    generation_end = time.perf_counter()
+
+    prompt_tokens = inputs["input_ids"].shape[-1]
+    generated_tokens = outputs.shape[-1] - prompt_tokens
+    total_seconds = generation_end - generation_start
+    first_token_time = timing_streamer.first_token_time or generation_end
+    ttft_seconds = first_token_time - generation_start
+    post_first_seconds = generation_end - first_token_time
+    end_to_end_throughput = generated_tokens / total_seconds if total_seconds > 0 else 0.0
+    post_first_throughput = (
+        (generated_tokens - 1) / post_first_seconds
+        if generated_tokens > 1 and post_first_seconds > 0
+        else 0.0
+    )
+    device_description = (
+        f"{device} ({torch.cuda.get_device_name(device)})"
+        if device.type == "cuda"
+        else str(device)
+    )
     
     print("Decoding output...")
     decoded_output = tokenizer.decode(outputs[0], skip_special_tokens=True)
@@ -63,6 +114,15 @@ def main():
     print(args.prompt)
     print("\n=== Model Output ===")
     print(decoded_output)
+    print("\n=== Performance ===")
+    print(f"Device: {device_description}")
+    print("Thinking: enabled")
+    print(f"Prompt tokens: {prompt_tokens}")
+    print(f"Generated tokens: {generated_tokens}")
+    print(f"TTFT: {ttft_seconds * 1000:.3f} ms")
+    print(f"End-to-end throughput: {end_to_end_throughput:.3f} tokens/s")
+    print(f"Post-first-token throughput: {post_first_throughput:.3f} tokens/s")
+    print(f"Total generation time: {total_seconds * 1000:.3f} ms")
 
 if __name__ == "__main__":
     main()
