@@ -100,7 +100,8 @@ Qwen3RMSNorm::Qwen3RMSNorm(std::int64_t hidden_size, float eps, Device device)
 
 Tensor Qwen3RMSNorm::forward(const Tensor& input) {
     ENSURE_TENSOR_DEFINED(input);
-    if (input.dtype() != DType::Float32 || input.ndim() == 0 || input.shape().back() != hidden_size_) {
+    ENSURE_TENSOR_DTYPE(input, DType::Float32);
+    if (input.ndim() == 0 || input.shape().back() != hidden_size_) {
         throw std::invalid_argument("Qwen3RMSNorm requires Float32 input ending in hidden_size");
     }
     const Tensor variance = mean(pow(input, 2.0f), -1, true);
@@ -202,7 +203,7 @@ Qwen3Model::Qwen3Model(Qwen3Config config) : config_(std::move(config)) {
 Tensor Qwen3Model::forward(const Tensor& input_ids) {
     ENSURE_TENSOR_DEFINED(input_ids);
     ENSURE_TENSOR_DIM(input_ids, 2);
-    if (input_ids.dtype() != DType::Int64) throw std::invalid_argument("Qwen3 input_ids must be Int64");
+    ENSURE_TENSOR_DTYPE(input_ids, DType::Int64);
     if (input_ids.shape()[1] > config_.max_position_embeddings) {
         throw std::invalid_argument("Qwen3 sequence exceeds max_position_embeddings");
     }

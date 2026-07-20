@@ -4,6 +4,7 @@
 #include "operations.h"
 #include "reduction_operations.h"
 #include "shape_operations.h"
+#include "tensor_utils.h"
 
 #include <cmath>
 #include <stdexcept>
@@ -47,10 +48,8 @@ Tensor layer_norm(
     const Tensor& weight,
     const Tensor& bias,
     float eps) {
-    if (!tensor.defined()) throw std::invalid_argument("layer_norm input must be defined");
-    if (tensor.dtype() != DType::Float32) {
-        throw std::invalid_argument("layer_norm currently supports Float32 only");
-    }
+    ENSURE_TENSOR_DEFINED(tensor);
+    ENSURE_TENSOR_DTYPE(tensor, DType::Float32);
     if (normalized_shape.empty()) {
         throw std::invalid_argument("layer_norm normalized_shape cannot be empty");
     }
@@ -75,17 +74,9 @@ Tensor layer_norm(
 
     const auto validate_affine = [&](const Tensor& parameter, const char* name) {
         if (!parameter.defined()) return;
-        if (parameter.dtype() != DType::Float32) {
-            throw std::invalid_argument(std::string("layer_norm ") + name + " must be Float32");
-        }
-        if (parameter.shape() != normalized_shape) {
-            throw std::invalid_argument(
-                std::string("layer_norm ") + name + " must match normalized_shape");
-        }
-        if (parameter.device() != tensor.device()) {
-            throw std::invalid_argument(
-                std::string("layer_norm ") + name + " must be on the input device");
-        }
+        ENSURE_TENSOR_DTYPE(parameter, DType::Float32);
+        ENSURE_TENSOR_SHAPE(parameter, normalized_shape);
+        ENSURE_TENSOR_DEVICE_MATCH_2(parameter, tensor);
     };
     validate_affine(weight, "weight");
     validate_affine(bias, "bias");
@@ -108,31 +99,22 @@ Tensor scaled_dot_product_attention(
     const Tensor& key,
     const Tensor& value,
     const Tensor& attn_mask) {
-    if (!query.defined()) throw std::invalid_argument("query must be defined");
-    if (query.dtype() != DType::Float32) {
-        throw std::invalid_argument("query currently supports Float32 only");
-    }
+    ENSURE_TENSOR_DEFINED(query);
+    ENSURE_TENSOR_DTYPE(query, DType::Float32);
     if (query.shape().size() < 2) {
         throw std::invalid_argument("query must have at least 2 dimensions");
     }
-    if (!key.defined()) throw std::invalid_argument("key must be defined");
-    if (key.dtype() != DType::Float32) {
-        throw std::invalid_argument("key currently supports Float32 only");
-    }
+    ENSURE_TENSOR_DEFINED(key);
+    ENSURE_TENSOR_DTYPE(key, DType::Float32);
     if (key.shape().size() < 2) {
         throw std::invalid_argument("key must have at least 2 dimensions");
     }
-    if (!value.defined()) throw std::invalid_argument("value must be defined");
-    if (value.dtype() != DType::Float32) {
-        throw std::invalid_argument("value currently supports Float32 only");
-    }
+    ENSURE_TENSOR_DEFINED(value);
+    ENSURE_TENSOR_DTYPE(value, DType::Float32);
     if (value.shape().size() < 2) {
         throw std::invalid_argument("value must have at least 2 dimensions");
     }
-    if (query.device() != key.device() || query.device() != value.device()) {
-        throw DeviceMismatchException(
-            "query, key, and value devices must match for scaled dot-product attention");
-    }
+    ENSURE_TENSOR_DEVICE_MATCH_3(query, key, value);
     // key -> [..., K, H]
     // key_transposed -> [..., H, K]
     auto key_transposed = citrius::transpose(key, -2, -1);
@@ -141,13 +123,8 @@ Tensor scaled_dot_product_attention(
     auto scores = citrius::matmul(query, key_transposed); 
 
     if (attn_mask.defined()) {
-        if (attn_mask.dtype() != DType::Bool) {
-            throw std::invalid_argument("attn_mask must be a boolean tensor");
-        }
-        if (attn_mask.device() != scores.device()) {
-            throw DeviceMismatchException(
-                "attn_mask device must match scores device");
-        }
+        ENSURE_TENSOR_DTYPE(attn_mask, DType::Bool);
+        ENSURE_TENSOR_DEVICE_MATCH_2(attn_mask, scores);
 
         // mask based on the attention (casual attention, self attention, etc)
         scores = citrius::masked_fill(

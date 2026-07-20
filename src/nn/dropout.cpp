@@ -1,4 +1,5 @@
 #include "nn/dropout.h"
+#include "tensor_utils.h"
 
 #include <stdexcept>
 
@@ -11,7 +12,7 @@ Dropout::Dropout(float probability) : probability_(probability) {
 }
 
 Tensor Dropout::forward(const Tensor& input) {
-    if (!input.defined()) throw std::invalid_argument("Dropout input must be defined");
+    ENSURE_TENSOR_DEFINED(input);
     return input;
 }
 

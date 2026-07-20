@@ -1,4 +1,5 @@
 #include "impl/multi_thread_cpu_device.h"
+#include "tensor_utils.h"
 
 #include <algorithm>
 #include <charconv>
@@ -26,15 +27,15 @@ std::size_t configured_thread_count(std::size_t requested) {
 }
 
 void require_inputs(const Tensor& a, const Tensor& b) {
-    if (!a.defined()) throw std::invalid_argument("left tensor is undefined");
-    if (!b.defined()) throw std::invalid_argument("right tensor is undefined");
-    if (a.dtype() != DType::Float32) throw std::invalid_argument("left tensor must be Float32");
-    if (b.dtype() != DType::Float32) throw std::invalid_argument("right tensor must be Float32");
+    ENSURE_TENSOR_DEFINED(a);
+    ENSURE_TENSOR_DEFINED(b);
+    ENSURE_TENSOR_DTYPE(a, DType::Float32);
+    ENSURE_TENSOR_DTYPE(b, DType::Float32);
 }
 
 CpuMemTensorStorageImpl& output_storage(Tensor& output) {
-    if (!output.defined()) throw std::invalid_argument("output tensor is undefined");
-    if (output.dtype() != DType::Float32) throw std::invalid_argument("output tensor must be Float32");
+    ENSURE_TENSOR_DEFINED(output);
+    ENSURE_TENSOR_DTYPE(output, DType::Float32);
     if (output.storage()->type() != TensorStorageType::CpuMemory) {
         throw std::invalid_argument("output tensor must use CpuMemory storage");
     }
@@ -80,7 +81,8 @@ std::size_t MultiThreadCpuDeviceImpl::thread_count() const { return thread_count
 
 void MultiThreadCpuDeviceImpl::add_out(const Tensor& a, const Tensor& b, Tensor& output) const {
     require_inputs(a, b);
-    if (a.shape() != b.shape() || a.shape() != output.shape()) throw std::invalid_argument("tensor shapes must match");
+    ENSURE_TENSOR_SHAPE(b, a.shape());
+    ENSURE_TENSOR_SHAPE(output, a.shape());
     const auto& as = static_cast<const CpuMemTensorStorageImpl&>(*ensure_storage(a.storage()));
     const auto& bs = static_cast<const CpuMemTensorStorageImpl&>(*ensure_storage(b.storage()));
     auto& os = output_storage(output);
@@ -92,7 +94,8 @@ void MultiThreadCpuDeviceImpl::add_out(const Tensor& a, const Tensor& b, Tensor&
 
 void MultiThreadCpuDeviceImpl::sub_out(const Tensor& a, const Tensor& b, Tensor& output) const {
     require_inputs(a, b);
-    if (a.shape() != b.shape() || a.shape() != output.shape()) throw std::invalid_argument("tensor shapes must match");
+    ENSURE_TENSOR_SHAPE(b, a.shape());
+    ENSURE_TENSOR_SHAPE(output, a.shape());
     const auto& as = static_cast<const CpuMemTensorStorageImpl&>(*ensure_storage(a.storage()));
     const auto& bs = static_cast<const CpuMemTensorStorageImpl&>(*ensure_storage(b.storage()));
     auto& os = output_storage(output);
@@ -104,10 +107,11 @@ void MultiThreadCpuDeviceImpl::sub_out(const Tensor& a, const Tensor& b, Tensor&
 
 void MultiThreadCpuDeviceImpl::matmul_out(const Tensor& a, const Tensor& b, Tensor& output) const {
     require_inputs(a, b);
-    if (a.ndim() != 2 || b.ndim() != 2) throw std::invalid_argument("matmul expects 2D tensors");
+    ENSURE_TENSOR_DIM(a, 2);
+    ENSURE_TENSOR_DIM(b, 2);
     if (a.shape()[1] != b.shape()[0]) throw std::invalid_argument("matmul inner dimensions must match");
     const auto m = a.shape()[0], k = a.shape()[1], n = b.shape()[1];
-    if (output.shape() != Shape({m, n})) throw std::invalid_argument("matmul output shape must be [m, n]");
+    ENSURE_TENSOR_SHAPE(output, Shape({m, n}));
     const auto& as = static_cast<const CpuMemTensorStorageImpl&>(*ensure_storage(a.storage()));
     const auto& bs = static_cast<const CpuMemTensorStorageImpl&>(*ensure_storage(b.storage()));
     auto& os = output_storage(output);

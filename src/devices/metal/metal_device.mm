@@ -1,6 +1,7 @@
 #include "impl/metal_device.h"
 
 #include "impl/cpu_storage.h"
+#include "tensor_utils.h"
 
 #import <Foundation/Foundation.h>
 #import <Metal/Metal.h>
@@ -68,27 +69,22 @@ kernel void matmul_f32(
 )";
 
 void require_defined(const Tensor& tensor, const char* name) {
-    if (!tensor.defined()) {
-        throw std::invalid_argument(std::string(name) + " tensor is undefined");
-    }
+    (void)name;
+    ENSURE_TENSOR_DEFINED(tensor);
 }
 
 void require_float32(const Tensor& tensor, const char* name) {
-    if (tensor.dtype() != DType::Float32) {
-        throw std::invalid_argument(std::string(name) + " tensor must be Float32");
-    }
+    (void)name;
+    ENSURE_TENSOR_DTYPE(tensor, DType::Float32);
 }
 
 void require_same_shape(const Tensor& a, const Tensor& b) {
-    if (a.shape() != b.shape()) {
-        throw std::invalid_argument("tensor shapes must match");
-    }
+    ENSURE_TENSOR_SHAPE(b, a.shape());
 }
 
 void require_2d_matmul_shapes(const Tensor& a, const Tensor& b) {
-    if (a.ndim() != 2 || b.ndim() != 2) {
-        throw std::invalid_argument("matmul expects 2D tensors");
-    }
+    ENSURE_TENSOR_DIM(a, 2);
+    ENSURE_TENSOR_DIM(b, 2);
 
     if (a.shape()[1] != b.shape()[0]) {
         throw std::invalid_argument("matmul inner dimensions must match");

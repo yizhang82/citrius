@@ -1,5 +1,6 @@
 #include "impl/batched_matmul_layout.h"
 #include "impl/cublas_cuda_device.h"
+#include "tensor_utils.h"
 #include "impl/cuda_allocation.h"
 #include "impl/cuda_context.h"
 
@@ -28,16 +29,12 @@ void check_cublas(cublasStatus_t status, const char* operation) {
 }
 
 void require_matmul_inputs(const Tensor& a, const Tensor& b) {
-    if (!a.defined())
-        throw std::invalid_argument("left tensor is undefined");
-    if (!b.defined())
-        throw std::invalid_argument("right tensor is undefined");
-    if (a.dtype() != DType::Float32)
-        throw std::invalid_argument("left tensor must be Float32");
-    if (b.dtype() != DType::Float32)
-        throw std::invalid_argument("right tensor must be Float32");
-    if (a.ndim() != 2 || b.ndim() != 2)
-        throw std::invalid_argument("matmul expects 2D tensors");
+    ENSURE_TENSOR_DEFINED(a);
+    ENSURE_TENSOR_DEFINED(b);
+    ENSURE_TENSOR_DTYPE(a, DType::Float32);
+    ENSURE_TENSOR_DTYPE(b, DType::Float32);
+    ENSURE_TENSOR_DIM(a, 2);
+    ENSURE_TENSOR_DIM(b, 2);
     if (a.shape()[1] != b.shape()[0])
         throw std::invalid_argument("matmul inner dimensions must match");
 }
@@ -83,8 +80,7 @@ void CublasCudaDeviceImpl::matmul_out(const Tensor& a, const Tensor& b, Tensor& 
         throw std::invalid_argument("cuBLAS matmul dimensions are too large");
     }
 
-    if (out.shape() != Shape({m, n}))
-        throw std::invalid_argument("matmul output shape must be [m, n]");
+    ENSURE_TENSOR_SHAPE(out, Shape({m, n}));
     if (m == 0 || n == 0)
         return;
 

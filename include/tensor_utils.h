@@ -1,5 +1,6 @@
 #pragma once
 
+#include "exceptions.h"
 #include "tensor.h"
 
 #include <stdexcept>
@@ -35,8 +36,8 @@
 #define ENSURE_TENSOR_DEVICE_MATCH_2(first, second)                                 \
     do {                                                                             \
         if ((first).device() != (second).device()) {                                 \
-            throw std::invalid_argument(#first " and " #second                     \
-                                        " must be on the same device");             \
+            throw citrius::DeviceMismatchException(                                 \
+                #first " and " #second " must be on the same device");             \
         }                                                                            \
     } while (false)
 
@@ -44,7 +45,7 @@
     do {                                                                             \
         if ((first).device() != (second).device() ||                                 \
             (first).device() != (third).device()) {                                  \
-            throw std::invalid_argument(#first ", " #second ", and " #third        \
-                                        " must be on the same device");             \
+            throw citrius::DeviceMismatchException(                                 \
+                #first ", " #second ", and " #third " must be on the same device"); \
         }                                                                            \
     } while (false)

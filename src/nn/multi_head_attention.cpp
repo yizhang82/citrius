@@ -3,6 +3,7 @@
 #include "shape_operations.h"
 #include "operations.h"
 #include "nn/functional.h"
+#include "tensor_utils.h"
 
 #include <stdexcept>
 
@@ -55,12 +56,8 @@ Tensor MultiHeadAttention::forward(const Tensor& input, const Tensor& attn_mask)
     // 6. Apply the output projection.
 
     // input [B, S, E]
-    if (!input.defined()) {
-        throw std::invalid_argument("MultiHeadAttention input must be defined");
-    }
-    if (input.shape().size() != 3) {
-        throw std::invalid_argument("MultiHeadAttention input must have 3 dimensions");
-    }
+    ENSURE_TENSOR_DEFINED(input);
+    ENSURE_TENSOR_DIM(input, 3);
 
     // [B, S, E] x [E, E] -> [B, S, E] 
     auto query = (*query_)(input);

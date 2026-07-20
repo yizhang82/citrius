@@ -1,4 +1,5 @@
 #include "nn/module_list.h"
+#include "tensor_utils.h"
 
 #include <stdexcept>
 #include <string>
@@ -32,7 +33,7 @@ std::shared_ptr<Module> ModuleList::operator[](std::size_t index) const {
 }
 
 Tensor ModuleList::forward(const Tensor& input) {
-    if (!input.defined()) throw std::invalid_argument("ModuleList input must be defined");
+    ENSURE_TENSOR_DEFINED(input);
     Tensor output = input;
     for (const auto& module : modules_) output = (*module)(output);
     return output;

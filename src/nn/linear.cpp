@@ -2,6 +2,7 @@
 
 #include "operations.h"
 #include "shape_operations.h"
+#include "tensor_utils.h"
 
 #include <cmath>
 #include <random>
@@ -49,16 +50,12 @@ Linear::Linear(
 }
 
 Tensor Linear::forward(const Tensor& input) {
-    if (!input.defined()) throw std::invalid_argument("Linear input must be defined");
-    if (input.dtype() != DType::Float32) {
-        throw std::invalid_argument("Linear currently supports Float32 only");
-    }
+    ENSURE_TENSOR_DEFINED(input);
+    ENSURE_TENSOR_DTYPE(input, DType::Float32);
     if (input.ndim() == 0 || input.shape().back() != in_features_) {
         throw std::invalid_argument("Linear input's last dimension must equal in_features");
     }
-    if (input.device() != weight().device()) {
-        throw std::invalid_argument("Linear input and parameters must be on the same device");
-    }
+    ENSURE_TENSOR_DEVICE_MATCH_2(input, weight());
 
     const std::int64_t rows = input.numel() / in_features_;
     const Tensor matrix_input(

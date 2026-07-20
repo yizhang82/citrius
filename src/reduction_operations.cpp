@@ -2,6 +2,7 @@
 
 #include "impl/cpu_storage.h"
 #include "tensor_factory.h"
+#include "tensor_utils.h"
 
 #ifdef CITRIUS_HAS_CUDA
 #include "impl/cuda_device.h"
@@ -22,10 +23,8 @@ namespace {
 enum class Reduction { Sum, Mean, Max, Variance };
 
 void require_float32(const Tensor& tensor) {
-    if (!tensor.defined()) throw std::invalid_argument("reduction input is undefined");
-    if (tensor.dtype() != DType::Float32) {
-        throw std::invalid_argument("reductions currently support Float32 only");
-    }
+    ENSURE_TENSOR_DEFINED(tensor);
+    ENSURE_TENSOR_DTYPE(tensor, DType::Float32);
 }
 
 std::vector<std::int64_t> all_dims(const Tensor& tensor) {

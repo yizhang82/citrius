@@ -1,6 +1,7 @@
 #pragma once
 
 #include "tensor.h"
+#include "tensor_utils.h"
 
 #include <algorithm>
 #include <numeric>
@@ -14,8 +15,10 @@ struct BatchedLayout {
     std::vector<std::int64_t> a_offsets, b_offsets;
 };
 inline BatchedLayout make_batched_layout(const Tensor& a, const Tensor& b) {
-    if (!a.defined() || !b.defined() || a.dtype() != DType::Float32 || b.dtype() != DType::Float32)
-        throw std::invalid_argument("batched_matmul expects defined Float32 tensors");
+    ENSURE_TENSOR_DEFINED(a);
+    ENSURE_TENSOR_DEFINED(b);
+    ENSURE_TENSOR_DTYPE(a, DType::Float32);
+    ENSURE_TENSOR_DTYPE(b, DType::Float32);
     if (a.ndim() < 2 || b.ndim() < 2 || (a.ndim() == 2 && b.ndim() == 2))
         throw std::invalid_argument("batched_matmul expects at least one batched input");
     if (a.shape().back() != b.shape()[b.ndim() - 2])

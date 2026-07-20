@@ -1,4 +1,5 @@
 #include "impl/cpu_device.h"
+#include "tensor_utils.h"
 
 #include <algorithm>
 #include <numeric>
@@ -10,27 +11,22 @@ namespace citrius::impl {
 namespace {
 
 void require_defined(const Tensor& tensor, const char* name) {
-    if (!tensor.defined()) {
-        throw std::invalid_argument(std::string(name) + " tensor is undefined");
-    }
+    (void)name;
+    ENSURE_TENSOR_DEFINED(tensor);
 }
 
 void require_float32(const Tensor& tensor, const char* name) {
-    if (tensor.dtype() != DType::Float32) {
-        throw std::invalid_argument(std::string(name) + " tensor must be Float32");
-    }
+    (void)name;
+    ENSURE_TENSOR_DTYPE(tensor, DType::Float32);
 }
 
 void require_same_shape(const Tensor& a, const Tensor& b) {
-    if (a.shape() != b.shape()) {
-        throw std::invalid_argument("tensor shapes must match");
-    }
+    ENSURE_TENSOR_SHAPE(b, a.shape());
 }
 
 void require_2d_matmul_shapes(const Tensor& a, const Tensor& b) {
-    if (a.ndim() != 2 || b.ndim() != 2) {
-        throw std::invalid_argument("matmul expects 2D tensors");
-    }
+    ENSURE_TENSOR_DIM(a, 2);
+    ENSURE_TENSOR_DIM(b, 2);
 
     if (a.shape()[1] != b.shape()[0]) {
         throw std::invalid_argument("matmul inner dimensions must match");
@@ -212,7 +208,7 @@ void CpuDeviceImpl::matmul_out(const Tensor& a, const Tensor& b, Tensor& output)
     const std::int64_t n = b.shape()[1];
     require_defined(output, "output");
     require_float32(output, "output");
-    if (output.shape() != Shape({m, n})) throw std::invalid_argument("matmul output shape must be [m, n]");
+    ENSURE_TENSOR_SHAPE(output, Shape({m, n}));
     const auto& a_storage = require_cpu_storage(*ensure_storage(a.storage()));
     const auto& b_storage = require_cpu_storage(*ensure_storage(b.storage()));
     auto& output_storage = require_cpu_storage(*output.storage());
@@ -238,9 +234,7 @@ void CpuDeviceImpl::batched_matmul_out(
     const Tensor& b,
     Tensor& output) const {
     const Shape expected = batched_output_shape(a, b);
-    if (output.shape() != expected) {
-        throw std::invalid_argument("batched_matmul output has an incorrect shape");
-    }
+    ENSURE_TENSOR_SHAPE(output, expected);
     const auto m = a.shape()[a.ndim() - 2];
     const auto k = a.shape().back();
     const auto n = b.shape().back();

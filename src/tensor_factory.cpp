@@ -2,6 +2,7 @@
 #include "impl/tensor_factory.h"
 #include "impl/cpu_device.h"
 #include "impl/cpu_storage.h"
+#include "tensor_utils.h"
 #ifdef CITRIUS_HAS_CUDA
 #include "impl/cuda_device.h"
 #include "impl/cuda_storage.h"
@@ -126,7 +127,7 @@ Tensor TensorFactory::from_vector(const std::vector<bool>& values, Shape shape, 
 }
 
 Tensor TensorFactory::to(const Tensor& tensor, Device device) {
-    if (!tensor.defined()) throw std::invalid_argument("cannot move an undefined tensor");
+    ENSURE_TENSOR_DEFINED(tensor);
     if (tensor.device() == device) return tensor;
     auto cpu = copy_to_cpu(tensor);
     if (device.type == DeviceType::CPU) return cpu;

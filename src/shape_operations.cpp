@@ -292,14 +292,15 @@ std::vector<Tensor> chunk(const Tensor& tensor, std::int64_t chunks, std::int64_
 Tensor concat(const std::vector<Tensor>& tensors, std::int64_t dim) {
     if (tensors.empty()) throw std::invalid_argument("concat expects at least one tensor");
     const Tensor& first = tensors.front();
-    if (!first.defined()) throw std::invalid_argument("concat tensors must be defined");
+    ENSURE_TENSOR_DEFINED(first);
     dim = normalize_dim(dim, first.ndim());
     Shape output_shape = first.shape();
     output_shape[dim] = 0;
     for (const Tensor& tensor : tensors) {
-        if (!tensor.defined() || tensor.ndim() != first.ndim() || tensor.dtype() != first.dtype() || tensor.device() != first.device()) {
-            throw std::invalid_argument("concat tensors must have matching rank, dtype, and device");
-        }
+        ENSURE_TENSOR_DEFINED(tensor);
+        ENSURE_TENSOR_DIM(tensor, first.ndim());
+        ENSURE_TENSOR_DTYPE(tensor, first.dtype());
+        ENSURE_TENSOR_DEVICE_MATCH_2(tensor, first);
         for (std::size_t axis = 0; axis < tensor.ndim(); ++axis) {
             if (axis != static_cast<std::size_t>(dim) && tensor.shape()[axis] != first.shape()[axis]) {
                 throw std::invalid_argument("concat tensor shapes must match outside the concatenation dimension");

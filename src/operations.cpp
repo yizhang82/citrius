@@ -5,6 +5,7 @@
 #include "impl/cpu_storage.h"
 #include "exceptions.h"
 #include "tensor_factory.h"
+#include "tensor_utils.h"
 
 #ifdef CITRIUS_HAS_CUDA
 #include "impl/cuda_device.h"
@@ -41,17 +42,12 @@ using impl::MetalDeviceImpl;
 #endif
 
 void require_matching_devices(const Tensor& left, const Tensor& right) {
-    if (left.device() != right.device()) {
-        throw DeviceMismatchException(
-            "tensor devices must match for binary operations");
-    }
+    ENSURE_TENSOR_DEVICE_MATCH_2(left, right);
 }
 
 void require_float32(const Tensor& tensor) {
-    if (!tensor.defined()) throw std::invalid_argument("tensor is undefined");
-    if (tensor.dtype() != DType::Float32) {
-        throw std::invalid_argument("operation currently supports Float32 only");
-    }
+    ENSURE_TENSOR_DEFINED(tensor);
+    ENSURE_TENSOR_DTYPE(tensor, DType::Float32);
 }
 
 Shape broadcast_shape(const Shape& left, const Shape& right) {
@@ -302,9 +298,8 @@ Tensor pow(const Tensor& tensor, float exponent) {
 
 Tensor masked_fill(const Tensor& tensor, const Tensor& mask, float value) {
     require_float32(tensor);
-    if (!mask.defined() || mask.dtype() != DType::Bool) {
-        throw std::invalid_argument("masked_fill mask must be a defined Bool tensor");
-    }
+    ENSURE_TENSOR_DEFINED(mask);
+    ENSURE_TENSOR_DTYPE(mask, DType::Bool);
     require_matching_devices(tensor, mask);
     if (broadcast_shape(tensor.shape(), mask.shape()) != tensor.shape()) {
         throw std::invalid_argument("masked_fill mask must broadcast to the input shape");

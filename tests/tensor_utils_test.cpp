@@ -68,7 +68,7 @@ TEST(TensorUtilsTest, EnsureTwoTensorDevicesMatch) {
     EXPECT_NO_THROW(ENSURE_TENSOR_DEVICE_MATCH_2(first, second));
     EXPECT_THROW(
         ENSURE_TENSOR_DEVICE_MATCH_2(first, other_device),
-        std::invalid_argument);
+        citrius::DeviceMismatchException);
 }
 
 TEST(TensorUtilsTest, EnsureThreeTensorDevicesMatch) {
@@ -81,5 +81,5 @@ TEST(TensorUtilsTest, EnsureThreeTensorDevicesMatch) {
     EXPECT_NO_THROW(ENSURE_TENSOR_DEVICE_MATCH_3(first, second, third));
     EXPECT_THROW(
         ENSURE_TENSOR_DEVICE_MATCH_3(first, second, other_device),
-        std::invalid_argument);
+        citrius::DeviceMismatchException);
 }

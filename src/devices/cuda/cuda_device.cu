@@ -23,16 +23,15 @@ void check_cuda(cudaError_t status, const char* operation) {
 }
 
 void require_defined(const Tensor& tensor, const char* name) {
-    if (!tensor.defined())
-        throw std::invalid_argument(std::string(name) + " tensor is undefined");
+    (void)name;
+    ENSURE_TENSOR_DEFINED(tensor);
 }
 void require_float32(const Tensor& tensor, const char* name) {
-    if (tensor.dtype() != DType::Float32)
-        throw std::invalid_argument(std::string(name) + " tensor must be Float32");
+    (void)name;
+    ENSURE_TENSOR_DTYPE(tensor, DType::Float32);
 }
 void require_same_shape(const Tensor& a, const Tensor& b) {
-    if (a.shape() != b.shape())
-        throw std::invalid_argument("tensor shapes must match");
+    ENSURE_TENSOR_SHAPE(b, a.shape());
 }
 
 Shape broadcast_shape(const Shape& left, const Shape& right) {
@@ -55,8 +54,8 @@ Strides contiguous_strides(const Shape& shape) {
     return result;
 }
 void require_2d_matmul_shapes(const Tensor& a, const Tensor& b) {
-    if (a.ndim() != 2 || b.ndim() != 2)
-        throw std::invalid_argument("matmul expects 2D tensors");
+    ENSURE_TENSOR_DIM(a, 2);
+    ENSURE_TENSOR_DIM(b, 2);
     if (a.shape()[1] != b.shape()[0])
         throw std::invalid_argument("matmul inner dimensions must match");
 }
@@ -859,10 +858,8 @@ Tensor CudaDeviceImpl::masked_fill(
     require_defined(tensor, "masked_fill input");
     require_float32(tensor, "masked_fill input");
     require_defined(mask, "masked_fill mask");
-    if (mask.dtype() != DType::Bool)
-        throw std::invalid_argument("masked_fill mask must be Bool");
-    if (tensor.device() != mask.device())
-        throw std::invalid_argument("masked_fill input and mask must be on the same device");
+    ENSURE_TENSOR_DTYPE(mask, DType::Bool);
+    ENSURE_TENSOR_DEVICE_MATCH_2(tensor, mask);
     if (broadcast_shape(tensor.shape(), mask.shape()) != tensor.shape())
         throw std::invalid_argument("masked_fill mask must broadcast to the input shape");
 
@@ -980,8 +977,7 @@ void CudaDeviceImpl::matmul_out(const Tensor& a, const Tensor& b, Tensor& out) c
     const auto m = a.shape()[0], k = a.shape()[1], n = b.shape()[1];
     require_defined(out, "output");
     require_float32(out, "output");
-    if (out.shape() != Shape({m, n}))
-        throw std::invalid_argument("matmul output shape must be [m, n]");
+    ENSURE_TENSOR_SHAPE(out, Shape({m, n}));
     auto ap = ensure_storage(a.storage(), ConversionPolicy::CopyToDevice);
     auto bp = ensure_storage(b.storage(), ConversionPolicy::CopyToDevice);
     if (m != 0 && n != 0) {
