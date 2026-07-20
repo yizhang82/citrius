@@ -184,6 +184,61 @@ TEST_P(DeviceNnConformanceTest, QwenRmsNormAndMlpMatchTorchComposition) {
                 {0.2689414f, 0.0f, 0.7310586f, 3.5231883f}, 2e-5f);
 }
 
+citrius::models::Qwen3Config grouped_qwen_config(citrius::Device device) {
+    citrius::models::Qwen3Config config;
+    config.vocab_size = 8;
+    config.hidden_size = 4;
+    config.intermediate_size = 4;
+    config.num_hidden_layers = 1;
+    config.num_attention_heads = 2;
+    config.num_key_value_heads = 1;
+    config.head_dim = 2;
+    config.max_position_embeddings = 8;
+    config.device = device;
+    return config;
+}
+
+void configure_grouped_qwen_attention(citrius::models::Qwen3Attention& attention,
+                                      citrius::Device device) {
+    set_identity(attention.query_projection(), device);
+    set_linear(attention.key_projection(), {1, 0, 0, 0, 0, 1, 0, 0}, {}, device);
+    set_linear(attention.value_projection(), {1, 0, 0, 0, 0, 1, 0, 0}, {}, device);
+    set_identity(attention.output_projection(), device);
+    attention.query_norm().weight() =
+        citrius::Tensor(std::vector<float>{1.25f, 0.75f}, {2}, device);
+    attention.key_norm().weight() = citrius::Tensor(std::vector<float>{0.5f, 1.5f}, {2}, device);
+}
+
+TEST_P(DeviceNnConformanceTest, QwenAttentionMatchesTorchGroupedQueryRopeAndCausalMask) {
+    citrius::models::Qwen3Attention attention(grouped_qwen_config(device()));
+    configure_grouped_qwen_attention(attention, device());
+    const auto input = tensor({1, 2, 3, 4, -1, 0.5f, 2, -2}, {1, 2, 4});
+    const auto mask =
+        citrius::from_vector(std::vector<bool>{false, true, false, false}, {2, 2}, device());
+
+    expect_near(values(attention.forward(input, mask)),
+                {1.0f, 2.0f, 1.0f, 2.0f, -0.87946039f, 0.59040475f, 0.80437851f, 1.85328388f},
+                3e-5f);
+}
+
+TEST_P(DeviceNnConformanceTest, QwenDecoderLayerMatchesTorchPreNormAttentionResidual) {
+    citrius::models::Qwen3DecoderLayer layer(grouped_qwen_config(device()));
+    configure_grouped_qwen_attention(layer.attention(), device());
+    layer.input_norm().weight() = tensor({1, 1, 1, 1}, {4});
+    layer.post_attention_norm().weight() = tensor({1, 1, 1, 1}, {4});
+    set_zero(layer.mlp().gate_projection(), device());
+    set_zero(layer.mlp().up_projection(), device());
+    set_zero(layer.mlp().down_projection(), device());
+    const auto input = tensor({1, 2, 3, 4, -1, 0.5f, 2, -2}, {1, 2, 4});
+    const auto mask =
+        citrius::from_vector(std::vector<bool>{false, true, false, false}, {2, 2}, device());
+
+    expect_near(values(layer.forward(input, mask)),
+                {1.36514831f, 2.73029661f, 3.36514831f, 4.73029661f, -1.59595490f, 0.85299635f,
+                 2.26511288f, -1.30897427f},
+                4e-5f);
+}
+
 INSTANTIATE_TEST_SUITE_P(AllCompiledDevices, DeviceNnConformanceTest,
                          testing::ValuesIn(device_cases()),
                          [](const testing::TestParamInfo<DeviceCase>& info) {

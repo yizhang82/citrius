@@ -69,7 +69,11 @@ Tensor apply_rope(const Tensor& tensor, float theta) {
     const Tensor cos_tensor = from_vector(cosine, {1, 1, sequence_length, head_dim}, packed.device());
     const Tensor sin_tensor = from_vector(sine, {1, 1, sequence_length, head_dim}, packed.device());
     const auto halves = split(packed, half, -1);
-    const Tensor rotated = concat({mul(halves[1], -1.0f), halves[0]}, -1);
+    // Scalar operations currently consume packed storage. Materialize the split
+    // views so their storage offsets are not mistaken for the start of storage.
+    const Tensor first_half = contiguous(halves[0]);
+    const Tensor second_half = contiguous(halves[1]);
+    const Tensor rotated = concat({mul(second_half, -1.0f), first_half}, -1);
     return add(mul(packed, cos_tensor), mul(rotated, sin_tensor));
 }
 
