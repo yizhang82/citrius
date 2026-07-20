@@ -8,6 +8,7 @@
 #include "impl/cutlass_cuda_device.h"
 #include "operations.h"
 #include "reduction_operations.h"
+#include "shape_operations.h"
 #include "tensor_factory.h"
 #include "nn/functional.h"
 #include "nn/layer_norm.h"
@@ -253,6 +254,22 @@ TEST(CudaDeviceTest, SelectCreatesAViewAndMaterializesOnlyTheSelectedScalar) {
     EXPECT_EQ(selected.strides(), citrius::Strides({12, 1}));
     EXPECT_EQ(selected.storage_offset(), 8);
     EXPECT_FLOAT_EQ(selected.select(0, 1).select(0, 3).item<float>(), 23.0f);
+}
+
+TEST(CudaDeviceTest, ContiguousMaterializesAStridedViewOnCuda) {
+    std::string error;
+    auto device = make_cuda_device(&error);
+    if (!device)
+        GTEST_SKIP() << error;
+    const auto tensor = make_cuda_tensor(
+        *device, {2, 3, 4},
+        {0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11,
+         12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23});
+    const auto packed = citrius::contiguous(tensor.select(1, 2));
+
+    EXPECT_EQ(packed.device(), tensor.device());
+    EXPECT_TRUE(packed.is_contiguous());
+    EXPECT_EQ(values(packed), std::vector<float>({8, 9, 10, 11, 20, 21, 22, 23}));
 }
 
 TEST(CudaDeviceTest, CublasMatmulMatchesReferenceForNonSquareMatrices) {

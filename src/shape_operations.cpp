@@ -1,6 +1,9 @@
 #include "shape_operations.h"
 
 #include "impl/cpu_storage.h"
+#ifdef CITRIUS_HAS_CUDA
+#include "impl/cuda_device.h"
+#endif
 #include "tensor_factory.h"
 #include "tensor_utils.h"
 
@@ -116,6 +119,27 @@ Tensor select(const Tensor& tensor, std::int64_t dim, std::int64_t index) {
                   tensor.device(), tensor.storage());
 }
 
+Tensor materialize_contiguous_cpu(const Tensor& tensor) {
+    Tensor output = empty(tensor.shape(), tensor.dtype(), Device::cpu());
+    if (tensor.numel() == 0) return output;
+    const auto output_strides = contiguous_strides(tensor.shape());
+    const auto element_size = dtype_size(tensor.dtype());
+    const auto* source = cpu_bytes(tensor);
+    auto* destination = cpu_bytes(output);
+    for (std::int64_t output_index = 0; output_index < output.numel(); ++output_index) {
+        std::int64_t remainder = output_index;
+        std::int64_t input_index = tensor.storage_offset();
+        for (std::size_t axis = 0; axis < tensor.ndim(); ++axis) {
+            const auto coordinate = remainder / output_strides[axis];
+            remainder %= output_strides[axis];
+            input_index += coordinate * tensor.strides()[axis];
+        }
+        std::memcpy(destination + output_index * element_size,
+                    source + input_index * element_size, element_size);
+    }
+    return output;
+}
+
 Tensor slice(
     const Tensor& tensor,
     std::int64_t dim,
@@ -219,7 +243,17 @@ Tensor transpose(const Tensor& tensor, std::int64_t dim0, std::int64_t dim1) {
 
 Tensor contiguous(const Tensor& tensor) {
     ENSURE_TENSOR_DEFINED(tensor);
-    return tensor;
+    if (tensor.is_contiguous()) return tensor;
+    switch (tensor.device().type) {
+        case DeviceType::CPU: return materialize_contiguous_cpu(tensor);
+#ifdef CITRIUS_HAS_CUDA
+        case DeviceType::CUDA: return impl::CudaDeviceImpl(tensor.device().index).contiguous(tensor);
+#endif
+        case DeviceType::Metal:
+            throw std::invalid_argument("Metal contiguous materialization is not implemented");
+        default:
+            throw std::invalid_argument("tensor backend is not enabled");
+    }
 }
 
 std::vector<Tensor> split(const Tensor& tensor, std::int64_t split_size, std::int64_t dim) {

@@ -65,3 +65,18 @@ TEST(ShapeOperationsTest, SplitsChunksAndConcatenates) {
     ASSERT_EQ(chunks.size(), 3u);
     EXPECT_EQ(values(citrius::concat(chunks, 1)), values(input));
 }
+
+TEST(ShapeOperationsTest, ContiguousMaterializesAStridedView) {
+    const citrius::Tensor input(
+        std::vector<float>{0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11,
+                           12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23},
+        {2, 3, 4});
+    const auto selected = input.select(1, 2);
+    const auto packed = citrius::contiguous(selected);
+
+    EXPECT_TRUE(packed.is_contiguous());
+    EXPECT_EQ(packed.strides(), citrius::Strides({4, 1}));
+    EXPECT_EQ(packed.storage_offset(), 0);
+    EXPECT_NE(packed.storage(), input.storage());
+    EXPECT_EQ(values(packed), std::vector<float>({8, 9, 10, 11, 20, 21, 22, 23}));
+}

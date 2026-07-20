@@ -286,6 +286,31 @@ __global__ void argmax_f32(const float* input, std::int64_t* output,
     }
 }
 
+__global__ void copy_strided(
+    const unsigned char* input,
+    unsigned char* output,
+    std::int64_t count,
+    std::int64_t rank,
+    const std::int64_t* shape,
+    const std::int64_t* strides,
+    std::int64_t element_size) {
+    const auto thread = static_cast<std::int64_t>(blockIdx.x) * blockDim.x + threadIdx.x;
+    const auto thread_count = static_cast<std::int64_t>(gridDim.x) * blockDim.x;
+    for (std::int64_t output_index = thread; output_index < count; output_index += thread_count) {
+        std::int64_t remainder = output_index;
+        std::int64_t input_index = 0;
+        for (std::int64_t axis = rank; axis-- > 0;) {
+            const auto coordinate = remainder % shape[axis];
+            remainder /= shape[axis];
+            input_index += coordinate * strides[axis];
+        }
+        for (std::int64_t byte = 0; byte < element_size; ++byte) {
+            output[output_index * element_size + byte] =
+                input[input_index * element_size + byte];
+        }
+    }
+}
+
 __global__ void unary_f32(
     const float* input,
     float* output,
@@ -703,6 +728,39 @@ Tensor CudaDeviceImpl::argmax(const Tensor& tensor, std::int64_t dimension, bool
         data(require_cuda_storage(*input)), output_data, output.numel(), reduction_size,
         inner_size);
     check_cuda(cudaGetLastError(), "failed to launch CUDA argmax kernel");
+    return output;
+}
+
+Tensor CudaDeviceImpl::contiguous(const Tensor& tensor) const {
+    require_defined(tensor, "contiguous input");
+    if (tensor.device() != Device::cuda(device_index_)) {
+        throw std::invalid_argument("contiguous input is on a different CUDA device");
+    }
+    if (tensor.is_contiguous()) return tensor;
+
+    Tensor output = empty(tensor.shape(), tensor.dtype());
+    if (tensor.numel() == 0) return output;
+    const auto rank = static_cast<std::int64_t>(tensor.ndim());
+    std::vector<std::int64_t> metadata;
+    metadata.reserve(static_cast<std::size_t>(2 * rank));
+    metadata.insert(metadata.end(), tensor.shape().begin(), tensor.shape().end());
+    metadata.insert(metadata.end(), tensor.strides().begin(), tensor.strides().end());
+    const auto metadata_bytes = metadata.size() * sizeof(std::int64_t);
+    CudaAllocation device_metadata(metadata_bytes, context_);
+    device_metadata.copy_from_host_async(metadata.data(), metadata_bytes);
+
+    const auto& input_storage = require_cuda_storage(*tensor.storage());
+    const auto* input_base = static_cast<const unsigned char*>(input_storage.handle().ptr);
+    const auto element_size = static_cast<std::int64_t>(dtype_size(tensor.dtype()));
+    const auto* input = input_base + tensor.storage_offset() * element_size;
+    auto* destination = static_cast<unsigned char*>(
+        require_cuda_storage(*output.storage()).handle().ptr);
+    const auto blocks = static_cast<unsigned>(
+        std::min<std::int64_t>((tensor.numel() + 255) / 256, max_elementwise_blocks_));
+    copy_strided<<<blocks, 256, 0, stream(context_)>>>(
+        input, destination, tensor.numel(), rank, device_metadata.data_as<std::int64_t>(),
+        device_metadata.data_as<std::int64_t>() + rank, element_size);
+    check_cuda(cudaGetLastError(), "failed to launch CUDA contiguous kernel");
     return output;
 }
 
