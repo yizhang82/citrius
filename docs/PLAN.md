@@ -307,18 +307,21 @@ After the reference model is correct:
 
 Current CUDA optimization order:
 
-1. add stride/storage-offset views plus native CUDA `contiguous()` so transpose,
-   permute, split, slice, and final-position selection never require host
-   staging;
-2. implement native indexed gather to remove Embedding host staging;
-3. make CUDA GEMM consume transpose/layout metadata or persistent prepacked
-   weights so `Linear` never materializes a transposed weight per forward;
+1. [complete] add stride/storage-offset views plus native CUDA `contiguous()` so
+   transpose, permute, split, slice, and final-position selection never require
+   host staging;
+2. [complete] implement native indexed gather to remove Embedding host staging;
+3. [complete] make CUDA GEMM consume transpose/layout metadata or persistent
+   prepacked weights so `Linear` never materializes a transposed weight per
+   forward;
 4. [complete] specialize contiguous last-dimension sum, mean, and maximum using
    one block per output row with warp shuffles and shared-memory reduction;
-5. add a numerically stable cooperative variance kernel, retaining the current
+5. [complete] retain one CUDA device implementation and cuBLAS handle per
+   backend/device instead of constructing and destroying them per operation;
+6. add a numerically stable cooperative variance kernel, retaining the current
    general arbitrary-dimension reduction kernel as a fallback;
-6. fuse softmax's maximum, exponential, sum, and division sequence;
-7. fuse LayerNorm's mean, variance, normalization, and affine sequence.
+7. fuse softmax's maximum, exponential, sum, and division sequence;
+8. fuse LayerNorm's mean, variance, normalization, and affine sequence.
 
 Each optimization step must add or extend `operations_benchmark` CPU/CUDA
 comparisons and retain parity tests against the composable CPU reference.
@@ -341,11 +344,30 @@ The initial nine-token-prompt baseline is:
 | CPU | 17,081.783 ms | 0.059 tokens/s | 170,325.068 ms |
 | CUDA | 18,411.104 ms | 0.054 tokens/s | 185,485.003 ms |
 
-These measurements use initialized weights without loading a checkpoint. The
-current decoder uses Float32 tensors, synchronous CUDA kernels, repeated
-allocation, full-sequence recomputation, CPU argmax, and no KV cache. The CUDA
-result is therefore an execution-overhead baseline rather than an optimized GPU
-inference result.
+These measurements use initialized weights without loading a checkpoint and are
+retained as the original execution-overhead baseline. GPU argmax, stream-ordered
+execution, native layout operations, and persistent CUDA device/cuBLAS state are
+now implemented. The decoder still uses Float32 tensors, repeated temporary
+allocation, full-sequence recomputation, and no KV cache.
+
+After caching one CUDA device implementation and cuBLAS handle per backend and
+device, the same CUDA benchmark improved from approximately 0.511 tokens/s and
+2,229 ms TTFT to 8.266 tokens/s and 151 ms TTFT. Nsight Systems identified the
+previous per-operation cuBLAS handle lifetime as the primary synchronization
+failure:
+
+| CUDA API event | Before caching | After caching |
+| --- | ---: | ---: |
+| `cudaDeviceSynchronize` | 55,120 | 4 |
+| CUDA event creation | 248,040 | 18 |
+| legacy `cudaMalloc` | 41,340 | 3 |
+
+The post-fix profile still records approximately 28,500 `cudaMallocAsync` and
+`cudaFreeAsync` calls, 9,920 host-to-device copies, and 17,005 kernel launches.
+This makes allocation/workspace reuse, metadata transfer removal, and fusion the
+next execution-runtime priorities. The PyTorch comparison runner supports CPU,
+greedy, and no-KV-cache modes so cache and decoding-policy effects can be measured
+separately.
 
 Implement the following work items in order. Each step must retain a reference
 path and extend the decoding benchmark where applicable.
@@ -368,6 +390,11 @@ Acceptance criteria:
 - ties, negative values, and irregular reduction sizes have unit coverage.
 
 ### 2.2 Stream-ordered execution and tensor materialization
+
+Status: stream ownership, pending same-stream composition, native CUDA
+materialization, GPU argmax, and persistent CUDA device/cuBLAS state are
+implemented. Explicit host observation and error-reporting boundaries still
+synchronize as required.
 
 - complete the stride/storage-offset view foundation required by inference,
   including metadata-only transpose, permute, split, slice, and last-position
@@ -396,15 +423,27 @@ Acceptance criteria:
 ### 2.3 CUDA allocation and workspace reuse
 
 - add a stream-aware caching allocator for general tensor storage;
+- model the first implementation after PyTorch's same-stream block reuse: use
+  size-binned cached blocks and avoid CUDA API calls on steady-state reuse;
 - reuse freed blocks without globally synchronizing the device;
 - add output-buffer variants for hot operations;
 - preallocate stable decoder temporaries and attention workspaces;
+- eliminate short-lived device metadata allocations by passing fixed-rank
+  metadata as kernel arguments or retaining reusable device metadata;
+- keep persistent cuBLAS workspaces associated with the cached handle/stream;
 - record allocation count and peak device memory in the benchmark.
 
 Acceptance criteria:
 
 - steady-state token decoding performs no `cudaMalloc` or `cudaFree` calls;
 - decode buffer addresses remain stable enough for later CUDA Graph capture.
+
+CPU execution has the analogous lifetime problem without the implicit device
+synchronization: each `CpuMemTensorStorageImpl` owns a fresh `std::vector` and
+parallel operations create and join worker threads for each invocation. Add a
+CPU caching allocator or reusable model workspaces, output-buffer variants, and
+a persistent worker pool after measuring allocation and thread-management time.
+Do not duplicate CUDA-specific stream/event machinery in the CPU allocator.
 
 ### 2.4 Native BF16 and FP16 inference
 
