@@ -3,6 +3,7 @@
 #include "types.h"
 
 #include <cstddef>
+#include <initializer_list>
 #include <iosfwd>
 #include <memory>
 #include <string>
@@ -10,6 +11,8 @@
 #include <vector>
 
 namespace citrius {
+
+class TensorIndex;
 
 namespace impl {
 class ITensorStorage;
@@ -45,6 +48,9 @@ public:
     std::size_t ndim() const;
     std::int64_t numel() const;
     bool defined() const;
+    Tensor index(std::initializer_list<TensorIndex> indices) const;
+    Tensor operator[](std::int64_t index) const;
+    Tensor operator[](std::initializer_list<TensorIndex> indices) const;
     Tensor select(std::int64_t dim, std::int64_t index) const;
     Tensor slice(
         std::int64_t dim,

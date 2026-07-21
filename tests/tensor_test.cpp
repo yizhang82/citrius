@@ -1,3 +1,5 @@
+#include "indexing_operations.h"
+#include "shape_operations.h"
 #include "tensor.h"
 #include "tensor_factory.h"
 
@@ -200,6 +202,55 @@ TEST(TensorTest, SliceReturnsAnAliasingPositiveStepView) {
     EXPECT_FLOAT_EQ(sliced.select(0, 1).item<float>(), 4.0f);
     EXPECT_THROW(tensor.slice(0, 0, 2, 0), std::invalid_argument);
     EXPECT_THROW(tensor.select(0, 10), std::out_of_range);
+}
+
+TEST(TensorTest, BasicIndexCombinesIntegersAndSlicesIntoOneAliasingView) {
+    const citrius::Tensor tensor(
+        std::vector<float>{0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11,
+                           12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23},
+        {2, 3, 4});
+    const auto indexed = tensor[{1, citrius::indexing::Slice(0, 3, 2), -1}];
+
+    EXPECT_EQ(indexed.shape(), citrius::Shape({2}));
+    EXPECT_EQ(indexed.strides(), citrius::Strides({8}));
+    EXPECT_EQ(indexed.storage_offset(), 15);
+    EXPECT_EQ(indexed.storage(), tensor.storage());
+    EXPECT_EQ(cpu_tensor_values(citrius::contiguous(indexed)),
+              (std::vector<float>{15, 23}));
+    EXPECT_FLOAT_EQ(tensor[-1].select(0, 0).select(0, 0).item<float>(), 12.0f);
+}
+
+TEST(TensorTest, BasicIndexSupportsEllipsisNewAxisAndReverseSlices) {
+    using citrius::indexing::Ellipsis;
+    using citrius::indexing::None;
+    using citrius::indexing::Slice;
+
+    const citrius::Tensor tensor(
+        std::vector<float>{0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11}, {2, 2, 3});
+    const auto indexed = tensor.index(
+        {None, Ellipsis, Slice(std::nullopt, std::nullopt, -1)});
+
+    EXPECT_EQ(indexed.shape(), (citrius::Shape{1, 2, 2, 3}));
+    EXPECT_EQ(indexed.strides(), (citrius::Strides{0, 6, 3, -1}));
+    EXPECT_EQ(indexed.storage_offset(), 2);
+    EXPECT_EQ(indexed.storage(), tensor.storage());
+    EXPECT_EQ(cpu_tensor_values(citrius::contiguous(indexed)),
+              (std::vector<float>{2, 1, 0, 5, 4, 3, 8, 7, 6, 11, 10, 9}));
+}
+
+TEST(TensorTest, BasicIndexValidatesComponentsAndHandlesEmptySlices) {
+    using citrius::indexing::Ellipsis;
+    using citrius::indexing::Slice;
+
+    const citrius::Tensor tensor(std::vector<float>{0, 1, 2, 3, 4, 5}, {2, 3});
+    const auto empty = tensor.index({Slice(4, 1), Slice()});
+
+    EXPECT_EQ(empty.shape(), (citrius::Shape{0, 3}));
+    EXPECT_EQ(empty.numel(), 0);
+    EXPECT_THROW(tensor.index({0, 0, 0}), std::out_of_range);
+    EXPECT_THROW(tensor.index({Ellipsis, Ellipsis}), std::invalid_argument);
+    EXPECT_THROW(tensor.index({Slice(std::nullopt, std::nullopt, 0)}),
+                 std::invalid_argument);
 }
 
 TEST(TensorTest, ExplicitLayoutValidatesMetadataAndStorageBounds) {

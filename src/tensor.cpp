@@ -1,5 +1,6 @@
 #include "tensor.h"
 
+#include "indexing_operations.h"
 #include "shape_operations.h"
 #include "tensor_factory.h"
 #include "impl/cpu_storage.h"
@@ -72,22 +73,32 @@ void validate_layout(const Shape& shape, const Strides& strides, std::int64_t st
     }
     if (storage_offset < 0) throw std::invalid_argument("tensor storage offset cannot be negative");
     bool empty = false;
+    std::int64_t minimum_offset = storage_offset;
     std::int64_t maximum_offset = storage_offset;
     for (std::size_t dimension = 0; dimension < shape.size(); ++dimension) {
         if (shape[dimension] < 0) throw std::invalid_argument("tensor dimensions cannot be negative");
-        if (strides[dimension] < 0) throw std::invalid_argument("negative tensor strides are not supported");
         if (shape[dimension] == 0) {
             empty = true;
             continue;
         }
         const auto extent = shape[dimension] - 1;
-        if (extent != 0 && strides[dimension] >
-                               (std::numeric_limits<std::int64_t>::max() - maximum_offset) / extent) {
-            throw std::invalid_argument("tensor layout offset overflows");
+        if (strides[dimension] >= 0) {
+            if (extent != 0 && strides[dimension] >
+                                   (std::numeric_limits<std::int64_t>::max() - maximum_offset) / extent) {
+                throw std::invalid_argument("tensor layout offset overflows");
+            }
+            maximum_offset += extent * strides[dimension];
+        } else {
+            if (strides[dimension] == std::numeric_limits<std::int64_t>::min() ||
+                (extent != 0 && -strides[dimension] >
+                                    minimum_offset / extent)) {
+                throw std::invalid_argument("tensor layout offset underflows");
+            }
+            minimum_offset += extent * strides[dimension];
         }
-        maximum_offset += extent * strides[dimension];
     }
     if (empty) return;
+    if (minimum_offset < 0) throw std::invalid_argument("tensor layout precedes storage");
 
     const auto element_size = dtype_size(dtype);
     const auto maximum_size = static_cast<std::uint64_t>(maximum_offset) + 1;
@@ -186,6 +197,18 @@ std::int64_t Tensor::numel() const {
 
 bool Tensor::defined() const {
     return defined_;
+}
+
+Tensor Tensor::index(std::initializer_list<TensorIndex> indices) const {
+    return citrius::index(*this, indices);
+}
+
+Tensor Tensor::operator[](std::int64_t index) const {
+    return select(0, index);
+}
+
+Tensor Tensor::operator[](std::initializer_list<TensorIndex> indices) const {
+    return citrius::index(*this, indices);
 }
 
 Tensor Tensor::select(std::int64_t dim, std::int64_t index) const {

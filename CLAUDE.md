@@ -46,6 +46,15 @@ Storage is abstracted through `ITensorStorage` in `include/impl/storage.h`. Conc
 
 Tensor copies are shallow with respect to storage: tensor metadata is copied by value, while the underlying `ITensorStorage` is shared through `std::shared_ptr`.
 
+Basic indexing accepts integer indices, Python-style slices, ellipsis, and inserted
+axes. It returns metadata-only views and supports negative indices and slice steps:
+
+```cpp
+using namespace citrius::indexing;
+Tensor tail = tensor.index({Ellipsis, Slice(std::nullopt, std::nullopt, -1)});
+Tensor row = tensor[-1];
+```
+
 Explicit deep copy is available through:
 
 ```cpp

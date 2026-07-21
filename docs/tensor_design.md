@@ -112,9 +112,36 @@ new_offset += selected_index * old_strides[dimension];
 The selected dimension is then removed from both shape and strides. Negative
 indices are normalized before calculating the offset.
 
-### Slice
+### Basic indexing
 
-For a positive-step slice, the selected dimension is transformed as follows:
+`Tensor::index`, the initializer-list `operator[]`, and the free `index`
+function compose basic index components in one operation:
+
+```cpp
+using namespace citrius::indexing;
+
+Tensor row = tensor[-1];
+Tensor view = tensor[{1, Slice(0, 3, 2), -1}];
+Tensor reversed = tensor.index(
+    {None, Ellipsis, Slice(std::nullopt, std::nullopt, -1)});
+```
+
+Each component has Python/PyTorch-style behavior:
+
+- an integer consumes and removes one dimension;
+- `Slice` consumes and preserves one dimension;
+- `None` inserts a size-one dimension without consuming an input dimension;
+- one `Ellipsis` expands to the unmentioned input dimensions;
+- omitted trailing dimensions behave as full slices.
+
+Integer and explicit slice bounds may be negative. Too many consuming indices,
+an out-of-range integer, multiple ellipses, or a zero slice step are rejected.
+Basic indexing is computed as one metadata transformation and always shares the
+input storage.
+
+### Slice metadata
+
+For a non-empty slice, the selected dimension is transformed as follows:
 
 ```cpp
 new_offset += start * old_strides[dimension];
@@ -123,9 +150,24 @@ new_strides[dimension] *= step;
 ```
 
 For example, slicing `[2:8:2]` from a contiguous one-dimensional tensor produces
-shape `[3]`, stride `[2]`, and offset `2`. Initial support should require a
-positive step. Negative strides can be added after kernels and bounds validation
-support them consistently.
+shape `[3]`, stride `[2]`, and offset `2`. A reverse slice `[::-1]` over a
+four-element contiguous tensor produces shape `[4]`, stride `[-1]`, and offset
+`3`. `contiguous()` subsequently visits storage offsets `3, 2, 1, 0` and writes
+them into ordinary row-major output.
+
+Slice defaults depend on step direction. For a positive step, omitted start and
+stop mean `0` and the dimension size. For a negative step, they mean the final
+element and the sentinel immediately before the first element. This distinction
+is important because an omitted negative-step stop is not equivalent to an
+explicit `-1` stop after Python-style negative-index normalization.
+
+Empty slices retain valid tensor metadata but reference no elements. Their
+storage offset therefore need not be adjusted to a normalized boundary that
+could lie immediately before or after the allocation.
+
+Inserting `None` adds a size-one dimension with stride zero. Since its only
+coordinate is zero, it neither expands the reachable storage region nor makes
+an otherwise contiguous tensor non-contiguous.
 
 ### Transpose and permute
 
@@ -206,23 +248,29 @@ Every defined tensor must satisfy:
 - storage is non-null;
 - `storage_offset >= 0`;
 - every dimension is non-negative;
-- every initially supported stride is non-negative;
 - every reachable element fits within storage;
 - tensor dtype and device agree with storage.
 
-For positive strides and a non-empty tensor, the largest reachable storage
-element is:
+For a non-empty tensor, bounds validation tracks both the smallest and largest
+reachable storage elements. Positive strides extend the maximum; negative
+strides extend the minimum:
 
 ```cpp
+std::int64_t minimum_offset = storage_offset;
 std::int64_t maximum_offset = storage_offset;
 for (std::size_t dimension = 0; dimension < shape.size(); ++dimension) {
-    maximum_offset += (shape[dimension] - 1) * strides[dimension];
+    const auto extent = shape[dimension] - 1;
+    if (strides[dimension] >= 0)
+        maximum_offset += extent * strides[dimension];
+    else
+        minimum_offset += extent * strides[dimension];
 }
 ```
 
 Construction is valid only when:
 
 ```text
+minimum_offset >= 0
 (maximum_offset + 1) * dtype_size(dtype) <= storage.nbytes()
 ```
 
@@ -241,8 +289,8 @@ introduce read-only inference views.
 
 Advanced indexing is different from basic indexing:
 
-- integer selection, slicing, `None`, transpose, and permutation return views
-  when representable by metadata;
+- integer selection, slicing, ellipsis expansion, `None`, transpose, and
+  permutation return views when representable by metadata;
 - boolean-mask and tensor-index operations allocate independent results;
 - indexed mutation is exposed explicitly through `index_put_`, not hidden proxy
   assignment.
@@ -269,14 +317,15 @@ permutation, splitting, and slicing must remain on-device and asynchronous.
 2. Initialize contiguous strides in every allocation and tensor factory path.
 3. Preserve layout metadata through shallow copy and account for the offset in
    `item<T>()`, transfers, and storage access.
-4. Implement metadata-only `select`, positive-step `slice`, transpose, and
-   permutation.
+4. Implement metadata-only `select`, signed-step `slice`, composable basic
+   indexing, transpose, and permutation.
 5. Keep existing kernels contiguous-only with explicit validation while layout
    support is introduced.
 6. Implement native CPU and CUDA strided `contiguous()` materialization.
 7. Teach high-value CUDA operations, especially GEMM and reductions, to consume
    useful non-contiguous layouts directly.
-8. Extend the model with the complete indexing API and autograd versioning.
+8. Add materialized advanced tensor/boolean indexing, indexed mutation, and
+   autograd versioning.
 
 Each stage requires CPU and CUDA parity tests covering nonzero offsets,
 singleton dimensions, empty tensors, scalar views, invalid bounds, view
