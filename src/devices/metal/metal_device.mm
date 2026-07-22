@@ -13,8 +13,10 @@
 #include <cstdint>
 #include <climits>
 #include <functional>
+#include <mutex>
 #include <stdexcept>
 #include <string>
+#include <unordered_map>
 #include <utility>
 #include <vector>
 
@@ -617,11 +619,6 @@ public:
             columns:static_cast<NSUInteger>(k)
             rowBytes:static_cast<NSUInteger>(k * sizeof(float))
             dataType:MPSDataTypeFloat32];
-        MPSMatrixDescriptor* b_descriptor = [MPSMatrixDescriptor
-            matrixDescriptorWithRows:static_cast<NSUInteger>(transpose_b ? n : k)
-            columns:static_cast<NSUInteger>(transpose_b ? k : n)
-            rowBytes:b_row_bytes
-            dataType:MPSDataTypeFloat32];
         MPSMatrixDescriptor* output_descriptor = [MPSMatrixDescriptor
             matrixDescriptorWithRows:static_cast<NSUInteger>(m)
             columns:static_cast<NSUInteger>(n)
@@ -629,16 +626,44 @@ public:
             dataType:MPSDataTypeFloat32];
         MPSMatrix* left = [[MPSMatrix alloc] initWithBuffer:a
             offset:a_offset descriptor:a_descriptor];
-        MPSMatrix* right = [[MPSMatrix alloc] initWithBuffer:b
-            offset:b_offset descriptor:b_descriptor];
         MPSMatrix* result = [[MPSMatrix alloc] initWithBuffer:out
             offset:0 descriptor:output_descriptor];
-        MPSMatrixMultiplication* multiplication = [[MPSMatrixMultiplication alloc]
-            initWithDevice:device transposeLeft:NO transposeRight:transpose_b
-            resultRows:static_cast<NSUInteger>(m)
-            resultColumns:static_cast<NSUInteger>(n)
-            interiorColumns:static_cast<NSUInteger>(k)
-            alpha:1.0 beta:0.0];
+        const std::string multiplication_key = std::to_string(m) + ':' +
+            std::to_string(k) + ':' + std::to_string(n) + ':' +
+            (transpose_b ? "t" : "n");
+        const std::string weight_key = std::to_string(
+            reinterpret_cast<std::uintptr_t>((__bridge void*)b)) + ':' +
+            std::to_string(b_offset) + ':' + std::to_string(transpose_b ? n : k) + ':' +
+            std::to_string(transpose_b ? k : n) + ':' + std::to_string(b_row_bytes);
+        MPSMatrixMultiplication* multiplication = nil;
+        MPSMatrix* right = nil;
+        {
+            std::lock_guard lock(mps_cache_mutex);
+            if (const auto found = multiplication_cache.find(multiplication_key);
+                found != multiplication_cache.end()) {
+                multiplication = found->second;
+            } else {
+                multiplication = [[MPSMatrixMultiplication alloc]
+                    initWithDevice:device transposeLeft:NO transposeRight:transpose_b
+                    resultRows:static_cast<NSUInteger>(m)
+                    resultColumns:static_cast<NSUInteger>(n)
+                    interiorColumns:static_cast<NSUInteger>(k)
+                    alpha:1.0 beta:0.0];
+                multiplication_cache.emplace(multiplication_key, multiplication);
+            }
+            if (const auto found = weight_matrix_cache.find(weight_key);
+                found != weight_matrix_cache.end()) {
+                right = found->second;
+            } else {
+                MPSMatrixDescriptor* b_descriptor = [MPSMatrixDescriptor
+                    matrixDescriptorWithRows:static_cast<NSUInteger>(transpose_b ? n : k)
+                    columns:static_cast<NSUInteger>(transpose_b ? k : n)
+                    rowBytes:b_row_bytes dataType:MPSDataTypeFloat32];
+                right = [[MPSMatrix alloc] initWithBuffer:b
+                    offset:b_offset descriptor:b_descriptor];
+                weight_matrix_cache.emplace(weight_key, right);
+            }
+        }
         [multiplication encodeToCommandBuffer:command_buffer
             leftMatrix:left rightMatrix:right resultMatrix:result];
 
@@ -687,6 +712,10 @@ public:
     id<MTLComputePipelineState> gather_pipeline = nil;
     id<MTLComputePipelineState> reduce_pipeline = nil;
     id<MTLComputePipelineState> argmax_pipeline = nil;
+    mutable std::mutex mps_cache_mutex;
+    mutable std::unordered_map<std::string, MPSMatrixMultiplication*>
+        multiplication_cache;
+    mutable std::unordered_map<std::string, MPSMatrix*> weight_matrix_cache;
 };
 
 MetalDeviceImpl::MetalDeviceImpl()
