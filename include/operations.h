@@ -52,6 +52,10 @@ Tensor matmul(const Tensor& left, const Tensor& right);
 /// portable tensor-operation composition.
 Tensor rms_norm(const Tensor& input, const Tensor& weight, float epsilon);
 
+/// Applies the SwiGLU activation `silu(gate) * up` elementwise.
+/// A device may provide a fused implementation.
+Tensor swiglu(const Tensor& gate, const Tensor& up);
+
 /// Multiplies two tensors element by element using trailing-dimension broadcasting.
 /// @param left Left Float32 input tensor.
 /// @param right Right Float32 input tensor on the same device.

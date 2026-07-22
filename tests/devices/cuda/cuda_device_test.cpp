@@ -637,6 +637,30 @@ TEST(CudaDeviceTest, FusedRmsNormMatchesReference) {
     }
 }
 
+TEST(CudaDeviceTest, FusedSwiGluMatchesReference) {
+    std::string error;
+    auto device = make_cuda_device(&error);
+    if (!device)
+        GTEST_SKIP() << error;
+
+    std::vector<float> gate_values(1027);
+    std::vector<float> up_values(1027);
+    for (std::size_t index = 0; index < gate_values.size(); ++index) {
+        gate_values[index] = static_cast<float>(static_cast<int>(index % 31) - 15) / 4.0f;
+        up_values[index] = static_cast<float>(index % 17) / 3.0f - 2.0f;
+    }
+    const citrius::Tensor gate(gate_values, citrius::Device::cuda());
+    const citrius::Tensor up(up_values, citrius::Device::cuda());
+    const auto optimized = device->try_swiglu(gate, up);
+    ASSERT_TRUE(optimized.has_value());
+    const auto actual = values(*optimized);
+    for (std::size_t index = 0; index < actual.size(); ++index) {
+        const float expected = gate_values[index] /
+            (1.0f + std::exp(-gate_values[index])) * up_values[index];
+        EXPECT_NEAR(actual[index], expected, 2e-6f);
+    }
+}
+
 TEST(CudaDeviceTest, LastDimensionReductionsHandleIrregularQwenSizedRows) {
     std::string error;
     auto device = make_cuda_device(&error);

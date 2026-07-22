@@ -18,10 +18,6 @@
 namespace citrius::models {
 namespace {
 
-Tensor silu(const Tensor& input) {
-    return div(input, add(exp(mul(input, -1.0f)), 1.0f));
-}
-
 Tensor causal_mask(std::int64_t sequence_length, Device device) {
     std::vector<bool> values(static_cast<std::size_t>(sequence_length * sequence_length));
     for (std::int64_t row = 0; row < sequence_length; ++row) {
@@ -128,7 +124,8 @@ Qwen3MLP::Qwen3MLP(const Qwen3Config& config) {
 }
 
 Tensor Qwen3MLP::forward(const Tensor& input) {
-    return (*down_projection_)(mul(silu((*gate_projection_)(input)), (*up_projection_)(input)));
+    return (*down_projection_)(
+        citrius::swiglu((*gate_projection_)(input), (*up_projection_)(input)));
 }
 
 nn::Linear& Qwen3MLP::gate_projection() { return *gate_projection_; }

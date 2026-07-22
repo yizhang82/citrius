@@ -155,6 +155,19 @@ __global__ void rms_norm_f32(
     }
 }
 
+__global__ void swiglu_f32(
+    const float* gate,
+    const float* up,
+    float* output,
+    std::int64_t count) {
+    const auto first = static_cast<std::int64_t>(blockIdx.x) * blockDim.x + threadIdx.x;
+    const auto stride = static_cast<std::int64_t>(blockDim.x) * gridDim.x;
+    for (std::int64_t index = first; index < count; index += stride) {
+        const float gate_value = gate[index];
+        output[index] = (gate_value / (1.0f + expf(-gate_value))) * up[index];
+    }
+}
+
 __device__ float apply_elementwise(
     float a,
     float b,
@@ -655,6 +668,30 @@ std::optional<Tensor> CudaDeviceImpl::try_rms_norm(
         data(require_cuda_storage(*weight_storage)) + weight.storage_offset(),
         data(require_cuda_storage(*output.storage())), row_count, row_size, epsilon);
     check_cuda(cudaGetLastError(), "failed to launch CUDA rms_norm kernel");
+    return output;
+}
+
+std::optional<Tensor> CudaDeviceImpl::try_swiglu(
+    const Tensor& gate,
+    const Tensor& up) const {
+    if (gate.dtype() != DType::Float32 || up.dtype() != DType::Float32 ||
+        gate.shape() != up.shape() || gate.device() != Device::cuda(device_index_) ||
+        up.device() != gate.device() || !gate.is_contiguous() || !up.is_contiguous()) {
+        return std::nullopt;
+    }
+
+    Tensor output = empty(gate.shape(), DType::Float32);
+    if (output.numel() == 0) return output;
+    auto gate_storage = ensure_storage(gate.storage());
+    auto up_storage = ensure_storage(up.storage());
+    const auto required_blocks = (output.numel() + 255) / 256;
+    const auto blocks = static_cast<unsigned>(
+        std::min<std::int64_t>(required_blocks, max_elementwise_blocks_));
+    swiglu_f32<<<blocks, 256, 0, stream(context_)>>>(
+        data(require_cuda_storage(*gate_storage)) + gate.storage_offset(),
+        data(require_cuda_storage(*up_storage)) + up.storage_offset(),
+        data(require_cuda_storage(*output.storage())), output.numel());
+    check_cuda(cudaGetLastError(), "failed to launch CUDA swiglu kernel");
     return output;
 }
 

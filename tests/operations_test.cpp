@@ -57,6 +57,16 @@ TEST(OperationsTest, RmsNormValidatesArguments) {
         std::invalid_argument);
 }
 
+TEST(OperationsTest, SwiGluUsesPortableDeviceFallback) {
+    const citrius::Tensor gate(std::vector<float>{-1, 0, 1, 2});
+    const citrius::Tensor up(std::vector<float>{1, 2, 3, 4});
+    const auto result = values(citrius::swiglu(gate, up));
+    EXPECT_NEAR(result[0], -0.2689414f, 1e-6f);
+    EXPECT_FLOAT_EQ(result[1], 0.0f);
+    EXPECT_NEAR(result[2], 2.1931758f, 1e-6f);
+    EXPECT_NEAR(result[3], 7.0463766f, 1e-6f);
+}
+
 TEST(OperationsTest, MultipliesUsingTensorDevice) {
     const citrius::Tensor left(std::vector<float>{1, 2, 3, 4, 5, 6}, {2, 3});
     const citrius::Tensor right(

@@ -46,6 +46,9 @@ public:
         const Tensor& input,
         const Tensor& weight,
         float epsilon) const override;
+    std::optional<Tensor> try_swiglu(
+        const Tensor& gate,
+        const Tensor& up) const override;
     Tensor broadcast_elementwise(
         const Tensor& a,
         const Tensor& b,

@@ -29,6 +29,11 @@ public:
         float epsilon) const {
         return std::nullopt;
     }
+    virtual std::optional<Tensor> try_swiglu(
+        const Tensor& gate,
+        const Tensor& up) const {
+        return std::nullopt;
+    }
     virtual TensorStoragePtr ensure_storage(
         const TensorStoragePtr& storage,
         ConversionPolicy policy = ConversionPolicy::Error) const = 0;

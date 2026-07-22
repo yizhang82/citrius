@@ -285,6 +285,21 @@ Tensor rms_norm(const Tensor& input, const Tensor& weight, float epsilon) {
     return mul(div(input, sqrt(add(variance, epsilon))), weight);
 }
 
+Tensor swiglu(const Tensor& gate, const Tensor& up) {
+    require_matching_devices(gate, up);
+    require_float32(gate);
+    require_float32(up);
+    if (gate.shape() != up.shape())
+        throw std::invalid_argument("swiglu inputs must have identical shapes");
+
+    const auto optimized = dispatch(
+        gate, up, [](const auto& device, const Tensor& gate_value, const Tensor& up_value) {
+            return device.try_swiglu(gate_value, up_value);
+        });
+    if (optimized) return *optimized;
+    return mul(div(gate, add(exp(mul(gate, -1.0f)), 1.0f)), up);
+}
+
 Tensor mul(const Tensor& left, const Tensor& right) {
 #ifdef CITRIUS_HAS_CUDA
     if (left.device().type == DeviceType::CUDA)
