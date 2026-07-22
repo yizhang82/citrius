@@ -55,6 +55,9 @@ if(CITRIUS_ENABLE_METAL)
             "-framework MetalPerformanceShaders"
     )
     target_compile_definitions(citrius PRIVATE CITRIUS_HAS_METAL=1)
+    target_compile_options(citrius PRIVATE
+        $<$<COMPILE_LANGUAGE:OBJCXX>:-fobjc-arc>
+    )
 endif()
 
 if(CITRIUS_ENABLE_CUDA)
