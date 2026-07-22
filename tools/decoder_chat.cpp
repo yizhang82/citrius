@@ -90,7 +90,7 @@ void usage() {
               << "  --tokenizer DIR     Directory containing vocab.json and merges.txt\n"
               << "  --prompt TEXT       User prompt (default: Hello)\n"
               << "  --max-new-tokens N  Tokens to generate (default: 64)\n"
-              << "  --device cpu|cuda   Execution device (default: cpu)\n"
+              << "  --device cpu|cuda|metal  Execution device (default: cpu)\n"
               << "  --dtype TYPE        float32, float16, or bfloat16 (default: float32)\n";
 }
 
@@ -131,8 +131,10 @@ Options parse_options(int argc, char** argv) {
                 options.device = citrius::Device::cpu();
             else if (device == "cuda")
                 options.device = citrius::Device::cuda();
+            else if (device == "metal")
+                options.device = citrius::Device::metal();
             else
-                throw std::invalid_argument("device must be cpu or cuda");
+                throw std::invalid_argument("device must be cpu, cuda, or metal");
         } else if (argument == "--help" || argument == "-h") {
             usage();
             std::exit(0);

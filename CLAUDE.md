@@ -324,6 +324,9 @@ Use `--dtype float32`, `float16`, or `bfloat16` to select projection and embeddi
 weight precision. Use `--device cpu` for CPU execution. The CUDA command requires
 an existing build configured with `build.bat --cuda`.
 
+On macOS, build with `./build.sh --metal` and pass `--device metal` to run chat
+decoding on Metal.
+
 Run the equivalent Hugging Face/PyTorch Qwen3-0.6B comparison with:
 
 ```powershell
