@@ -75,6 +75,51 @@ std::vector<std::int64_t> indices(const citrius::Tensor& tensor) {
         ->copy_to_host(result.data(), result.size() * sizeof(std::int64_t));
     return result;
 }
+
+citrius::models::Qwen3Config tiny_qwen_config(citrius::DType dtype) {
+    citrius::models::Qwen3Config config;
+    config.vocab_size = 8;
+    config.hidden_size = 4;
+    config.intermediate_size = 8;
+    config.num_hidden_layers = 1;
+    config.num_attention_heads = 2;
+    config.num_key_value_heads = 1;
+    config.head_dim = 2;
+    config.max_position_embeddings = 16;
+    config.rope_theta = 10000.0f;
+    config.device = citrius::Device::cuda();
+    config.dtype = dtype;
+    return config;
+}
+
+void initialize_qwen_deterministically(citrius::models::Qwen3ForCausalLM& model) {
+    float phase = 0.1f;
+    auto set = [&](citrius::Tensor& parameter, bool normalization = false) {
+        std::vector<float> data(static_cast<std::size_t>(parameter.numel()));
+        for (std::size_t index = 0; index < data.size(); ++index) {
+            data[index] = (normalization ? 1.0f : 0.0f) +
+                (normalization ? 0.05f : 0.15f) * std::sin(
+                    phase + 0.37f * static_cast<float>(index));
+        }
+        parameter = citrius::from_vector(
+            data, parameter.shape(), parameter.dtype(), parameter.device());
+        phase += 0.29f;
+    };
+    set(model.model().token_embedding().weight());
+    auto& layer = model.model().layer(0);
+    set(layer.attention().query_projection().weight());
+    set(layer.attention().key_projection().weight());
+    set(layer.attention().value_projection().weight());
+    set(layer.attention().output_projection().weight());
+    set(layer.attention().query_norm().weight(), true);
+    set(layer.attention().key_norm().weight(), true);
+    set(layer.mlp().gate_projection().weight());
+    set(layer.mlp().up_projection().weight());
+    set(layer.mlp().down_projection().weight());
+    set(layer.input_norm().weight(), true);
+    set(layer.post_attention_norm().weight(), true);
+    set(model.model().norm().weight(), true);
+}
 } // namespace
 
 TEST(CudaDeviceTest, EmptyAllocatesCudaStorage) {
@@ -343,6 +388,29 @@ TEST(CudaDeviceTest, CublasMatmulConsumesTransposedWeightView) {
     const auto output = cublas.matmul(input, citrius::transpose(weight, 0, 1));
 
     EXPECT_EQ(values(output), std::vector<float>({4, 5, 10, 11}));
+}
+
+TEST(CudaDeviceTest, Bfloat16CublasMatmulConsumesTransposedWeightView) {
+    std::string error;
+    auto baseline = make_cuda_device(&error);
+    if (!baseline)
+        GTEST_SKIP() << error;
+    citrius::impl::CublasCudaDeviceImpl cublas;
+    const auto input = citrius::from_vector(
+        std::vector<float>{1.125f, -2.25f, 3.5f, 4.25f, 5.5f, -6.75f},
+        {2, 3}, citrius::DType::BFloat16, citrius::Device::cuda());
+    const auto weight = citrius::from_vector(
+        std::vector<float>{0.5f, -0.75f, 1.25f, -1.5f, 0.25f, 2.0f},
+        {2, 3}, citrius::DType::BFloat16, citrius::Device::cuda());
+
+    const auto output = floating_values(
+        cublas.matmul(input, citrius::transpose(weight, 0, 1)));
+    const std::vector<float> expected{6.625f, 4.75f, -10.4375f, -18.5f};
+
+    ASSERT_EQ(output.size(), expected.size());
+    for (std::size_t index = 0; index < output.size(); ++index) {
+        EXPECT_NEAR(output[index], expected[index], 0.15f) << "element " << index;
+    }
 }
 
 TEST(CudaDeviceTest, CutlassMatmulConsumesTransposedWeightView) {
@@ -633,6 +701,31 @@ TEST(CudaDeviceTest, CublasTensorCoreMatmulSupportsFloat16AndBFloat16) {
         for (std::size_t index = 0; index < actual.size(); ++index)
             EXPECT_NEAR(actual[index], expected[index], dtype == citrius::DType::Float16 ? 0.05f : 0.25f);
     }
+}
+
+TEST(CudaDeviceTest, Bfloat16QwenLogitsCloselyMatchFloat32) {
+    std::string error;
+    auto device = make_cuda_device(&error);
+    if (!device)
+        GTEST_SKIP() << error;
+    citrius::models::Qwen3ForCausalLM float_model(
+        tiny_qwen_config(citrius::DType::Float32));
+    citrius::models::Qwen3ForCausalLM bfloat_model(
+        tiny_qwen_config(citrius::DType::BFloat16));
+    initialize_qwen_deterministically(float_model);
+    initialize_qwen_deterministically(bfloat_model);
+    const auto input_ids = citrius::from_vector(
+        std::vector<std::int64_t>{1, 5, 2, 7}, {1, 4}, citrius::Device::cuda());
+
+    const auto expected = values(float_model.forward_last_token(input_ids));
+    const auto actual = values(bfloat_model.forward_last_token(input_ids));
+
+    ASSERT_EQ(actual.size(), expected.size());
+    for (std::size_t index = 0; index < actual.size(); ++index) {
+        EXPECT_NEAR(actual[index], expected[index], 0.02f) << "logit " << index;
+    }
+    EXPECT_EQ(std::max_element(expected.begin(), expected.end()) - expected.begin(),
+              std::max_element(actual.begin(), actual.end()) - actual.begin());
 }
 
 TEST(CudaDeviceTest, CastsFloat16AndBFloat16OnCuda) {

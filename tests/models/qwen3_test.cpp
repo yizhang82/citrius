@@ -6,7 +6,9 @@
 
 #include <gtest/gtest.h>
 
+#include <algorithm>
 #include <bit>
+#include <cmath>
 #include <cstdint>
 #include <filesystem>
 #include <fstream>
@@ -89,6 +91,41 @@ TEST(Qwen3Test, ProducesVocabularyLogits) {
     EXPECT_EQ(model.model().token_embedding().weight().shape(), (citrius::Shape{8, 4}));
 }
 
+void set_deterministic_parameter(
+    citrius::Tensor& parameter, float phase, float center = 0.0f, float scale = 0.15f) {
+    std::vector<float> data(static_cast<std::size_t>(parameter.numel()));
+    for (std::size_t index = 0; index < data.size(); ++index) {
+        data[index] = center + scale * std::sin(
+            phase + 0.37f * static_cast<float>(index));
+    }
+    parameter = citrius::from_vector(
+        data, parameter.shape(), parameter.dtype(), parameter.device());
+}
+
+void initialize_deterministically(citrius::models::Qwen3ForCausalLM& model) {
+    float phase = 0.1f;
+    auto set = [&](citrius::Tensor& parameter, bool normalization = false) {
+        set_deterministic_parameter(
+            parameter, phase, normalization ? 1.0f : 0.0f,
+            normalization ? 0.05f : 0.15f);
+        phase += 0.29f;
+    };
+    set(model.model().token_embedding().weight());
+    auto& layer = model.model().layer(0);
+    set(layer.attention().query_projection().weight());
+    set(layer.attention().key_projection().weight());
+    set(layer.attention().value_projection().weight());
+    set(layer.attention().output_projection().weight());
+    set(layer.attention().query_norm().weight(), true);
+    set(layer.attention().key_norm().weight(), true);
+    set(layer.mlp().gate_projection().weight());
+    set(layer.mlp().up_projection().weight());
+    set(layer.mlp().down_projection().weight());
+    set(layer.input_norm().weight(), true);
+    set(layer.post_attention_norm().weight(), true);
+    set(model.model().norm().weight(), true);
+}
+
 TEST(Qwen3Test, StoresProjectionWeightsInConfiguredReducedPrecision) {
     auto config = tiny_config();
     config.dtype = citrius::DType::BFloat16;
@@ -103,6 +140,29 @@ TEST(Qwen3Test, StoresProjectionWeightsInConfiguredReducedPrecision) {
     EXPECT_EQ(model.model().layer(0).input_norm().weight().dtype(), citrius::DType::Float32);
     EXPECT_EQ(logits.dtype(), citrius::DType::Float32);
     EXPECT_EQ(logits.shape(), (citrius::Shape{1, 2, 8}));
+}
+
+TEST(Qwen3Test, Bfloat16ModelLogitsCloselyMatchFloat32) {
+    auto float_config = tiny_config();
+    auto bfloat_config = tiny_config();
+    bfloat_config.dtype = citrius::DType::BFloat16;
+    citrius::models::Qwen3ForCausalLM float_model(float_config);
+    citrius::models::Qwen3ForCausalLM bfloat_model(bfloat_config);
+    initialize_deterministically(float_model);
+    initialize_deterministically(bfloat_model);
+    const auto input_ids =
+        citrius::from_vector(std::vector<std::int64_t>{1, 5, 2, 7}, {1, 4});
+
+    const auto expected = values(float_model(input_ids));
+    const auto actual = values(bfloat_model(input_ids));
+
+    ASSERT_EQ(actual.size(), expected.size());
+    for (std::size_t index = 0; index < actual.size(); ++index) {
+        EXPECT_NEAR(actual[index], expected[index], 0.02f) << "logit " << index;
+    }
+    const auto expected_last = std::max_element(expected.end() - 8, expected.end());
+    const auto actual_last = std::max_element(actual.end() - 8, actual.end());
+    EXPECT_EQ(expected_last - (expected.end() - 8), actual_last - (actual.end() - 8));
 }
 
 TEST(Qwen3Test, LastTokenForwardMatchesFullLogits) {
