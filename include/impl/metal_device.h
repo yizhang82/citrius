@@ -73,7 +73,7 @@ public:
 
 private:
     class Impl;
-    std::unique_ptr<Impl> impl_;
+    std::shared_ptr<Impl> impl_;
 
     const MetalMemTensorStorageImpl& require_metal_storage(const ITensorStorage& storage) const;
     MetalMemTensorStorageImpl& require_metal_storage(ITensorStorage& storage) const;

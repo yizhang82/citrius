@@ -580,7 +580,10 @@ public:
 };
 
 MetalDeviceImpl::MetalDeviceImpl()
-    : impl_(std::make_unique<Impl>()) {}
+    : impl_([] {
+        static std::shared_ptr<Impl> shared = std::make_shared<Impl>();
+        return shared;
+    }()) {}
 
 MetalDeviceImpl::~MetalDeviceImpl() = default;
 
