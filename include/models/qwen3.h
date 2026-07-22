@@ -123,7 +123,10 @@ public:
     const Qwen3Config& config() const;
 
 private:
+    Tensor vocabulary_projection(const Tensor& hidden);
     std::shared_ptr<Qwen3Model> model_;
+    Tensor cached_float32_vocabulary_weight_;
+    std::shared_ptr<impl::ITensorStorage> cached_vocabulary_source_storage_;
 };
 
 /// Loads Hugging Face Qwen3 safetensors names into a compatible model.

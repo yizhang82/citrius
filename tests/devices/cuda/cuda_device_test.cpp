@@ -78,12 +78,12 @@ std::vector<std::int64_t> indices(const citrius::Tensor& tensor) {
 
 citrius::models::Qwen3Config tiny_qwen_config(citrius::DType dtype) {
     citrius::models::Qwen3Config config;
-    config.vocab_size = 8;
-    config.hidden_size = 4;
-    config.intermediate_size = 8;
+    config.vocab_size = 16;
+    config.hidden_size = 8;
+    config.intermediate_size = 16;
     config.num_hidden_layers = 1;
-    config.num_attention_heads = 2;
-    config.num_key_value_heads = 1;
+    config.num_attention_heads = 4;
+    config.num_key_value_heads = 2;
     config.head_dim = 2;
     config.max_position_embeddings = 16;
     config.rope_theta = 10000.0f;
@@ -413,6 +413,55 @@ TEST(CudaDeviceTest, Bfloat16CublasMatmulConsumesTransposedWeightView) {
     }
 }
 
+TEST(CudaDeviceTest, Bfloat16CublasMatmulCanProduceFloat32Output) {
+    std::string error;
+    auto baseline = make_cuda_device(&error);
+    if (!baseline)
+        GTEST_SKIP() << error;
+    citrius::impl::CublasCudaDeviceImpl cublas;
+    const auto input = citrius::from_vector(
+        std::vector<float>{1.125f, -2.25f, 3.5f, 4.25f, 5.5f, -6.75f},
+        {2, 3}, citrius::DType::BFloat16, citrius::Device::cuda());
+    const auto weight = citrius::from_vector(
+        std::vector<float>{0.5f, -0.75f, 1.25f, -1.5f, 0.25f, 2.0f},
+        {2, 3}, citrius::DType::BFloat16, citrius::Device::cuda());
+
+    const auto output = cublas.matmul_float32_output(
+        input, citrius::transpose(weight, 0, 1));
+
+    EXPECT_EQ(output.dtype(), citrius::DType::Float32);
+    EXPECT_EQ(values(output),
+              (std::vector<float>{6.625f, 4.75f, -10.4375f, -18.5f}));
+}
+
+TEST(CudaDeviceTest, Bfloat16CublasFloat32OutputHandlesSingleRowVocabularyProjection) {
+    std::string error;
+    auto baseline = make_cuda_device(&error);
+    if (!baseline)
+        GTEST_SKIP() << error;
+    citrius::impl::CublasCudaDeviceImpl cublas;
+    const std::vector<float> input_values{1.0f, -2.0f, 3.0f, -4.0f};
+    std::vector<float> weight_values(32);
+    for (std::size_t index = 0; index < weight_values.size(); ++index) {
+        weight_values[index] = 0.125f * static_cast<float>(static_cast<int>(index) - 15);
+    }
+    const auto input = citrius::from_vector(
+        input_values, {1, 4}, citrius::DType::BFloat16, citrius::Device::cuda());
+    const auto weight = citrius::from_vector(
+        weight_values, {8, 4}, citrius::DType::BFloat16, citrius::Device::cuda());
+    std::vector<float> expected(8, 0.0f);
+    for (std::size_t row = 0; row < expected.size(); ++row) {
+        for (std::size_t column = 0; column < input_values.size(); ++column) {
+            expected[row] += input_values[column] * weight_values[row * 4 + column];
+        }
+    }
+
+    const auto output = cublas.matmul_float32_output(
+        input, citrius::transpose(weight, 0, 1));
+
+    EXPECT_EQ(values(output), expected);
+}
+
 TEST(CudaDeviceTest, CutlassMatmulConsumesTransposedWeightView) {
     std::string error;
     auto baseline = make_cuda_device(&error);
@@ -729,6 +778,9 @@ TEST(CudaDeviceTest, Bfloat16QwenLogitsCloselyMatchFloat32) {
     };
     const auto float_embedding = float_model.model().token_embedding()(input_ids);
     const auto bfloat_embedding = bfloat_model.model().token_embedding()(input_ids);
+    compare("embedding weight", float_model.model().token_embedding().weight(),
+            citrius::cast(bfloat_model.model().token_embedding().weight(),
+                          citrius::DType::Float32), 0.002f);
     compare("embedding", float_embedding, bfloat_embedding, 0.002f);
     compare("attention",
             float_model.model().layer(0).attention()(float_embedding),
@@ -736,8 +788,9 @@ TEST(CudaDeviceTest, Bfloat16QwenLogitsCloselyMatchFloat32) {
     compare("mlp",
             float_model.model().layer(0).mlp()(float_embedding),
             bfloat_model.model().layer(0).mlp()(bfloat_embedding), 0.02f);
-    compare("model hidden",
-            float_model.model()(input_ids), bfloat_model.model()(input_ids), 0.02f);
+    const auto float_hidden = float_model.model()(input_ids);
+    const auto bfloat_hidden = bfloat_model.model()(input_ids);
+    compare("model hidden", float_hidden, bfloat_hidden, 0.02f);
     const auto expected = values(float_model.forward_last_token(input_ids));
     const auto actual = values(bfloat_model.forward_last_token(input_ids));
 

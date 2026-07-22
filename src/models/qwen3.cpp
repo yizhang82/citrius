@@ -16,18 +16,6 @@
 #include <vector>
 
 namespace citrius::models {
-namespace {
-
-Tensor tied_vocabulary_projection(const Tensor& hidden, const Tensor& weight) {
-    const DType gemm_dtype = hidden.dtype();
-    const Tensor& gemm_input = hidden;
-    Tensor gemm_weight = transpose(weight, 0, 1);
-    if (gemm_weight.dtype() != gemm_dtype) gemm_weight = cast(gemm_weight, gemm_dtype);
-    return matmul(gemm_input, gemm_weight);
-}
-
-} // namespace
-
 void Qwen3Config::validate() const {
     if (vocab_size <= 0 || hidden_size <= 0 || intermediate_size <= 0 ||
         num_hidden_layers <= 0 || num_attention_heads <= 0 ||
@@ -181,7 +169,7 @@ Qwen3ForCausalLM::Qwen3ForCausalLM(Qwen3Config config) {
 
 Tensor Qwen3ForCausalLM::forward(const Tensor& input_ids) {
     const Tensor hidden = (*model_)(input_ids);
-    return tied_vocabulary_projection(hidden, model_->token_embedding().weight());
+    return vocabulary_projection(hidden);
 }
 
 Tensor Qwen3ForCausalLM::forward_last_token(const Tensor& input_ids) {
@@ -189,8 +177,23 @@ Tensor Qwen3ForCausalLM::forward_last_token(const Tensor& input_ids) {
     const Tensor last_hidden = contiguous(
         hidden.index({indexing::Slice(), -1, indexing::Slice()}));
     return reshape(
-        tied_vocabulary_projection(last_hidden, model_->token_embedding().weight()),
+        vocabulary_projection(last_hidden),
         {hidden.shape()[0], 1, config().vocab_size});
+}
+
+Tensor Qwen3ForCausalLM::vocabulary_projection(const Tensor& hidden) {
+    const Tensor& weight = model_->token_embedding().weight();
+    const auto source_storage = weight.storage();
+    const Tensor* projection_weight = &weight;
+    if (weight.dtype() != hidden.dtype()) {
+        if (!cached_float32_vocabulary_weight_.defined() ||
+            cached_vocabulary_source_storage_ != source_storage) {
+            cached_float32_vocabulary_weight_ = cast(weight, hidden.dtype());
+            cached_vocabulary_source_storage_ = source_storage;
+        }
+        projection_weight = &cached_float32_vocabulary_weight_;
+    }
+    return matmul(hidden, transpose(*projection_weight, 0, 1));
 }
 
 Qwen3Model& Qwen3ForCausalLM::model() { return *model_; }

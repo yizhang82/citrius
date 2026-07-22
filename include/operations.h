@@ -52,6 +52,11 @@ Tensor sub(const Tensor& left, const Tensor& right);
 /// @endcode
 Tensor matmul(const Tensor& left, const Tensor& right);
 
+/// Multiplies two 2D tensors using their storage dtype with Float32 accumulation
+/// and output. CUDA cuBLAS executes reduced-precision inputs directly; other
+/// backends fall back to converting the inputs to Float32.
+Tensor matmul_float32_output(const Tensor& left, const Tensor& right);
+
 /// Converts floating-point tensor elements to another floating-point dtype.
 Tensor cast(const Tensor& tensor, DType dtype);
 

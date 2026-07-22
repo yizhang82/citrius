@@ -92,6 +92,10 @@ void CublasCudaDeviceImpl::matmul_out(const Tensor& a, const Tensor& b, Tensor& 
     }
 
     ENSURE_TENSOR_SHAPE(out, Shape({m, n}));
+    if (out.dtype() != a.dtype() && out.dtype() != DType::Float32) {
+        throw std::invalid_argument(
+            "cuBLAS matmul output must match the input dtype or be Float32");
+    }
     if (m == 0 || n == 0)
         return;
 
@@ -131,6 +135,7 @@ void CublasCudaDeviceImpl::matmul_out(const Tensor& a, const Tensor& b, Tensor& 
     // This accounts for the (n, m, k) problem dimensions and leading
     // dimensions n for B^T, k for A^T, and n for C^T below.
     const auto data_type = cuda_dtype(a.dtype());
+    const auto output_type = cuda_dtype(out.dtype());
     check_cublas(cublasGemmEx(impl_->handle,      // cuBLAS context for the selected CUDA device
                              b_operation,
                              a_operation,
@@ -147,11 +152,19 @@ void CublasCudaDeviceImpl::matmul_out(const Tensor& a, const Tensor& b, Tensor& 
                              &beta, // scale applied to the previous output contents (0.0)
                              data(*out.storage()), // column-major C^T bytes, equivalent to
                                                    // row-major C
-                             data_type,
+                             output_type,
                              static_cast<int>(n), // leading dimension of C^T
                              CUBLAS_COMPUTE_32F,
                              CUBLAS_GEMM_DEFAULT_TENSOR_OP),
                  "cuBLAS matmul failed");
+}
+
+Tensor CublasCudaDeviceImpl::matmul_float32_output(
+    const Tensor& a, const Tensor& b) const {
+    require_matmul_inputs(a, b);
+    Tensor out = empty({a.shape()[0], b.shape()[1]}, DType::Float32);
+    matmul_out(a, b, out);
+    return out;
 }
 
 Tensor CublasCudaDeviceImpl::batched_matmul(const Tensor& a, const Tensor& b) const {

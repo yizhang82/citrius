@@ -267,6 +267,33 @@ Tensor matmul(const Tensor& left, const Tensor& right) {
     });
 }
 
+Tensor matmul_float32_output(const Tensor& left, const Tensor& right) {
+    require_matching_devices(left, right);
+    ENSURE_TENSOR_DEFINED(left);
+    ENSURE_TENSOR_DEFINED(right);
+    if (left.ndim() != 2 || right.ndim() != 2) {
+        throw std::invalid_argument("matmul_float32_output requires 2D inputs");
+    }
+    if ((left.dtype() != DType::Float16 && left.dtype() != DType::BFloat16 &&
+         left.dtype() != DType::Float32) || right.dtype() != left.dtype()) {
+        throw std::invalid_argument(
+            "matmul_float32_output requires matching Float16, BFloat16, or Float32 inputs");
+    }
+#ifdef CITRIUS_HAS_CUDA
+    if (left.device().type == DeviceType::CUDA) {
+        auto device = cuda_device(left.device().index);
+        if (const auto* cublas = dynamic_cast<const CublasCudaDeviceImpl*>(device.get())) {
+            return cublas->matmul_float32_output(left, right);
+        }
+    }
+#endif
+    const Tensor float_left = left.dtype() == DType::Float32
+        ? left : cast(left, DType::Float32);
+    const Tensor float_right = right.dtype() == DType::Float32
+        ? right : cast(right, DType::Float32);
+    return matmul(float_left, float_right);
+}
+
 Tensor cast(const Tensor& tensor, DType dtype) {
     ENSURE_TENSOR_DEFINED(tensor);
     if (!is_floating_point(tensor.dtype()) || tensor.dtype() == DType::Float64 ||

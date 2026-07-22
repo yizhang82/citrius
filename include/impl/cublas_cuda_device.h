@@ -17,6 +17,7 @@ class CublasCudaDeviceImpl final : public CudaDeviceImpl {
     CublasCudaDeviceImpl& operator=(const CublasCudaDeviceImpl&) = delete;
 
     void matmul_out(const Tensor& a, const Tensor& b, Tensor& out) const override;
+    Tensor matmul_float32_output(const Tensor& a, const Tensor& b) const;
     Tensor batched_matmul(const Tensor& a, const Tensor& b) const override;
 
   private:
