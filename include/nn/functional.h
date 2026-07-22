@@ -65,6 +65,7 @@ Tensor scaled_dot_product_attention(
     const Tensor& query,
     const Tensor& key,
     const Tensor& value,
-    const Tensor& attn_mask = Tensor());
+    const Tensor& attn_mask = Tensor(),
+    bool is_causal = false);
 
 } // namespace citrius::nn::functional

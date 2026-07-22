@@ -58,7 +58,8 @@ public:
         const Tensor& query,
         const Tensor& key,
         const Tensor& value,
-        const Tensor& mask) const override;
+        const Tensor& mask,
+        bool is_causal) const override;
     Tensor broadcast_elementwise(
         const Tensor& a,
         const Tensor& b,

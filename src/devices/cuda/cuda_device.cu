@@ -234,7 +234,8 @@ __global__ void scaled_dot_product_attention_f32(
     std::int64_t key_value_heads,
     std::int64_t query_length,
     std::int64_t key_length,
-    std::int64_t head_dim) {
+    std::int64_t head_dim,
+    bool is_causal) {
     extern __shared__ float shared[];
     float* accumulator = shared;
     float* warp_sums = accumulator + head_dim;
@@ -273,7 +274,9 @@ __global__ void scaled_dot_product_attention_f32(
             for (int offset = 16; offset > 0; offset /= 2)
                 score += __shfl_down_sync(0xffffffff, score, offset);
             if (lane == 0) {
-                const bool excluded = mask && mask[query_position * key_length + key_position];
+                const bool excluded =
+                    (is_causal && key_position > query_position) ||
+                    (mask && mask[query_position * key_length + key_position]);
                 score = excluded ? negative_infinity
                                  : score * rsqrtf(static_cast<float>(head_dim));
                 const float previous_maximum = state[0];
@@ -863,7 +866,8 @@ std::optional<Tensor> CudaDeviceImpl::try_scaled_dot_product_attention(
     const Tensor& query,
     const Tensor& key,
     const Tensor& value,
-    const Tensor& mask) const {
+    const Tensor& mask,
+    bool is_causal) const {
     if (query.dtype() != DType::Float32 || key.dtype() != DType::Float32 ||
         value.dtype() != DType::Float32 || query.ndim() != 4 || key.ndim() != 4 ||
         value.ndim() != 4 || query.device() != Device::cuda(device_index_) ||
@@ -902,7 +906,7 @@ std::optional<Tensor> CudaDeviceImpl::try_scaled_dot_product_attention(
         data(require_cuda_storage(*key_storage)) + key.storage_offset(),
         data(require_cuda_storage(*value_storage)) + value.storage_offset(), mask_data,
         data(require_cuda_storage(*output.storage())), query.shape()[1], key.shape()[1],
-        query_length, key_length, query.shape()[3]);
+        query_length, key_length, query.shape()[3], is_causal);
     check_cuda(cudaGetLastError(), "failed to launch CUDA scaled_dot_product_attention kernel");
     return output;
 }

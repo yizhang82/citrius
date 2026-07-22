@@ -45,7 +45,8 @@ public:
         const Tensor& query,
         const Tensor& key,
         const Tensor& value,
-        const Tensor& mask) const {
+        const Tensor& mask,
+        bool is_causal) const {
         return std::nullopt;
     }
     virtual TensorStoragePtr ensure_storage(

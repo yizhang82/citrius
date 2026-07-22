@@ -18,16 +18,6 @@
 namespace citrius::models {
 namespace {
 
-Tensor causal_mask(std::int64_t sequence_length, Device device) {
-    std::vector<bool> values(static_cast<std::size_t>(sequence_length * sequence_length));
-    for (std::int64_t row = 0; row < sequence_length; ++row) {
-        for (std::int64_t column = row + 1; column < sequence_length; ++column) {
-            values[static_cast<std::size_t>(row * sequence_length + column)] = true;
-        }
-    }
-    return from_vector(values, {sequence_length, sequence_length}, device);
-}
-
 } // namespace
 
 void Qwen3Config::validate() const {
@@ -113,7 +103,8 @@ Tensor Qwen3Attention::forward(const Tensor& input, const Tensor& attn_mask) {
     key = citrius::rms_norm_rope(
         key, key_norm_->weight(), config_.rms_norm_eps, config_.rope_theta);
     value = permute(value, {0, 2, 1, 3});
-    Tensor output = nn::functional::scaled_dot_product_attention(query, key, value, attn_mask);
+    Tensor output = nn::functional::scaled_dot_product_attention(
+        query, key, value, attn_mask, true);
     output = reshape(permute(output, {0, 2, 1, 3}), {batch, sequence, config_.num_attention_heads * config_.head_dim});
     return (*output_projection_)(output);
 }
@@ -162,8 +153,7 @@ Tensor Qwen3Model::forward(const Tensor& input_ids) {
         throw std::invalid_argument("Qwen3 sequence exceeds max_position_embeddings");
     }
     Tensor hidden = (*token_embedding_)(input_ids);
-    const Tensor mask = causal_mask(input_ids.shape()[1], input_ids.device());
-    for (const auto& layer : layers_) hidden = layer->forward(hidden, mask);
+    for (const auto& layer : layers_) hidden = layer->forward(hidden);
     return (*norm_)(hidden);
 }
 

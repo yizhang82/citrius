@@ -5,6 +5,7 @@
 #include "operations.h"
 #include "reduction_operations.h"
 #include "shape_operations.h"
+#include "tensor_factory.h"
 #include "tensor_utils.h"
 
 #ifdef CITRIUS_HAS_CUDA
@@ -103,7 +104,8 @@ Tensor scaled_dot_product_attention(
     const Tensor& query,
     const Tensor& key,
     const Tensor& value,
-    const Tensor& attn_mask) {
+    const Tensor& attn_mask,
+    bool is_causal) {
     ENSURE_TENSOR_DEFINED(query);
     ENSURE_TENSOR_DTYPE(query, DType::Float32);
     if (query.shape().size() < 2) {
@@ -124,7 +126,8 @@ Tensor scaled_dot_product_attention(
     if (query.device().type == DeviceType::CUDA) {
         impl::CudaDeviceImpl device(query.device().index);
         if (auto optimized =
-                device.try_scaled_dot_product_attention(query, key, value, attn_mask))
+                device.try_scaled_dot_product_attention(
+                    query, key, value, attn_mask, is_causal))
             return *optimized;
     }
 #endif
@@ -166,6 +169,20 @@ Tensor scaled_dot_product_attention(
         scores = citrius::masked_fill(
             scores,
             attn_mask,
+            -std::numeric_limits<float>::infinity());
+    }
+
+    if (is_causal) {
+        const auto query_length = query.shape()[query.ndim() - 2];
+        const auto key_length = key.shape()[key.ndim() - 2];
+        std::vector<bool> causal_values(
+            static_cast<std::size_t>(query_length * key_length), false);
+        for (std::int64_t row = 0; row < query_length; ++row) {
+            for (std::int64_t column = row + 1; column < key_length; ++column)
+                causal_values[static_cast<std::size_t>(row * key_length + column)] = true;
+        }
+        scores = citrius::masked_fill(
+            scores, from_vector(causal_values, {query_length, key_length}, query.device()),
             -std::numeric_limits<float>::infinity());
     }
 
