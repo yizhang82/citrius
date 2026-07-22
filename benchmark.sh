@@ -79,13 +79,19 @@ case "$benchmark" in
             *) usage; exit 1 ;;
         esac
         benchmark_args=()
+        benchmark_arg_count=0
         while [[ $# -gt 0 ]]; do
             [[ ("$1" == "--tokens" || "$1" == "--dtype") && $# -ge 2 ]] || { usage; exit 1; }
             benchmark_args+=("$1" "$2")
+            benchmark_arg_count=$((benchmark_arg_count + 2))
             shift 2
         done
         cmake --build "$BUILD_DIR" -j --target qwen3_decoding_benchmark
-        "$BUILD_DIR/qwen3_decoding_benchmark" "$backend" "${benchmark_args[@]}"
+        if [[ "$benchmark_arg_count" -gt 0 ]]; then
+            "$BUILD_DIR/qwen3_decoding_benchmark" "$backend" "${benchmark_args[@]}"
+        else
+            "$BUILD_DIR/qwen3_decoding_benchmark" "$backend"
+        fi
         ;;
     add-kernel|matmul-kernel)
         require_backend "CUDA" CITRIUS_ENABLE_CUDA --cuda
