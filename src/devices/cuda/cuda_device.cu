@@ -224,6 +224,82 @@ __global__ void rms_norm_rope_f32(
     }
 }
 
+__global__ void scaled_dot_product_attention_f32(
+    const float* query,
+    const float* key,
+    const float* value,
+    const std::uint8_t* mask,
+    float* output,
+    std::int64_t heads,
+    std::int64_t key_value_heads,
+    std::int64_t query_length,
+    std::int64_t key_length,
+    std::int64_t head_dim) {
+    extern __shared__ float shared[];
+    float* accumulator = shared;
+    float* warp_sums = accumulator + head_dim;
+    float* state = warp_sums + 32;
+    const auto lane = threadIdx.x & 31;
+    const auto warp = threadIdx.x >> 5;
+    const auto warp_count = (blockDim.x + 31) / 32;
+    const auto row = static_cast<std::int64_t>(blockIdx.x);
+    const auto query_position = row % query_length;
+    const auto head = (row / query_length) % heads;
+    const auto batch = row / (heads * query_length);
+    const float* query_row = query + row * head_dim;
+    const float negative_infinity = -__int_as_float(0x7f800000);
+
+    for (std::int64_t column = threadIdx.x; column < head_dim; column += blockDim.x)
+        accumulator[column] = 0.0f;
+    if (threadIdx.x == 0) {
+        state[0] = negative_infinity; // running maximum
+        state[1] = 0.0f;          // running exponential sum
+    }
+    __syncthreads();
+
+    for (std::int64_t key_position = 0; key_position < key_length; ++key_position) {
+        const auto key_value_head = head / (heads / key_value_heads);
+        const auto key_row_index =
+            ((batch * key_value_heads + key_value_head) * key_length + key_position) * head_dim;
+        float score = 0.0f;
+        for (std::int64_t column = threadIdx.x; column < head_dim; column += blockDim.x)
+            score += query_row[column] * key[key_row_index + column];
+        for (int offset = 16; offset > 0; offset /= 2)
+            score += __shfl_down_sync(0xffffffff, score, offset);
+        if (lane == 0) warp_sums[warp] = score;
+        __syncthreads();
+        if (warp == 0) {
+            score = lane < warp_count ? warp_sums[lane] : 0.0f;
+            for (int offset = 16; offset > 0; offset /= 2)
+                score += __shfl_down_sync(0xffffffff, score, offset);
+            if (lane == 0) {
+                const bool excluded = mask && mask[query_position * key_length + key_position];
+                score = excluded ? negative_infinity
+                                 : score * rsqrtf(static_cast<float>(head_dim));
+                const float previous_maximum = state[0];
+                const float next_maximum = fmaxf(previous_maximum, score);
+                const float previous_scale =
+                    previous_maximum == negative_infinity ? 0.0f
+                                                      : expf(previous_maximum - next_maximum);
+                const float value_scale =
+                    score == negative_infinity ? 0.0f : expf(score - next_maximum);
+                state[0] = next_maximum;
+                state[1] = state[1] * previous_scale + value_scale;
+                state[2] = previous_scale;
+                state[3] = value_scale;
+            }
+        }
+        __syncthreads();
+        for (std::int64_t column = threadIdx.x; column < head_dim; column += blockDim.x)
+            accumulator[column] = accumulator[column] * state[2] +
+                value[key_row_index + column] * state[3];
+        __syncthreads();
+    }
+
+    for (std::int64_t column = threadIdx.x; column < head_dim; column += blockDim.x)
+        output[row * head_dim + column] = accumulator[column] / state[1];
+}
+
 __device__ float apply_elementwise(
     float a,
     float b,
@@ -780,6 +856,54 @@ std::optional<Tensor> CudaDeviceImpl::try_rms_norm_rope(
         data(require_cuda_storage(*output.storage())), sequence, heads, head_dim,
         row_count, epsilon, theta);
     check_cuda(cudaGetLastError(), "failed to launch CUDA rms_norm_rope kernel");
+    return output;
+}
+
+std::optional<Tensor> CudaDeviceImpl::try_scaled_dot_product_attention(
+    const Tensor& query,
+    const Tensor& key,
+    const Tensor& value,
+    const Tensor& mask) const {
+    if (query.dtype() != DType::Float32 || key.dtype() != DType::Float32 ||
+        value.dtype() != DType::Float32 || query.ndim() != 4 || key.ndim() != 4 ||
+        value.ndim() != 4 || query.device() != Device::cuda(device_index_) ||
+        key.device() != query.device() || value.device() != query.device() ||
+        !query.is_contiguous() || !key.is_contiguous() || !value.is_contiguous() ||
+        query.shape()[0] != key.shape()[0] || query.shape()[1] % key.shape()[1] != 0 ||
+        key.shape() != value.shape() || query.shape()[3] != key.shape()[3] ||
+        query.shape()[3] > 1024) {
+        return std::nullopt;
+    }
+    const auto query_length = query.shape()[2];
+    const auto key_length = key.shape()[2];
+    if (mask.defined() &&
+        (mask.dtype() != DType::Bool || mask.device() != query.device() ||
+         mask.shape() != Shape{query_length, key_length} || !mask.is_contiguous())) {
+        return std::nullopt;
+    }
+
+    Tensor output = empty(query.shape(), DType::Float32);
+    if (output.numel() == 0) return output;
+    auto query_storage = ensure_storage(query.storage());
+    auto key_storage = ensure_storage(key.storage());
+    auto value_storage = ensure_storage(value.storage());
+    TensorStoragePtr mask_storage;
+    const std::uint8_t* mask_data = nullptr;
+    if (mask.defined()) {
+        mask_storage = ensure_storage(mask.storage());
+        mask_data = reinterpret_cast<const std::uint8_t*>(
+            data(require_cuda_storage(*mask_storage))) + mask.storage_offset();
+    }
+    const auto rows = query.shape()[0] * query.shape()[1] * query_length;
+    const auto shared_bytes = static_cast<std::size_t>(query.shape()[3] + 36) * sizeof(float);
+    scaled_dot_product_attention_f32<<<
+        static_cast<unsigned>(rows), 256, shared_bytes, stream(context_)>>>(
+        data(require_cuda_storage(*query_storage)) + query.storage_offset(),
+        data(require_cuda_storage(*key_storage)) + key.storage_offset(),
+        data(require_cuda_storage(*value_storage)) + value.storage_offset(), mask_data,
+        data(require_cuda_storage(*output.storage())), query.shape()[1], key.shape()[1],
+        query_length, key_length, query.shape()[3]);
+    check_cuda(cudaGetLastError(), "failed to launch CUDA scaled_dot_product_attention kernel");
     return output;
 }
 

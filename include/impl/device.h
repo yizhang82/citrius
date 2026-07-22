@@ -41,6 +41,13 @@ public:
         float theta) const {
         return std::nullopt;
     }
+    virtual std::optional<Tensor> try_scaled_dot_product_attention(
+        const Tensor& query,
+        const Tensor& key,
+        const Tensor& value,
+        const Tensor& mask) const {
+        return std::nullopt;
+    }
     virtual TensorStoragePtr ensure_storage(
         const TensorStoragePtr& storage,
         ConversionPolicy policy = ConversionPolicy::Error) const = 0;

@@ -28,20 +28,6 @@ Tensor causal_mask(std::int64_t sequence_length, Device device) {
     return from_vector(values, {sequence_length, sequence_length}, device);
 }
 
-Tensor repeat_key_value_heads(const Tensor& tensor, std::int64_t repetitions) {
-    if (repetitions == 1) return tensor;
-    const Tensor packed = contiguous(tensor);
-    std::vector<Tensor> repeated;
-    repeated.reserve(
-        static_cast<std::size_t>(packed.shape()[1] * repetitions));
-    for (std::int64_t head_index = 0; head_index < packed.shape()[1]; ++head_index) {
-        const Tensor head = packed.index(
-            {indexing::Slice(), indexing::Slice(head_index, head_index + 1)});
-        for (std::int64_t index = 0; index < repetitions; ++index) repeated.push_back(head);
-    }
-    return concat(repeated, 1);
-}
-
 } // namespace
 
 void Qwen3Config::validate() const {
@@ -127,9 +113,6 @@ Tensor Qwen3Attention::forward(const Tensor& input, const Tensor& attn_mask) {
     key = citrius::rms_norm_rope(
         key, key_norm_->weight(), config_.rms_norm_eps, config_.rope_theta);
     value = permute(value, {0, 2, 1, 3});
-    const std::int64_t groups = config_.num_attention_heads / config_.num_key_value_heads;
-    key = repeat_key_value_heads(key, groups);
-    value = repeat_key_value_heads(value, groups);
     Tensor output = nn::functional::scaled_dot_product_attention(query, key, value, attn_mask);
     output = reshape(permute(output, {0, 2, 1, 3}), {batch, sequence, config_.num_attention_heads * config_.head_dim});
     return (*output_projection_)(output);

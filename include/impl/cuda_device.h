@@ -54,6 +54,11 @@ public:
         const Tensor& weight,
         float epsilon,
         float theta) const override;
+    std::optional<Tensor> try_scaled_dot_product_attention(
+        const Tensor& query,
+        const Tensor& key,
+        const Tensor& value,
+        const Tensor& mask) const override;
     Tensor broadcast_elementwise(
         const Tensor& a,
         const Tensor& b,

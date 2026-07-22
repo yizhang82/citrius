@@ -1,10 +1,15 @@
 #include "nn/functional.h"
 
 #include "exceptions.h"
+#include "indexing_operations.h"
 #include "operations.h"
 #include "reduction_operations.h"
 #include "shape_operations.h"
 #include "tensor_utils.h"
+
+#ifdef CITRIUS_HAS_CUDA
+#include "impl/cuda_device.h"
+#endif
 
 #include <cmath>
 #include <stdexcept>
@@ -115,9 +120,40 @@ Tensor scaled_dot_product_attention(
         throw std::invalid_argument("value must have at least 2 dimensions");
     }
     ENSURE_TENSOR_DEVICE_MATCH_3(query, key, value);
+#ifdef CITRIUS_HAS_CUDA
+    if (query.device().type == DeviceType::CUDA) {
+        impl::CudaDeviceImpl device(query.device().index);
+        if (auto optimized =
+                device.try_scaled_dot_product_attention(query, key, value, attn_mask))
+            return *optimized;
+    }
+#endif
+    Tensor effective_key = key;
+    Tensor effective_value = value;
+    if (query.ndim() == 4 && key.ndim() == 4 && value.ndim() == 4 &&
+        query.shape()[0] == key.shape()[0] && key.shape()[1] == value.shape()[1] &&
+        query.shape()[1] != key.shape()[1]) {
+        if (query.shape()[1] % key.shape()[1] != 0)
+            throw std::invalid_argument("query heads must be divisible by key/value heads");
+        const auto repetitions = query.shape()[1] / key.shape()[1];
+        const auto repeat_heads = [repetitions](const Tensor& tensor) {
+            const Tensor packed = contiguous(tensor);
+            std::vector<Tensor> repeated;
+            repeated.reserve(static_cast<std::size_t>(packed.shape()[1] * repetitions));
+            for (std::int64_t head = 0; head < packed.shape()[1]; ++head) {
+                const Tensor view = packed.index(
+                    {indexing::Slice(), indexing::Slice(head, head + 1)});
+                for (std::int64_t index = 0; index < repetitions; ++index)
+                    repeated.push_back(view);
+            }
+            return concat(repeated, 1);
+        };
+        effective_key = repeat_heads(key);
+        effective_value = repeat_heads(value);
+    }
     // key -> [..., K, H]
     // key_transposed -> [..., H, K]
-    auto key_transposed = citrius::transpose(key, -2, -1);
+    auto key_transposed = citrius::transpose(effective_key, -2, -1);
     // query -> [..., Q, H]
     // scores -> [..., Q, K]
     auto scores = citrius::matmul(query, key_transposed); 
@@ -140,7 +176,7 @@ Tensor scaled_dot_product_attention(
 
     // value -> [..., K, V]
     // output -> [..., Q, V]
-    return citrius::matmul(probabilities, value);
+    return citrius::matmul(probabilities, effective_value);
 }
 
 } // namespace citrius::nn::functional
