@@ -52,6 +52,7 @@ if(CITRIUS_ENABLE_METAL)
         PUBLIC
             "-framework Foundation"
             "-framework Metal"
+            "-framework MetalPerformanceShaders"
     )
     target_compile_definitions(citrius PRIVATE CITRIUS_HAS_METAL=1)
 endif()

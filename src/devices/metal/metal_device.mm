@@ -6,6 +6,7 @@
 
 #import <Foundation/Foundation.h>
 #import <Metal/Metal.h>
+#import <MetalPerformanceShaders/MetalPerformanceShaders.h>
 
 #include <algorithm>
 #include <array>
@@ -309,22 +310,31 @@ kernel void matmul_f32(
     device const float* b [[buffer(1)]],
     device float* out [[buffer(2)]],
     constant uint3& dims [[buffer(3)]],
-    uint2 id [[thread_position_in_grid]]) {
-    const uint row = id.y;
-    const uint col = id.x;
+    uint2 group_id [[threadgroup_position_in_grid]],
+    uint2 thread_id [[thread_position_in_threadgroup]]) {
+    constexpr uint tile_size = 16;
+    threadgroup float a_tile[tile_size][tile_size];
+    threadgroup float b_tile[tile_size][tile_size];
+    const uint row = group_id.y * tile_size + thread_id.y;
+    const uint col = group_id.x * tile_size + thread_id.x;
     const uint m = dims.x;
     const uint k = dims.y;
     const uint n = dims.z;
 
-    if (row >= m || col >= n) {
-        return;
-    }
-
     float total = 0.0f;
-    for (uint inner = 0; inner < k; ++inner) {
-        total += a[row * k + inner] * b[inner * n + col];
+    for (uint tile = 0; tile < (k + tile_size - 1) / tile_size; ++tile) {
+        const uint a_col = tile * tile_size + thread_id.x;
+        const uint b_row = tile * tile_size + thread_id.y;
+        a_tile[thread_id.y][thread_id.x] = row < m && a_col < k
+            ? a[row * k + a_col] : 0.0f;
+        b_tile[thread_id.y][thread_id.x] = b_row < k && col < n
+            ? b[b_row * n + col] : 0.0f;
+        threadgroup_barrier(mem_flags::mem_threadgroup);
+        for (uint inner = 0; inner < tile_size; ++inner)
+            total += a_tile[thread_id.y][inner] * b_tile[inner][thread_id.x];
+        threadgroup_barrier(mem_flags::mem_threadgroup);
     }
-    out[row * n + col] = total;
+    if (row < m && col < n) out[row * n + col] = total;
 }
 
 kernel void batched_matmul_f32(
@@ -334,21 +344,35 @@ kernel void batched_matmul_f32(
     device const long* a_offsets [[buffer(3)]],
     device const long* b_offsets [[buffer(4)]],
     constant uint4& dims [[buffer(5)]],
-    uint3 id [[thread_position_in_grid]]) {
-    const uint col = id.x;
-    const uint row = id.y;
-    const uint batch = id.z;
+    uint3 group_id [[threadgroup_position_in_grid]],
+    uint3 thread_id [[thread_position_in_threadgroup]]) {
+    constexpr uint tile_size = 16;
+    threadgroup float a_tile[tile_size][tile_size];
+    threadgroup float b_tile[tile_size][tile_size];
+    const uint col = group_id.x * tile_size + thread_id.x;
+    const uint row = group_id.y * tile_size + thread_id.y;
+    const uint batch = group_id.z;
     const uint m = dims.x;
     const uint k = dims.y;
     const uint n = dims.z;
     const uint batches = dims.w;
-    if (row >= m || col >= n || batch >= batches) return;
+    if (batch >= batches) return;
     float total = 0.0f;
     const long a_base = a_offsets[batch];
     const long b_base = b_offsets[batch];
-    for (uint inner = 0; inner < k; ++inner)
-        total += a[a_base + row * k + inner] * b[b_base + inner * n + col];
-    out[(batch * m + row) * n + col] = total;
+    for (uint tile = 0; tile < (k + tile_size - 1) / tile_size; ++tile) {
+        const uint a_col = tile * tile_size + thread_id.x;
+        const uint b_row = tile * tile_size + thread_id.y;
+        a_tile[thread_id.y][thread_id.x] = row < m && a_col < k
+            ? a[a_base + row * k + a_col] : 0.0f;
+        b_tile[thread_id.y][thread_id.x] = b_row < k && col < n
+            ? b[b_base + b_row * n + col] : 0.0f;
+        threadgroup_barrier(mem_flags::mem_threadgroup);
+        for (uint inner = 0; inner < tile_size; ++inner)
+            total += a_tile[thread_id.y][inner] * b_tile[inner][thread_id.x];
+        threadgroup_barrier(mem_flags::mem_threadgroup);
+    }
+    if (row < m && col < n) out[(batch * m + row) * n + col] = total;
 }
 
 kernel void rms_norm_f32(
@@ -578,42 +602,51 @@ public:
         std::int64_t k,
         std::int64_t n,
         NSUInteger a_offset,
-        NSUInteger b_offset) const {
+        NSUInteger b_offset,
+        bool transpose_b,
+        NSUInteger b_row_bytes) const {
         // The first matmul kernel uses uint dimensions in Metal. This keeps
         // validation explicit until larger shape handling is designed.
         if (m < 0 || k < 0 || n < 0 || m > UINT32_MAX || k > UINT32_MAX || n > UINT32_MAX) {
             throw std::invalid_argument("Metal matmul dimensions are too large");
         }
 
-        // dims is interpreted by the Metal kernel as {m, k, n}, where the
-        // operation is [m x k] multiplied by [k x n] to produce [m x n].
-        std::array<uint32_t, 3> dims = {
-            static_cast<uint32_t>(m),
-            static_cast<uint32_t>(k),
-            static_cast<uint32_t>(n),
-        };
-
-        // Record a single compute dispatch for the whole output matrix.
         id<MTLCommandBuffer> command_buffer = [queue commandBuffer];
-        id<MTLComputeCommandEncoder> encoder = [command_buffer computeCommandEncoder];
-
-        // Binding slots mirror the matmul_f32 kernel signature.
-        [encoder setComputePipelineState:matmul_pipeline];
-        [encoder setBuffer:a offset:a_offset atIndex:0];
-        [encoder setBuffer:b offset:b_offset atIndex:1];
-        [encoder setBuffer:out offset:0 atIndex:2];
-        [encoder setBytes:dims.data() length:sizeof(uint32_t) * dims.size() atIndex:3];
-
-        // The grid is shaped like the output matrix. Each thread computes one
-        // output cell, with id.x selecting the column and id.y selecting the row.
-        MTLSize grid_size = MTLSizeMake(static_cast<NSUInteger>(n), static_cast<NSUInteger>(m), 1);
-        MTLSize group_size = MTLSizeMake(8, 8, 1);
-        [encoder dispatchThreads:grid_size threadsPerThreadgroup:group_size];
-        [encoder endEncoding];
+        MPSMatrixDescriptor* a_descriptor = [MPSMatrixDescriptor
+            matrixDescriptorWithRows:static_cast<NSUInteger>(m)
+            columns:static_cast<NSUInteger>(k)
+            rowBytes:static_cast<NSUInteger>(k * sizeof(float))
+            dataType:MPSDataTypeFloat32];
+        MPSMatrixDescriptor* b_descriptor = [MPSMatrixDescriptor
+            matrixDescriptorWithRows:static_cast<NSUInteger>(transpose_b ? n : k)
+            columns:static_cast<NSUInteger>(transpose_b ? k : n)
+            rowBytes:b_row_bytes
+            dataType:MPSDataTypeFloat32];
+        MPSMatrixDescriptor* output_descriptor = [MPSMatrixDescriptor
+            matrixDescriptorWithRows:static_cast<NSUInteger>(m)
+            columns:static_cast<NSUInteger>(n)
+            rowBytes:static_cast<NSUInteger>(n * sizeof(float))
+            dataType:MPSDataTypeFloat32];
+        MPSMatrix* left = [[MPSMatrix alloc] initWithBuffer:a
+            offset:a_offset descriptor:a_descriptor];
+        MPSMatrix* right = [[MPSMatrix alloc] initWithBuffer:b
+            offset:b_offset descriptor:b_descriptor];
+        MPSMatrix* result = [[MPSMatrix alloc] initWithBuffer:out
+            offset:0 descriptor:output_descriptor];
+        MPSMatrixMultiplication* multiplication = [[MPSMatrixMultiplication alloc]
+            initWithDevice:device transposeLeft:NO transposeRight:transpose_b
+            resultRows:static_cast<NSUInteger>(m)
+            resultColumns:static_cast<NSUInteger>(n)
+            interiorColumns:static_cast<NSUInteger>(k)
+            alpha:1.0 beta:0.0];
+        [multiplication encodeToCommandBuffer:command_buffer
+            leftMatrix:left rightMatrix:right resultMatrix:result];
 
         // Synchronous completion keeps the public operation semantics eager.
         [command_buffer commit];
         [command_buffer waitUntilCompleted];
+        if (command_buffer.status == MTLCommandBufferStatusError)
+            throw std::runtime_error("Metal MPS matmul execution failed");
     }
 
     void run_1d(id<MTLComputePipelineState> state, NSUInteger count,
@@ -1055,7 +1088,9 @@ Tensor MetalDeviceImpl::matmul(const Tensor& a, const Tensor& b) const {
     const std::int64_t n = b.shape()[1];
 
     const Tensor packed_a = a.is_contiguous() ? a : contiguous(a);
-    const Tensor packed_b = b.is_contiguous() ? b : contiguous(b);
+    const bool transposed_b = !b.is_contiguous() && b.strides()[0] == 1 &&
+        b.strides()[1] >= b.shape()[0];
+    const Tensor packed_b = b.is_contiguous() || transposed_b ? b : contiguous(b);
     auto output = empty({m, n}, a.dtype());
     auto a_storage_ptr = ensure_storage(packed_a.storage(), ConversionPolicy::CopyToDevice);
     auto b_storage_ptr = ensure_storage(packed_b.storage(), ConversionPolicy::CopyToDevice);
@@ -1071,7 +1106,10 @@ Tensor MetalDeviceImpl::matmul(const Tensor& a, const Tensor& b) const {
         k,
         n,
         static_cast<NSUInteger>(packed_a.storage_offset() * sizeof(float)),
-        static_cast<NSUInteger>(packed_b.storage_offset() * sizeof(float)));
+        static_cast<NSUInteger>(packed_b.storage_offset() * sizeof(float)),
+        transposed_b,
+        static_cast<NSUInteger>((transposed_b ? packed_b.strides()[1] : packed_b.strides()[0]) *
+            sizeof(float)));
 
     return output;
 }
@@ -1105,8 +1143,9 @@ Tensor MetalDeviceImpl::batched_matmul(const Tensor& a, const Tensor& b) const {
     [encoder setBuffer:a_offsets offset:0 atIndex:3];
     [encoder setBuffer:b_offsets offset:0 atIndex:4];
     [encoder setBytes:dims.data() length:sizeof(dims) atIndex:5];
-    [encoder dispatchThreads:MTLSizeMake(static_cast<NSUInteger>(n), static_cast<NSUInteger>(m),
-        layout.a_offsets.size()) threadsPerThreadgroup:MTLSizeMake(8, 8, 1)];
+    [encoder dispatchThreadgroups:MTLSizeMake(
+        static_cast<NSUInteger>((n + 15) / 16), static_cast<NSUInteger>((m + 15) / 16),
+        layout.a_offsets.size()) threadsPerThreadgroup:MTLSizeMake(16, 16, 1)];
     [encoder endEncoding];
     [command_buffer commit];
     [command_buffer waitUntilCompleted];
