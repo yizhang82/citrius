@@ -1,6 +1,7 @@
 #include "impl/cpu_device.h"
 #include "impl/cpu_storage.h"
 #include "impl/metal_device.h"
+#include "impl/metal_context.h"
 #include "impl/metal_storage.h"
 
 #include <gtest/gtest.h>
@@ -71,6 +72,23 @@ TEST(MetalDeviceTest, EmptyAllocatesMetalStorage) {
     ASSERT_NE(tensor.storage(), nullptr);
     EXPECT_EQ(tensor.storage()->type(), citrius::impl::TensorStorageType::MetalMemory);
     EXPECT_EQ(tensor.storage()->nbytes(), 6 * sizeof(float));
+}
+
+TEST(MetalDeviceTest, StoragesShareTheProcessExecutionContext) {
+    std::string error_message;
+    auto device = make_metal_device(&error_message);
+    if (!device) {
+        GTEST_SKIP() << error_message;
+    }
+
+    auto tensor = device->empty({2}, citrius::DType::Float32);
+    auto storage = std::static_pointer_cast<citrius::impl::MetalMemTensorStorageImpl>(
+        tensor.storage());
+    citrius::impl::MetalMemTensorStorageImpl direct_storage(
+        2 * sizeof(float), citrius::DType::Float32);
+
+    EXPECT_EQ(storage->execution_context(), direct_storage.execution_context());
+    EXPECT_EQ(storage->execution_context(), citrius::impl::metal_execution_context());
 }
 
 TEST(MetalDeviceTest, AddsFloat32Tensors) {

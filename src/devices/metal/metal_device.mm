@@ -2,7 +2,7 @@
 
 #include "impl/cpu_storage.h"
 #include "impl/batched_matmul_layout.h"
-#include "metal_context.h"
+#include "impl/metal_context.h"
 #include "tensor_utils.h"
 
 #import <Foundation/Foundation.h>
@@ -603,12 +603,9 @@ id<MTLBuffer> buffer_from_storage(const MetalMemTensorStorageImpl& storage) {
 class MetalDeviceImpl::Impl {
 public:
     Impl() {
-        device = shared_metal_device();
-
-        queue = [device newCommandQueue];
-        if (queue == nil) {
-            throw std::runtime_error("failed to create Metal command queue");
-        }
+        context = metal_execution_context();
+        device = (__bridge id<MTLDevice>)context->device();
+        queue = (__bridge id<MTLCommandQueue>)context->command_queue();
 
         NSError* error = nil;
         NSString* source = [NSString stringWithUTF8String:kMetalKernels];
@@ -786,29 +783,14 @@ public:
     }
 
     void submit(id<MTLCommandBuffer> command_buffer) const {
-        std::lock_guard lock(submission_mutex);
-        [command_buffer commit];
-        pending_command_buffers.push_back(command_buffer);
+        context->submit((__bridge void*)command_buffer);
     }
 
     void synchronize() const {
-        std::vector<id<MTLCommandBuffer>> command_buffers;
-        {
-            std::lock_guard lock(submission_mutex);
-            command_buffers.swap(pending_command_buffers);
-        }
-        for (id<MTLCommandBuffer> command_buffer : command_buffers) {
-            [command_buffer waitUntilCompleted];
-            if (command_buffer.status == MTLCommandBufferStatusError) {
-                const char* description = command_buffer.error
-                    ? [[command_buffer.error localizedDescription] UTF8String]
-                    : "unknown error";
-                throw std::runtime_error(
-                    std::string("Metal command buffer execution failed: ") + description);
-            }
-        }
+        context->synchronize();
     }
 
+    std::shared_ptr<MetalExecutionContext> context;
     id<MTLDevice> device = nil;
     id<MTLCommandQueue> queue = nil;
     id<MTLLibrary> library = nil;
@@ -831,8 +813,6 @@ public:
     id<MTLComputePipelineState> argmax_pipeline = nil;
     id<MTLComputePipelineState> softmax_pipeline = nil;
     id<MTLComputePipelineState> attention_pipeline = nil;
-    mutable std::mutex submission_mutex;
-    mutable std::vector<id<MTLCommandBuffer>> pending_command_buffers;
     mutable std::mutex mps_cache_mutex;
     mutable std::unordered_map<std::string, MPSMatrixMultiplication*>
         multiplication_cache;
@@ -869,7 +849,8 @@ Tensor MetalDeviceImpl::empty(Shape shape, DType dtype) const {
         throw std::invalid_argument("tensor allocation is too large");
     auto storage = std::make_shared<MetalMemTensorStorageImpl>(
         static_cast<std::size_t>(count) * element_size,
-        dtype);
+        dtype,
+        impl_->context);
     return Tensor(std::move(shape), dtype, Device::metal(), std::move(storage));
 }
 
@@ -1517,7 +1498,8 @@ TensorStoragePtr MetalDeviceImpl::ensure_storage(
         const auto& cpu_storage = static_cast<const CpuMemTensorStorageImpl&>(*storage);
         auto metal_storage = std::make_shared<MetalMemTensorStorageImpl>(
             cpu_storage.nbytes(),
-            cpu_storage.dtype());
+            cpu_storage.dtype(),
+            impl_->context);
         metal_storage->copy_from_host(cpu_storage.data(), cpu_storage.nbytes());
         return metal_storage;
     }

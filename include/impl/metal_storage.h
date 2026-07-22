@@ -6,9 +6,15 @@
 
 namespace citrius::impl {
 
+class MetalExecutionContext;
+
 class MetalMemTensorStorageImpl final : public ITensorStorage {
 public:
     MetalMemTensorStorageImpl(std::size_t nbytes, DType dtype);
+    MetalMemTensorStorageImpl(
+        std::size_t nbytes,
+        DType dtype,
+        std::shared_ptr<MetalExecutionContext> context);
     ~MetalMemTensorStorageImpl() override;
 
     MetalMemTensorStorageImpl(const MetalMemTensorStorageImpl&) = delete;
@@ -22,6 +28,7 @@ public:
     StorageHandle handle() const override;
     std::shared_ptr<ITensorStorage> clone() const override;
 
+    const std::shared_ptr<MetalExecutionContext>& execution_context() const;
     void copy_from_host(const void* data, std::size_t nbytes);
     void copy_to_host(void* data, std::size_t nbytes, std::size_t source_offset = 0) const;
 

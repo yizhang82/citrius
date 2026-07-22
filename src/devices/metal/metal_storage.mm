@@ -1,33 +1,42 @@
 #include "impl/metal_storage.h"
-#include "impl/metal_device.h"
-#include "metal_context.h"
+#include "impl/metal_context.h"
 
 #import <Metal/Metal.h>
 
 #include <cstring>
 #include <stdexcept>
+#include <utility>
 
 namespace citrius::impl {
 
 class MetalMemTensorStorageImpl::Impl {
 public:
-    Impl(std::size_t nbytes, DType dtype)
-        : dtype(dtype),
+    Impl(std::size_t nbytes, DType dtype, std::shared_ptr<MetalExecutionContext> context)
+        : context(std::move(context)),
+          dtype(dtype),
           nbytes(nbytes) {
-        buffer = [shared_metal_device()
+        if (!this->context)
+            throw std::invalid_argument("Metal storage requires an execution context");
+        id<MTLDevice> device = (__bridge id<MTLDevice>)this->context->device();
+        buffer = [device
             newBufferWithLength:nbytes options:MTLResourceStorageModeShared];
         if (buffer == nil) {
             throw std::runtime_error("failed to allocate Metal buffer");
         }
     }
 
+    std::shared_ptr<MetalExecutionContext> context;
     id<MTLBuffer> buffer = nil;
     DType dtype;
     std::size_t nbytes;
 };
 
 MetalMemTensorStorageImpl::MetalMemTensorStorageImpl(std::size_t nbytes, DType dtype)
-    : impl_(std::make_unique<Impl>(nbytes, dtype)) {}
+    : MetalMemTensorStorageImpl(nbytes, dtype, metal_execution_context()) {}
+
+MetalMemTensorStorageImpl::MetalMemTensorStorageImpl(
+    std::size_t nbytes, DType dtype, std::shared_ptr<MetalExecutionContext> context)
+    : impl_(std::make_unique<Impl>(nbytes, dtype, std::move(context))) {}
 
 MetalMemTensorStorageImpl::~MetalMemTensorStorageImpl() = default;
 
@@ -56,8 +65,9 @@ StorageHandle MetalMemTensorStorageImpl::handle() const {
 }
 
 std::shared_ptr<ITensorStorage> MetalMemTensorStorageImpl::clone() const {
-    MetalDeviceImpl().synchronize();
-    auto copied = std::make_shared<MetalMemTensorStorageImpl>(nbytes(), dtype());
+    impl_->context->synchronize();
+    auto copied = std::make_shared<MetalMemTensorStorageImpl>(
+        nbytes(), dtype(), impl_->context);
     copied->copy_from_host([impl_->buffer contents], nbytes());
     return copied;
 }
@@ -67,7 +77,7 @@ void MetalMemTensorStorageImpl::copy_from_host(const void* data, std::size_t nby
         throw std::invalid_argument("host data is larger than Metal storage");
     }
 
-    MetalDeviceImpl().synchronize();
+    impl_->context->synchronize();
     std::memcpy([impl_->buffer contents], data, nbytes);
 }
 
@@ -79,9 +89,14 @@ void MetalMemTensorStorageImpl::copy_to_host(
         throw std::invalid_argument("host destination is larger than Metal storage");
     }
 
-    MetalDeviceImpl().synchronize();
+    impl_->context->synchronize();
     const auto* source = static_cast<const std::byte*>([impl_->buffer contents]) + source_offset;
     std::memcpy(data, source, nbytes);
+}
+
+const std::shared_ptr<MetalExecutionContext>&
+MetalMemTensorStorageImpl::execution_context() const {
+    return impl_->context;
 }
 
 } // namespace citrius::impl
