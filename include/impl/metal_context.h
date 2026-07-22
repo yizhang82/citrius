@@ -16,6 +16,7 @@ public:
 
     void* device() const;
     void* command_queue() const;
+    void* command_buffer() const;
     void submit(void* command_buffer) const;
     void synchronize() const;
 

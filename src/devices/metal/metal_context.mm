@@ -21,6 +21,8 @@ public:
     id<MTLDevice> device = nil;
     id<MTLCommandQueue> queue = nil;
     mutable std::mutex submission_mutex;
+    mutable id<MTLCommandBuffer> active_command_buffer = nil;
+    mutable std::size_t active_encoding_count = 0;
     mutable std::vector<id<MTLCommandBuffer>> pending_command_buffers;
 };
 
@@ -30,18 +32,38 @@ MetalExecutionContext::~MetalExecutionContext() = default;
 void* MetalExecutionContext::device() const { return (__bridge void*)impl_->device; }
 void* MetalExecutionContext::command_queue() const { return (__bridge void*)impl_->queue; }
 
+void* MetalExecutionContext::command_buffer() const {
+    std::lock_guard lock(impl_->submission_mutex);
+    if (impl_->active_command_buffer == nil)
+        impl_->active_command_buffer = [impl_->queue commandBuffer];
+    return (__bridge void*)impl_->active_command_buffer;
+}
+
 void MetalExecutionContext::submit(void* command_buffer_handle) const {
     id<MTLCommandBuffer> command_buffer =
         (__bridge id<MTLCommandBuffer>)command_buffer_handle;
     std::lock_guard lock(impl_->submission_mutex);
-    [command_buffer commit];
-    impl_->pending_command_buffers.push_back(command_buffer);
+    if (command_buffer != impl_->active_command_buffer)
+        throw std::runtime_error("Metal command buffer submission is out of order");
+    constexpr std::size_t max_encodings_per_command_buffer = 64;
+    if (++impl_->active_encoding_count >= max_encodings_per_command_buffer) {
+        [command_buffer commit];
+        impl_->pending_command_buffers.push_back(command_buffer);
+        impl_->active_command_buffer = nil;
+        impl_->active_encoding_count = 0;
+    }
 }
 
 void MetalExecutionContext::synchronize() const {
     std::vector<id<MTLCommandBuffer>> command_buffers;
     {
         std::lock_guard lock(impl_->submission_mutex);
+        if (impl_->active_command_buffer != nil) {
+            [impl_->active_command_buffer commit];
+            impl_->pending_command_buffers.push_back(impl_->active_command_buffer);
+            impl_->active_command_buffer = nil;
+            impl_->active_encoding_count = 0;
+        }
         command_buffers.swap(impl_->pending_command_buffers);
     }
     for (id<MTLCommandBuffer> command_buffer : command_buffers) {

@@ -671,7 +671,7 @@ public:
 
         // A command buffer records one batch of GPU work; the compute encoder
         // records the specific kernel launch and its bound inputs.
-        id<MTLCommandBuffer> command_buffer = [queue commandBuffer];
+        id<MTLCommandBuffer> command_buffer = this->command_buffer();
         id<MTLComputeCommandEncoder> encoder = [command_buffer computeCommandEncoder];
 
         // These binding slots must match the [[buffer(N)]] annotations in the
@@ -710,7 +710,7 @@ public:
             throw std::invalid_argument("Metal matmul dimensions are too large");
         }
 
-        id<MTLCommandBuffer> command_buffer = [queue commandBuffer];
+        id<MTLCommandBuffer> command_buffer = this->command_buffer();
         MPSMatrixDescriptor* a_descriptor = [MPSMatrixDescriptor
             matrixDescriptorWithRows:static_cast<NSUInteger>(m)
             columns:static_cast<NSUInteger>(k)
@@ -771,7 +771,7 @@ public:
                 const std::function<void(id<MTLComputeCommandEncoder>)>& bind) const {
         if (count > UINT32_MAX) throw std::invalid_argument("Metal element count is too large");
         if (count == 0) return;
-        id<MTLCommandBuffer> command_buffer = [queue commandBuffer];
+        id<MTLCommandBuffer> command_buffer = this->command_buffer();
         id<MTLComputeCommandEncoder> encoder = [command_buffer computeCommandEncoder];
         [encoder setComputePipelineState:state];
         bind(encoder);
@@ -784,6 +784,10 @@ public:
 
     void submit(id<MTLCommandBuffer> command_buffer) const {
         context->submit((__bridge void*)command_buffer);
+    }
+
+    id<MTLCommandBuffer> command_buffer() const {
+        return (__bridge id<MTLCommandBuffer>)context->command_buffer();
     }
 
     void synchronize() const {
@@ -1237,7 +1241,7 @@ Tensor MetalDeviceImpl::softmax_last_dimension(const Tensor& tensor) const {
     auto& output_storage = require_metal_storage(*output.storage());
     std::array<uint32_t, 2> dims = {
         static_cast<uint32_t>(rows), static_cast<uint32_t>(width)};
-    id<MTLCommandBuffer> command_buffer = [impl_->queue commandBuffer];
+    id<MTLCommandBuffer> command_buffer = impl_->command_buffer();
     id<MTLComputeCommandEncoder> encoder = [command_buffer computeCommandEncoder];
     [encoder setComputePipelineState:impl_->softmax_pipeline];
     [encoder setBuffer:buffer_from_storage(input_storage)
@@ -1309,7 +1313,7 @@ Tensor MetalDeviceImpl::batched_matmul(const Tensor& a, const Tensor& b) const {
     const auto n = packed_b.shape().back();
     std::array<uint32_t, 4> dims = {static_cast<uint32_t>(m), static_cast<uint32_t>(k),
         static_cast<uint32_t>(n), static_cast<uint32_t>(layout.a_offsets.size())};
-    id<MTLCommandBuffer> command_buffer = [impl_->queue commandBuffer];
+    id<MTLCommandBuffer> command_buffer = impl_->command_buffer();
     id<MTLComputeCommandEncoder> encoder = [command_buffer computeCommandEncoder];
     [encoder setComputePipelineState:impl_->batched_matmul_pipeline];
     [encoder setBuffer:buffer_from_storage(a_storage)
@@ -1459,7 +1463,7 @@ std::optional<Tensor> MetalDeviceImpl::try_scaled_dot_product_attention(
     std::array<uint32_t, 3> options = {static_cast<uint32_t>(query.shape()[3]),
         static_cast<uint32_t>(rows), static_cast<uint32_t>((is_causal ? 1 : 0) |
             (mask.defined() ? 2 : 0))};
-    id<MTLCommandBuffer> command_buffer = [impl_->queue commandBuffer];
+    id<MTLCommandBuffer> command_buffer = impl_->command_buffer();
     id<MTLComputeCommandEncoder> encoder = [command_buffer computeCommandEncoder];
     [encoder setComputePipelineState:impl_->attention_pipeline];
     [encoder setBuffer:buffer_from_storage(query_storage)
