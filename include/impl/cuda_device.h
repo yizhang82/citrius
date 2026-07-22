@@ -42,6 +42,10 @@ public:
     Tensor sub(const Tensor& a, const Tensor& b) const override;
     Tensor matmul(const Tensor& a, const Tensor& b) const override;
     Tensor batched_matmul(const Tensor& a, const Tensor& b) const override;
+    std::optional<Tensor> try_rms_norm(
+        const Tensor& input,
+        const Tensor& weight,
+        float epsilon) const override;
     Tensor broadcast_elementwise(
         const Tensor& a,
         const Tensor& b,

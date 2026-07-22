@@ -47,6 +47,11 @@ Tensor sub(const Tensor& left, const Tensor& right);
 /// @endcode
 Tensor matmul(const Tensor& left, const Tensor& right);
 
+/// Applies root-mean-square normalization over the last dimension.
+/// A device may provide a fused implementation; otherwise this uses the
+/// portable tensor-operation composition.
+Tensor rms_norm(const Tensor& input, const Tensor& weight, float epsilon);
+
 /// Multiplies two tensors element by element using trailing-dimension broadcasting.
 /// @param left Left Float32 input tensor.
 /// @param right Right Float32 input tensor on the same device.

@@ -36,6 +36,27 @@ TEST(OperationsTest, SubtractsUsingTensorDevice) {
     EXPECT_EQ(values(citrius::sub(left, right)), std::vector<float>({9, 18, 27}));
 }
 
+TEST(OperationsTest, RmsNormUsesPortableDeviceFallback) {
+    const citrius::Tensor input(std::vector<float>{1, 2, 3, 4}, {2, 2});
+    const citrius::Tensor weight(std::vector<float>{1.5f, 0.5f});
+
+    const auto result = values(citrius::rms_norm(input, weight, 1e-6f));
+    EXPECT_NEAR(result[0], 0.9486832f, 1e-6f);
+    EXPECT_NEAR(result[1], 0.6324555f, 1e-6f);
+    EXPECT_NEAR(result[2], 1.2727922f, 1e-6f);
+    EXPECT_NEAR(result[3], 0.5656854f, 1e-6f);
+}
+
+TEST(OperationsTest, RmsNormValidatesArguments) {
+    const citrius::Tensor input(std::vector<float>{1, 2, 3, 4}, {2, 2});
+    EXPECT_THROW(
+        citrius::rms_norm(input, citrius::Tensor(std::vector<float>{1}), 1e-6f),
+        std::invalid_argument);
+    EXPECT_THROW(
+        citrius::rms_norm(input, citrius::Tensor(std::vector<float>{1, 1}), 0.0f),
+        std::invalid_argument);
+}
+
 TEST(OperationsTest, MultipliesUsingTensorDevice) {
     const citrius::Tensor left(std::vector<float>{1, 2, 3, 4, 5, 6}, {2, 3});
     const citrius::Tensor right(

@@ -114,8 +114,7 @@ Tensor Qwen3RMSNorm::forward(const Tensor& input) {
     if (input.ndim() == 0 || input.shape().back() != hidden_size_) {
         throw std::invalid_argument("Qwen3RMSNorm requires Float32 input ending in hidden_size");
     }
-    const Tensor variance = mean(pow(input, 2.0f), -1, true);
-    return mul(div(input, sqrt(add(variance, eps_))), weight());
+    return citrius::rms_norm(input, weight(), eps_);
 }
 
 Tensor& Qwen3RMSNorm::weight() { return parameter("weight"); }

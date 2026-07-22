@@ -4,6 +4,7 @@
 #include "impl/multi_thread_cpu_device.h"
 #include "impl/cpu_storage.h"
 #include "exceptions.h"
+#include "reduction_operations.h"
 #include "shape_operations.h"
 #include "tensor_factory.h"
 #include "tensor_utils.h"
@@ -197,7 +198,7 @@ Tensor cuda_scalar_elementwise(
 #endif
 
 template <typename Operation>
-Tensor dispatch(const Tensor& left, const Tensor& right, Operation operation) {
+auto dispatch(const Tensor& left, const Tensor& right, Operation operation) {
     require_matching_devices(left, right);
     const Device device = left.device();
 
@@ -263,6 +264,25 @@ Tensor matmul(const Tensor& left, const Tensor& right) {
     return dispatch(left, right, [](const auto& device, const Tensor& a, const Tensor& b) {
         return device.matmul(a, b);
     });
+}
+
+Tensor rms_norm(const Tensor& input, const Tensor& weight, float epsilon) {
+    require_matching_devices(input, weight);
+    require_float32(input);
+    require_float32(weight);
+    if (input.ndim() == 0 || weight.shape() != Shape{input.shape().back()})
+        throw std::invalid_argument("rms_norm weight must match the input's last dimension");
+    if (!(epsilon > 0.0f))
+        throw std::invalid_argument("rms_norm epsilon must be positive");
+
+    const auto optimized = dispatch(
+        input, weight, [epsilon](const auto& device, const Tensor& value, const Tensor& scale) {
+            return device.try_rms_norm(value, scale, epsilon);
+        });
+    if (optimized) return *optimized;
+
+    const Tensor variance = mean(pow(input, 2.0f), -1, true);
+    return mul(div(input, sqrt(add(variance, epsilon))), weight);
 }
 
 Tensor mul(const Tensor& left, const Tensor& right) {

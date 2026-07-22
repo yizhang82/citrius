@@ -600,6 +600,43 @@ TEST(CudaDeviceTest, FullReductionsMatchCpuReference) {
     EXPECT_NEAR(values(citrius::variance(cuda_input))[0], 14.138889f, 1e-5f);
 }
 
+TEST(CudaDeviceTest, FusedRmsNormMatchesReference) {
+    std::string error;
+    auto device = make_cuda_device(&error);
+    if (!device)
+        GTEST_SKIP() << error;
+
+    constexpr std::int64_t row_size = 128;
+    std::vector<float> input_values(static_cast<std::size_t>(3 * row_size));
+    std::vector<float> weight_values(static_cast<std::size_t>(row_size));
+    for (std::int64_t index = 0; index < 3 * row_size; ++index)
+        input_values[static_cast<std::size_t>(index)] =
+            static_cast<float>((index * 13) % 37 - 18) / 9.0f;
+    for (std::int64_t index = 0; index < row_size; ++index)
+        weight_values[static_cast<std::size_t>(index)] = 0.5f + static_cast<float>(index % 7) / 8.0f;
+
+    const citrius::Tensor input(input_values, {3, row_size}, citrius::Device::cuda());
+    const citrius::Tensor weight(weight_values, {row_size}, citrius::Device::cuda());
+    const auto optimized = device->try_rms_norm(input, weight, 1e-6f);
+    ASSERT_TRUE(optimized.has_value());
+    const auto actual = values(*optimized);
+
+    for (std::int64_t row = 0; row < 3; ++row) {
+        float sum_squares = 0.0f;
+        for (std::int64_t column = 0; column < row_size; ++column) {
+            const float value = input_values[static_cast<std::size_t>(row * row_size + column)];
+            sum_squares += value * value;
+        }
+        const float inverse_rms = 1.0f / std::sqrt(sum_squares / row_size + 1e-6f);
+        for (std::int64_t column = 0; column < row_size; ++column) {
+            const auto index = static_cast<std::size_t>(row * row_size + column);
+            EXPECT_NEAR(actual[index], input_values[index] * inverse_rms *
+                                           weight_values[static_cast<std::size_t>(column)],
+                        2e-6f);
+        }
+    }
+}
+
 TEST(CudaDeviceTest, LastDimensionReductionsHandleIrregularQwenSizedRows) {
     std::string error;
     auto device = make_cuda_device(&error);

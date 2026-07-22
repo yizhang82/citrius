@@ -115,6 +115,46 @@ __global__ void sub_f32(const float* a, const float* b, float* out, std::int64_t
         out[i] = a[i] - b[i];
 }
 
+__global__ void rms_norm_f32(
+    const float* input,
+    const float* weight,
+    float* output,
+    std::int64_t row_count,
+    std::int64_t row_size,
+    float epsilon) {
+    __shared__ float warp_sums[32];
+    const auto lane = threadIdx.x & 31;
+    const auto warp = threadIdx.x >> 5;
+    const auto warp_count = (blockDim.x + 31) / 32;
+    for (std::int64_t row = blockIdx.x; row < row_count; row += gridDim.x) {
+        const float* input_row = input + row * row_size;
+        float* output_row = output + row * row_size;
+        float sum_squares = 0.0f;
+        for (std::int64_t column = threadIdx.x; column < row_size; column += blockDim.x) {
+            const float value = input_row[column];
+            sum_squares += value * value;
+        }
+        for (int offset = 16; offset > 0; offset /= 2)
+            sum_squares += __shfl_down_sync(0xffffffff, sum_squares, offset);
+        if (lane == 0) warp_sums[warp] = sum_squares;
+        __syncthreads();
+
+        if (warp == 0) {
+            sum_squares = lane < warp_count ? warp_sums[lane] : 0.0f;
+            for (int offset = 16; offset > 0; offset /= 2)
+                sum_squares += __shfl_down_sync(0xffffffff, sum_squares, offset);
+            if (lane == 0)
+                warp_sums[0] = rsqrtf(sum_squares / static_cast<float>(row_size) + epsilon);
+        }
+        __syncthreads();
+
+        const float inverse_rms = warp_sums[0];
+        for (std::int64_t column = threadIdx.x; column < row_size; column += blockDim.x)
+            output_row[column] = input_row[column] * inverse_rms * weight[column];
+        __syncthreads();
+    }
+}
+
 __device__ float apply_elementwise(
     float a,
     float b,
@@ -589,6 +629,33 @@ Tensor CudaDeviceImpl::empty(Shape shape, DType dtype) const {
     auto storage = std::make_shared<CudaMemTensorStorageImpl>(
         static_cast<std::size_t>(metadata.numel()) * dtype_size(dtype), dtype, context_);
     return Tensor(std::move(shape), dtype, Device::cuda(device_index_), std::move(storage));
+}
+
+std::optional<Tensor> CudaDeviceImpl::try_rms_norm(
+    const Tensor& input,
+    const Tensor& weight,
+    float epsilon) const {
+    if (input.dtype() != DType::Float32 || weight.dtype() != DType::Float32 ||
+        input.ndim() == 0 || weight.shape() != Shape{input.shape().back()} ||
+        input.device() != Device::cuda(device_index_) || weight.device() != input.device() ||
+        !input.is_contiguous() || !weight.is_contiguous()) {
+        return std::nullopt;
+    }
+
+    Tensor output = empty(input.shape(), DType::Float32);
+    if (output.numel() == 0) return output;
+    auto input_storage = ensure_storage(input.storage());
+    auto weight_storage = ensure_storage(weight.storage());
+    const auto row_size = input.shape().back();
+    const auto row_count = input.numel() / row_size;
+    const auto blocks = static_cast<unsigned>(
+        std::min<std::int64_t>(row_count, max_elementwise_blocks_));
+    rms_norm_f32<<<blocks, 256, 0, stream(context_)>>>(
+        data(require_cuda_storage(*input_storage)) + input.storage_offset(),
+        data(require_cuda_storage(*weight_storage)) + weight.storage_offset(),
+        data(require_cuda_storage(*output.storage())), row_count, row_size, epsilon);
+    check_cuda(cudaGetLastError(), "failed to launch CUDA rms_norm kernel");
+    return output;
 }
 
 Tensor CudaDeviceImpl::add(const Tensor& a, const Tensor& b) const {
