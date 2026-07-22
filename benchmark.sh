@@ -7,7 +7,7 @@ BUILD_DIR="$ROOT_DIR/build"
 usage() {
     echo "Usage:"
     echo "  ./benchmark.sh operations --cpu|--metal|--cuda|--all [--html [FILE]]"
-    echo "  ./benchmark.sh qwen3-decoding --cpu|--cuda"
+    echo "  ./benchmark.sh qwen3-decoding --cpu|--cuda [--tokens N]"
     echo "  ./benchmark.sh add-kernel [--size N] [--iterations N] [--samples N]"
     echo "  ./benchmark.sh matmul-kernel [--size N] [--iterations N] [--samples N]"
 }
@@ -69,15 +69,22 @@ case "$benchmark" in
         fi
         ;;
     qwen3-decoding)
-        [[ $# -eq 1 ]] || { usage; exit 1; }
+        [[ $# -ge 1 ]] || { usage; exit 1; }
         backend="$1"
+        shift
         case "$backend" in
             --cpu) ;;
             --cuda) require_backend "CUDA" CITRIUS_ENABLE_CUDA --cuda ;;
             *) usage; exit 1 ;;
         esac
+        benchmark_args=()
+        while [[ $# -gt 0 ]]; do
+            [[ "$1" == "--tokens" && $# -ge 2 ]] || { usage; exit 1; }
+            benchmark_args+=("$1" "$2")
+            shift 2
+        done
         cmake --build "$BUILD_DIR" -j --target qwen3_decoding_benchmark
-        "$BUILD_DIR/qwen3_decoding_benchmark" "$backend"
+        "$BUILD_DIR/qwen3_decoding_benchmark" "$backend" "${benchmark_args[@]}"
         ;;
     add-kernel|matmul-kernel)
         require_backend "CUDA" CITRIUS_ENABLE_CUDA --cuda

@@ -6,6 +6,7 @@
 
 #include <algorithm>
 #include <chrono>
+#include <charconv>
 #include <cstdint>
 #include <iomanip>
 #include <iostream>
@@ -16,24 +17,50 @@
 namespace {
 
 using Clock = std::chrono::steady_clock;
-constexpr std::int64_t generated_token_count = 10;
+constexpr std::int64_t default_generated_token_count = 500;
 
-citrius::Device parse_device(int argc, char** argv) {
-    if (argc != 2) {
-        throw std::invalid_argument("usage: qwen3_decoding_benchmark --cpu|--cuda");
-    }
-    const std::string argument = argv[1];
-    if (argument == "--cpu")
-        return citrius::Device::cpu();
-    if (argument == "--cuda") {
+struct Options {
+    citrius::Device device;
+    std::int64_t generated_token_count = default_generated_token_count;
+};
+
+Options parse_options(int argc, char** argv) {
+    Options options;
+    bool has_device = false;
+    for (int index = 1; index < argc; ++index) {
+        const std::string argument = argv[index];
+        if (argument == "--cpu") {
+            if (has_device) throw std::invalid_argument("device may only be specified once");
+            options.device = citrius::Device::cpu();
+            has_device = true;
+        } else if (argument == "--cuda") {
+            if (has_device) throw std::invalid_argument("device may only be specified once");
 #ifdef CITRIUS_HAS_CUDA
-        return citrius::Device::cuda();
+            options.device = citrius::Device::cuda();
+            has_device = true;
 #else
-        throw std::invalid_argument(
-            "CUDA support was not enabled; configure with build.bat --cuda");
+            throw std::invalid_argument(
+                "CUDA support was not enabled; configure with build.bat --cuda");
 #endif
+        } else if (argument == "--tokens") {
+            if (++index == argc)
+                throw std::invalid_argument("--tokens requires a positive integer");
+            const std::string value = argv[index];
+            const auto [end, error] = std::from_chars(
+                value.data(), value.data() + value.size(), options.generated_token_count);
+            if (error != std::errc{} || end != value.data() + value.size() ||
+                options.generated_token_count <= 0) {
+                throw std::invalid_argument("--tokens requires a positive integer");
+            }
+        } else {
+            throw std::invalid_argument(
+                "usage: qwen3_decoding_benchmark --cpu|--cuda [--tokens N]");
+        }
     }
-    throw std::invalid_argument("usage: qwen3_decoding_benchmark --cpu|--cuda");
+    if (!has_device)
+        throw std::invalid_argument(
+            "usage: qwen3_decoding_benchmark --cpu|--cuda [--tokens N]");
+    return options;
 }
 
 std::int64_t last_token_argmax(const citrius::Tensor& logits) {
@@ -46,7 +73,9 @@ std::int64_t last_token_argmax(const citrius::Tensor& logits) {
 
 int main(int argc, char** argv) {
     try {
-        const citrius::Device device = parse_device(argc, argv);
+        const Options options = parse_options(argc, argv);
+        const citrius::Device device = options.device;
+        const std::int64_t generated_token_count = options.generated_token_count;
         citrius::models::Qwen3Config config;
         config.device = device;
 
@@ -83,10 +112,13 @@ int main(int argc, char** argv) {
 
         std::cout << "\nTTFT: " << token_seconds.front() * 1000.0 << " ms\n"
                   << "End-to-end throughput: " << generated_token_count / total_seconds
-                  << " tokens/s\n"
-                  << "Post-first-token throughput: " << (generated_token_count - 1) / decode_seconds
-                  << " tokens/s\n"
-                  << "Total generation time: " << total_seconds * 1000.0 << " ms\n"
+                  << " tokens/s\n";
+        if (generated_token_count > 1)
+            std::cout << "Post-first-token throughput: "
+                      << (generated_token_count - 1) / decode_seconds << " tokens/s\n";
+        else
+            std::cout << "Post-first-token throughput: n/a\n";
+        std::cout << "Total generation time: " << total_seconds * 1000.0 << " ms\n"
                   << "Generated token IDs:";
         for (const auto token : generated)
             std::cout << ' ' << token;

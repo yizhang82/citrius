@@ -281,12 +281,18 @@ benchmark.bat matmul-kernel
 benchmark.bat matmul-kernel --size 2048 --iterations 20 --samples 5
 ```
 
-Run the checkpoint-free Qwen3-0.6B greedy decoding baseline for exactly 10
-generated tokens with:
+Run the checkpoint-free Qwen3-0.6B greedy decoding benchmark, which generates
+500 tokens by default, with:
 
 ```bat
 benchmark.bat qwen3-decoding --cpu
 benchmark.bat qwen3-decoding --cuda
+```
+
+Override the generated token count with `--tokens`:
+
+```bat
+benchmark.bat qwen3-decoding --cuda --tokens 10
 ```
 
 The benchmark excludes model construction, reports time to first token (TTFT),

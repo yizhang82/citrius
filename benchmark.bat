@@ -69,15 +69,26 @@ if /I "%~2"=="--cuda" (
     set "CUDA_ARG=--cuda"
 )
 if not defined BACKEND goto usage_error
-if not "%~3"=="" goto usage_error
+shift
+shift
 
+:parse_qwen3_decoding_args
+if "%~1"=="" goto run_qwen3_decoding
+if /I not "%~1"=="--tokens" goto usage_error
+if "%~2"=="" goto usage_error
+set "BENCH_ARGS=%BENCH_ARGS% --tokens %~2"
+shift
+shift
+goto parse_qwen3_decoding_args
+
+:run_qwen3_decoding
 if defined CUDA_ARG call :require_cuda
 if errorlevel 1 exit /B %errorlevel%
 
 cmake --build "%BUILD_DIR%" --config Release --target qwen3_decoding_benchmark
 if errorlevel 1 exit /B %errorlevel%
 
-"%BUILD_DIR%\Release\qwen3_decoding_benchmark.exe" %BACKEND%
+"%BUILD_DIR%\Release\qwen3_decoding_benchmark.exe" %BACKEND% %BENCH_ARGS%
 exit /B %errorlevel%
 
 :parse_add_kernel
@@ -145,7 +156,7 @@ exit /B 0
 :usage_error
 echo Usage:
 echo   benchmark.bat operations --cpu^|--cuda^|--all [--html [FILE]]
-echo   benchmark.bat qwen3-decoding --cpu^|--cuda
+echo   benchmark.bat qwen3-decoding --cpu^|--cuda [--tokens N]
 echo   benchmark.bat add-kernel [--size N] [--iterations N] [--samples N]
 echo   benchmark.bat matmul-kernel [--size N] [--iterations N] [--samples N]
 exit /B 1

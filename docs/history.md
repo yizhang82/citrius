@@ -174,7 +174,7 @@ sub     grid-stride 2xSM            140        35840      29.26        8.49     
 sub     grid-stride 4xSM            280        71680      14.63        8.01        8.50      1570.53
 sub     grid-stride 8xSM            560       143360       7.31        7.22        7.98      1741.77
 sub     grid-stride 16xSM          1120       286720       3.66        8.28       11.38      1519.79
-sub     grid-stride 32xSM          2240       573440       1.83        7.37        7.80      1706.63
+sub     grid-stride 32xSM          2240       573440       1.83        7.37        7.80      1706.63G
 sub     fixed 2 elem/thread        2048       524288       2.00        7.51        8.06      1676.12
 sub     fixed 4 elem/thread        1024       262144       4.00        7.52        7.92      1673.28
 sub     fixed 8 elem/thread         512       131072       8.00       11.19       11.54      1124.73
@@ -717,3 +717,11 @@ batch-matmul     1024      50        4.584        5.129      256.454     3747.70
 * add --cpu for pytorch [qwen3 0.6 CUDA, TTFT=88.252ms, Throughput: 22.856 token/s]
 * cublas fix: don't recreate cuda device on every call. [qwen3 0.6 CUDA, TTFT=151ms, Throughput: 8.266 token/s]
 * correctness tests + fix
+
+## 7/20
+
+* tensor indexing
+
+## 7/21
+
+* fused kernels [qwen3 0.6 CUDA, TTFT=64ms, Throughput: 50.643 tokens for 50 tokens]. This means we are now 2x faster than pytorch and 7x faster TTFT
