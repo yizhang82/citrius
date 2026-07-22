@@ -8,6 +8,9 @@
 #ifdef CITRIUS_HAS_CUDA
 #include "impl/cuda_device.h"
 #endif
+#ifdef CITRIUS_HAS_METAL
+#include "impl/metal_device.h"
+#endif
 
 #include <algorithm>
 #include <cmath>
@@ -82,6 +85,20 @@ Tensor reduce(
         }
         return impl::CudaDeviceImpl(tensor.device().index)
             .reduce(tensor, dims, keepdim, cuda_operation);
+    }
+#endif
+#ifdef CITRIUS_HAS_METAL
+    if (tensor.device().type == DeviceType::Metal) {
+        impl::MetalReductionOperation metal_operation;
+        switch (reduction) {
+            case Reduction::Sum: metal_operation = impl::MetalReductionOperation::Sum; break;
+            case Reduction::Mean: metal_operation = impl::MetalReductionOperation::Mean; break;
+            case Reduction::Max: metal_operation = impl::MetalReductionOperation::Maximum; break;
+            case Reduction::Variance:
+                metal_operation = impl::MetalReductionOperation::Variance;
+                break;
+        }
+        return impl::MetalDeviceImpl().reduce(tensor, dims, keepdim, metal_operation);
     }
 #endif
     std::vector<bool> reduced(tensor.ndim(), false);
@@ -206,6 +223,10 @@ Tensor argmax(const Tensor& tensor) {
     if (tensor.device().type == DeviceType::CUDA)
         return impl::CudaDeviceImpl(tensor.device().index).argmax(tensor);
 #endif
+#ifdef CITRIUS_HAS_METAL
+    if (tensor.device().type == DeviceType::Metal)
+        return impl::MetalDeviceImpl().argmax(tensor);
+#endif
     const Tensor flattened = reshape(contiguous(tensor), {tensor.numel()});
     return argmax_cpu(flattened, 0, false);
 }
@@ -216,6 +237,10 @@ Tensor argmax(const Tensor& tensor, std::int64_t dim, bool keepdim) {
 #ifdef CITRIUS_HAS_CUDA
     if (tensor.device().type == DeviceType::CUDA)
         return impl::CudaDeviceImpl(tensor.device().index).argmax(tensor, normalized.front(), keepdim);
+#endif
+#ifdef CITRIUS_HAS_METAL
+    if (tensor.device().type == DeviceType::Metal)
+        return impl::MetalDeviceImpl().argmax(tensor, normalized.front(), keepdim);
 #endif
     return argmax_cpu(tensor, normalized.front(), keepdim);
 }

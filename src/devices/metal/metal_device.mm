@@ -218,6 +218,91 @@ kernel void gather_rows_kernel(
         out[id * element_size + byte] = table[source * element_size + byte];
 }
 
+kernel void reduce_f32(
+    device const float* input [[buffer(0)]],
+    device float* out [[buffer(1)]],
+    device const long* metadata [[buffer(2)]],
+    constant uint4& config [[buffer(3)]],
+    constant uint2& output_config [[buffer(4)]],
+    uint id [[thread_position_in_grid]]) {
+    const uint input_count = config.x;
+    const uint output_count = config.y;
+    const uint rank = config.z;
+    const uint operation = config.w;
+    const uint output_rank = output_config.x;
+    const uint reduced_count = output_config.y;
+    if (id >= output_count) return;
+    device const long* shape = metadata;
+    device const long* contiguous = shape + rank;
+    device const long* input_strides = contiguous + rank;
+    device const long* reduced = input_strides + rank;
+    device const long* output_strides = reduced + rank;
+    float total = operation == 2 ? -INFINITY : 0.0f;
+    float mean = 0.0f;
+    if (operation == 3) {
+        for (uint input_id = 0; input_id < input_count; ++input_id) {
+            uint output_id = 0;
+            uint output_axis = 0;
+            long input_index = 0;
+            for (uint axis = 0; axis < rank; ++axis) {
+                const long coordinate = (long(input_id) / contiguous[axis]) % shape[axis];
+                input_index += coordinate * input_strides[axis];
+                if (!reduced[axis]) output_id += uint(coordinate * output_strides[output_axis++]);
+            }
+            if (output_id == id) mean += input[input_index];
+        }
+        mean /= float(reduced_count);
+    }
+    for (uint input_id = 0; input_id < input_count; ++input_id) {
+        uint output_id = 0;
+        uint output_axis = 0;
+        long input_index = 0;
+        for (uint axis = 0; axis < rank; ++axis) {
+            const long coordinate = (long(input_id) / contiguous[axis]) % shape[axis];
+            input_index += coordinate * input_strides[axis];
+            if (!reduced[axis]) output_id += uint(coordinate * output_strides[output_axis++]);
+        }
+        if (output_id != id) continue;
+        const float value = input[input_index];
+        if (operation == 2) total = max(total, value);
+        else if (operation == 3) total += (value - mean) * (value - mean);
+        else total += value;
+    }
+    if (operation == 1 || operation == 3) total /= float(reduced_count);
+    out[id] = total;
+}
+
+kernel void argmax_f32(
+    device const float* input [[buffer(0)]],
+    device long* out [[buffer(1)]],
+    device const long* metadata [[buffer(2)]],
+    constant uint3& config [[buffer(3)]],
+    uint id [[thread_position_in_grid]]) {
+    const uint output_count = config.x;
+    const uint rank = config.y;
+    const uint axis = config.z;
+    if (id >= output_count) return;
+    device const long* shape = metadata;
+    device const long* input_strides = shape + rank;
+    device const long* output_shape = input_strides + rank;
+    device const long* output_strides = output_shape + rank - 1;
+    long base = 0;
+    uint output_axis = 0;
+    for (uint input_axis = 0; input_axis < rank; ++input_axis) {
+        if (input_axis == axis) continue;
+        const long coordinate = (long(id) / output_strides[output_axis]) % output_shape[output_axis];
+        base += coordinate * input_strides[input_axis];
+        ++output_axis;
+    }
+    float best = input[base];
+    long best_index = 0;
+    for (long index = 1; index < shape[axis]; ++index) {
+        const float value = input[base + index * input_strides[axis]];
+        if (value > best) { best = value; best_index = index; }
+    }
+    out[id] = best_index;
+}
+
 kernel void matmul_f32(
     device const float* a [[buffer(0)]],
     device const float* b [[buffer(1)]],
@@ -323,6 +408,8 @@ public:
         contiguous_pipeline = pipeline("contiguous_copy");
         concat_pipeline = pipeline("concat_copy");
         gather_pipeline = pipeline("gather_rows_kernel");
+        reduce_pipeline = pipeline("reduce_f32");
+        argmax_pipeline = pipeline("argmax_f32");
     }
 
     id<MTLComputePipelineState> pipeline(const char* name) {
@@ -459,6 +546,8 @@ public:
     id<MTLComputePipelineState> contiguous_pipeline = nil;
     id<MTLComputePipelineState> concat_pipeline = nil;
     id<MTLComputePipelineState> gather_pipeline = nil;
+    id<MTLComputePipelineState> reduce_pipeline = nil;
+    id<MTLComputePipelineState> argmax_pipeline = nil;
 };
 
 MetalDeviceImpl::MetalDeviceImpl()
@@ -750,6 +839,99 @@ Tensor MetalDeviceImpl::gather_rows(const Tensor& table, const Tensor& indices) 
     if (*static_cast<const int*>(invalid.contents) != 0)
         throw std::out_of_range("gather_rows index is out of range");
     return output;
+}
+
+Tensor MetalDeviceImpl::reduce(
+    const Tensor& tensor, const std::vector<std::int64_t>& dimensions,
+    bool keepdim, MetalReductionOperation operation) const {
+    require_defined(tensor, "input");
+    require_float32(tensor, "input");
+    std::vector<bool> is_reduced(tensor.ndim(), false);
+    for (const auto dimension : dimensions)
+        is_reduced[static_cast<std::size_t>(dimension)] = true;
+    Shape output_shape;
+    Shape compact_output_shape;
+    std::int64_t reduced_count = 1;
+    for (std::size_t axis = 0; axis < tensor.ndim(); ++axis) {
+        if (is_reduced[axis]) {
+            reduced_count *= tensor.shape()[axis];
+            if (keepdim) output_shape.push_back(1);
+        } else {
+            output_shape.push_back(tensor.shape()[axis]);
+            compact_output_shape.push_back(tensor.shape()[axis]);
+        }
+    }
+    Tensor output = empty(output_shape, DType::Float32);
+    const auto& input_storage = require_metal_storage(*tensor.storage());
+    auto& output_storage = require_metal_storage(*output.storage());
+    const Strides input_contiguous = row_major_strides(tensor.shape());
+    const Strides output_strides = row_major_strides(compact_output_shape);
+    std::vector<std::int64_t> metadata;
+    metadata.insert(metadata.end(), tensor.shape().begin(), tensor.shape().end());
+    metadata.insert(metadata.end(), input_contiguous.begin(), input_contiguous.end());
+    metadata.insert(metadata.end(), tensor.strides().begin(), tensor.strides().end());
+    for (const bool reduced : is_reduced) metadata.push_back(reduced ? 1 : 0);
+    metadata.insert(metadata.end(), output_strides.begin(), output_strides.end());
+    id<MTLBuffer> metadata_buffer = [impl_->device newBufferWithBytes:metadata.data()
+        length:metadata.size() * sizeof(std::int64_t) options:MTLResourceStorageModeShared];
+    std::array<uint32_t, 4> config = {static_cast<uint32_t>(tensor.numel()),
+        static_cast<uint32_t>(output.numel()), static_cast<uint32_t>(tensor.ndim()),
+        static_cast<uint32_t>(operation)};
+    std::array<uint32_t, 2> output_config = {
+        static_cast<uint32_t>(compact_output_shape.size()), static_cast<uint32_t>(reduced_count)};
+    impl_->run_1d(impl_->reduce_pipeline, static_cast<NSUInteger>(output.numel()),
+        [&](id<MTLComputeCommandEncoder> encoder) {
+            [encoder setBuffer:buffer_from_storage(input_storage)
+                offset:static_cast<NSUInteger>(tensor.storage_offset() * sizeof(float)) atIndex:0];
+            [encoder setBuffer:buffer_from_storage(output_storage) offset:0 atIndex:1];
+            [encoder setBuffer:metadata_buffer offset:0 atIndex:2];
+            [encoder setBytes:config.data() length:sizeof(config) atIndex:3];
+            [encoder setBytes:output_config.data() length:sizeof(output_config) atIndex:4];
+        });
+    return output;
+}
+
+Tensor MetalDeviceImpl::argmax(
+    const Tensor& tensor, std::int64_t dimension, bool keepdim) const {
+    require_defined(tensor, "input");
+    require_float32(tensor, "input");
+    const auto axis = static_cast<std::size_t>(dimension);
+    if (tensor.shape()[axis] == 0)
+        throw std::invalid_argument("argmax cannot reduce an empty dimension");
+    Shape compact_output_shape = tensor.shape();
+    compact_output_shape.erase(compact_output_shape.begin() + static_cast<std::ptrdiff_t>(axis));
+    Shape output_shape = tensor.shape();
+    if (keepdim) output_shape[axis] = 1;
+    else output_shape = compact_output_shape;
+    Tensor output = empty(output_shape, DType::Int64);
+    const auto& input_storage = require_metal_storage(*tensor.storage());
+    auto& output_storage = require_metal_storage(*output.storage());
+    const Strides output_strides = row_major_strides(compact_output_shape);
+    std::vector<std::int64_t> metadata;
+    metadata.insert(metadata.end(), tensor.shape().begin(), tensor.shape().end());
+    metadata.insert(metadata.end(), tensor.strides().begin(), tensor.strides().end());
+    metadata.insert(metadata.end(), compact_output_shape.begin(), compact_output_shape.end());
+    metadata.insert(metadata.end(), output_strides.begin(), output_strides.end());
+    id<MTLBuffer> metadata_buffer = [impl_->device newBufferWithBytes:metadata.data()
+        length:metadata.size() * sizeof(std::int64_t) options:MTLResourceStorageModeShared];
+    std::array<uint32_t, 3> config = {static_cast<uint32_t>(output.numel()),
+        static_cast<uint32_t>(tensor.ndim()), static_cast<uint32_t>(axis)};
+    impl_->run_1d(impl_->argmax_pipeline, static_cast<NSUInteger>(output.numel()),
+        [&](id<MTLComputeCommandEncoder> encoder) {
+            [encoder setBuffer:buffer_from_storage(input_storage)
+                offset:static_cast<NSUInteger>(tensor.storage_offset() * sizeof(float)) atIndex:0];
+            [encoder setBuffer:buffer_from_storage(output_storage) offset:0 atIndex:1];
+            [encoder setBuffer:metadata_buffer offset:0 atIndex:2];
+            [encoder setBytes:config.data() length:sizeof(config) atIndex:3];
+        });
+    return output;
+}
+
+Tensor MetalDeviceImpl::argmax(const Tensor& tensor) const {
+    const Tensor packed = contiguous(tensor);
+    Tensor flattened({packed.numel()}, {1}, packed.storage_offset(), packed.dtype(),
+                     packed.device(), packed.storage());
+    return argmax(flattened, 0, false);
 }
 
 Tensor MetalDeviceImpl::matmul(const Tensor& a, const Tensor& b) const {

@@ -22,6 +22,13 @@ enum class MetalUnaryOperation : std::uint32_t {
     Power,
 };
 
+enum class MetalReductionOperation : std::uint32_t {
+    Sum,
+    Mean,
+    Maximum,
+    Variance,
+};
+
 class MetalDeviceImpl final : public IDevice {
 public:
     MetalDeviceImpl();
@@ -53,6 +60,13 @@ public:
     Tensor contiguous(const Tensor& tensor) const;
     Tensor concat(const std::vector<Tensor>& tensors, std::int64_t dimension) const;
     Tensor gather_rows(const Tensor& table, const Tensor& indices) const;
+    Tensor reduce(
+        const Tensor& tensor,
+        const std::vector<std::int64_t>& dimensions,
+        bool keepdim,
+        MetalReductionOperation operation) const;
+    Tensor argmax(const Tensor& tensor, std::int64_t dimension, bool keepdim) const;
+    Tensor argmax(const Tensor& tensor) const;
     TensorStoragePtr ensure_storage(
         const TensorStoragePtr& storage,
         ConversionPolicy policy = ConversionPolicy::Error) const override;
