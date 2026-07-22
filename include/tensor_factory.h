@@ -18,6 +18,11 @@ Tensor from_vector(
     Shape shape,
     Device device = Device::cpu());
 Tensor from_vector(
+    const std::vector<float>& values,
+    Shape shape,
+    DType dtype,
+    Device device = Device::cpu());
+Tensor from_vector(
     const std::vector<std::int64_t>& values,
     Device device = Device::cpu());
 Tensor from_vector(

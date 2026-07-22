@@ -24,6 +24,8 @@ using impl::CpuMemTensorStorageImpl;
 
 const char* dtype_name(DType dtype) {
     switch (dtype) {
+        case DType::Float16: return "float16";
+        case DType::BFloat16: return "bfloat16";
         case DType::Float32: return "float32";
         case DType::Float64: return "float64";
         case DType::Int32: return "int32";
@@ -263,6 +265,17 @@ std::string Tensor::to_string() const {
     std::ostringstream stream;
     stream << "tensor([";
     switch (dtype()) {
+        case DType::Float16:
+        case DType::BFloat16: {
+            const auto* bits = reinterpret_cast<const std::uint16_t*>(values);
+            for (std::int64_t index = 0; index < numel(); ++index) {
+                if (index != 0) stream << ", ";
+                stream << (dtype() == DType::Float16
+                                   ? float16_to_float(bits[index])
+                                   : bfloat16_to_float(bits[index]));
+            }
+            break;
+        }
         case DType::Float32:
             append_values(stream, reinterpret_cast<const float*>(values), numel());
             break;

@@ -88,27 +88,6 @@ std::vector<TensorInfo> parse_header(const std::string& header) {
     return tensors;
 }
 
-float half_to_float(std::uint16_t half) {
-    const std::uint32_t sign = (half & 0x8000u) << 16;
-    std::uint32_t exponent = (half >> 10) & 0x1fu;
-    std::uint32_t mantissa = half & 0x03ffu;
-    std::uint32_t bits;
-    if (exponent == 0) {
-        if (mantissa == 0) bits = sign;
-        else {
-            int shift = 0;
-            while ((mantissa & 0x0400u) == 0) { mantissa <<= 1; ++shift; }
-            mantissa &= 0x03ffu;
-            bits = sign | ((127 - 14 - shift) << 23) | (mantissa << 13);
-        }
-    } else if (exponent == 31) {
-        bits = sign | 0x7f800000u | (mantissa << 13);
-    } else {
-        bits = sign | ((exponent + 112) << 23) | (mantissa << 13);
-    }
-    return std::bit_cast<float>(bits);
-}
-
 std::size_t element_size(const std::string& dtype) {
     if (dtype == "F32") return 4;
     if (dtype == "F16" || dtype == "BF16") return 2;
@@ -117,7 +96,9 @@ std::size_t element_size(const std::string& dtype) {
 
 } // namespace
 
-TensorMap load_safetensors(const std::filesystem::path& path, Device device) {
+TensorMap load_safetensors(const std::filesystem::path& path, Device device, DType dtype) {
+    if (dtype != DType::Float16 && dtype != DType::BFloat16 && dtype != DType::Float32)
+        throw std::invalid_argument("safetensors target dtype must be Float16, BFloat16, or Float32");
     std::ifstream stream(path, std::ios::binary | std::ios::ate);
     if (!stream) throw std::runtime_error("cannot open safetensors file: " + path.string());
     const auto file_size = static_cast<std::uint64_t>(stream.tellg());
@@ -155,10 +136,10 @@ TensorMap load_safetensors(const std::filesystem::path& path, Device device) {
                     (static_cast<std::uint16_t>(bytes[index * 2 + 1]) << 8);
                 values[index] = info.dtype == "BF16"
                     ? std::bit_cast<float>(static_cast<std::uint32_t>(bits) << 16)
-                    : half_to_float(bits);
+                    : float16_to_float(bits);
             }
         }
-        result.emplace(info.name, from_vector(values, info.shape, device));
+        result.emplace(info.name, from_vector(values, info.shape, dtype, device));
     }
     return result;
 }

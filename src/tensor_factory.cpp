@@ -85,10 +85,28 @@ Tensor TensorFactory::from_vector(const std::vector<float>& values, Device devic
 }
 
 Tensor TensorFactory::from_vector(const std::vector<float>& values, Shape shape, Device device) {
-    auto cpu = empty(std::move(shape), DType::Float32, Device::cpu());
+    return from_vector(values, std::move(shape), DType::Float32, device);
+}
+
+Tensor TensorFactory::from_vector(
+    const std::vector<float>& values,
+    Shape shape,
+    DType dtype,
+    Device device) {
+    if (dtype != DType::Float16 && dtype != DType::BFloat16 && dtype != DType::Float32)
+        throw std::invalid_argument("floating values require a floating-point tensor dtype");
+    auto cpu = empty(std::move(shape), dtype, Device::cpu());
     if (cpu.numel() != static_cast<std::int64_t>(values.size())) throw std::invalid_argument("tensor shape does not match vector size");
     auto storage = std::static_pointer_cast<CpuMemTensorStorageImpl>(cpu.storage());
-    std::copy(values.begin(), values.end(), storage->data_as<float>());
+    if (dtype == DType::Float32) {
+        std::copy(values.begin(), values.end(), storage->data_as<float>());
+    } else {
+        auto* destination = storage->data_as<std::uint16_t>();
+        for (std::size_t index = 0; index < values.size(); ++index)
+            destination[index] = dtype == DType::Float16
+                ? float_to_float16(values[index])
+                : float_to_bfloat16(values[index]);
+    }
     return to(cpu, device);
 }
 
@@ -167,6 +185,14 @@ Tensor from_vector(const std::vector<float>& values, Device device) {
 
 Tensor from_vector(const std::vector<float>& values, Shape shape, Device device) {
     return impl::TensorFactory::from_vector(values, std::move(shape), device);
+}
+
+Tensor from_vector(
+    const std::vector<float>& values,
+    Shape shape,
+    DType dtype,
+    Device device) {
+    return impl::TensorFactory::from_vector(values, std::move(shape), dtype, device);
 }
 
 Tensor from_vector(const std::vector<std::int64_t>& values, Device device) {

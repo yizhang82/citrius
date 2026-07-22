@@ -7,6 +7,8 @@
 
 #include <gtest/gtest.h>
 
+#include <algorithm>
+#include <cmath>
 #include <memory>
 #include <sstream>
 #include <stdexcept>
@@ -56,6 +58,29 @@ TEST(TensorTest, ConstructsFromVectorWithInferredShape) {
     EXPECT_EQ(tensor.shape(), citrius::Shape({3}));
     EXPECT_EQ(tensor.dtype(), citrius::DType::Float32);
     EXPECT_EQ(cpu_tensor_values(tensor), values);
+}
+
+TEST(TensorTest, ConstructsAndPrintsFloat16AndBFloat16Values) {
+    const std::vector<float> input{1.0f, -2.5f, 0.333333f};
+    const auto fp16 = citrius::from_vector(input, {3}, citrius::DType::Float16);
+    const auto bf16 = citrius::from_vector(input, {3}, citrius::DType::BFloat16);
+    EXPECT_EQ(fp16.dtype(), citrius::DType::Float16);
+    EXPECT_EQ(bf16.dtype(), citrius::DType::BFloat16);
+    EXPECT_EQ(fp16.storage()->nbytes(), 6u);
+    EXPECT_EQ(bf16.storage()->nbytes(), 6u);
+    EXPECT_NE(fp16.to_string().find("dtype=float16"), std::string::npos);
+    EXPECT_NE(bf16.to_string().find("dtype=bfloat16"), std::string::npos);
+    EXPECT_NE(fp16.to_string().find("-2.5"), std::string::npos);
+    EXPECT_NE(bf16.to_string().find("-2.5"), std::string::npos);
+}
+
+TEST(TensorTest, FloatingPointBitConversionsRoundTrip) {
+    for (const float value : {0.0f, -0.0f, 1.0f, -2.5f, 65504.0f}) {
+        EXPECT_NEAR(citrius::float16_to_float(citrius::float_to_float16(value)), value,
+                    std::max(1e-6f, std::abs(value) * 1e-3f));
+        EXPECT_NEAR(citrius::bfloat16_to_float(citrius::float_to_bfloat16(value)), value,
+                    std::max(1e-6f, std::abs(value) * 4e-3f));
+    }
 }
 
 TEST(TensorTest, FactoryConstructsVectorWithExplicitShape) {

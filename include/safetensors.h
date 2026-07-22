@@ -14,6 +14,7 @@ using TensorMap = std::unordered_map<std::string, Tensor>;
 /// Floating-point values are converted to Citrius Float32 tensors.
 TensorMap load_safetensors(
     const std::filesystem::path& path,
-    Device device = Device::cpu());
+    Device device = Device::cpu(),
+    DType dtype = DType::Float32);
 
 } // namespace citrius
