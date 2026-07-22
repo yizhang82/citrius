@@ -726,4 +726,5 @@ batch-matmul     1024      50        4.584        5.129      256.454     3747.70
 
 * fused kernels [qwen3 0.6 CUDA, TTFT=64ms, Throughput: 50.643 tokens for 50 tokens]. This means we are now 2x faster than pytorch and 7x faster TTFT
 * bfloat16, correctness, and perf fixes
-* metal kernels and optimizations. [qewn3 0.6 Metal, TTFT=161ms, Throughput: 9.590 token/s]
+* metal kernels and optimizations. [qewn3 0.6B Metal, TTFT=161ms, Throughput: 9.590 token/s]
+* metal fix: fused kernel [qewn3 0.6B Metal, TTFT=95.9ms, Throughput: 12.90 token/s]

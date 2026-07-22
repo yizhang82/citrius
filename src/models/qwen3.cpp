@@ -102,7 +102,7 @@ Tensor Qwen3Attention::forward(const Tensor& input, const Tensor& attn_mask) {
         query, query_norm_->weight(), config_.rms_norm_eps, config_.rope_theta);
     key = citrius::rms_norm_rope(
         key, key_norm_->weight(), config_.rms_norm_eps, config_.rope_theta);
-    value = permute(value, {0, 2, 1, 3});
+    value = contiguous(permute(value, {0, 2, 1, 3}));
     Tensor output = nn::functional::scaled_dot_product_attention(
         query, key, value, attn_mask, true);
     output = reshape(permute(output, {0, 2, 1, 3}), {batch, sequence, config_.num_attention_heads * config_.head_dim});
