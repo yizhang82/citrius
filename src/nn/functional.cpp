@@ -144,6 +144,14 @@ Tensor scaled_dot_product_attention(
             return *optimized;
     }
 #endif
+#ifdef CITRIUS_HAS_METAL
+    if (query.device().type == DeviceType::Metal) {
+        impl::MetalDeviceImpl device;
+        if (auto optimized = device.try_scaled_dot_product_attention(
+                query, key, value, attn_mask, is_causal))
+            return *optimized;
+    }
+#endif
     Tensor effective_key = key;
     Tensor effective_value = value;
     if (query.ndim() == 4 && key.ndim() == 4 && value.ndim() == 4 &&

@@ -345,6 +345,70 @@ kernel void softmax_last_dimension_f32(
         out[base + col] *= inverse_sum;
 }
 
+kernel void scaled_dot_product_attention_f32(
+    device const float* query [[buffer(0)]],
+    device const float* key [[buffer(1)]],
+    device const float* value [[buffer(2)]],
+    device const uchar* mask [[buffer(3)]],
+    device float* output [[buffer(4)]],
+    constant uint4& dims [[buffer(5)]],
+    constant uint3& options [[buffer(6)]],
+    uint row [[threadgroup_position_in_grid]],
+    uint lane [[thread_position_in_threadgroup]],
+    uint lanes [[threads_per_threadgroup]]) {
+    const uint heads = dims.x;
+    const uint key_value_heads = dims.y;
+    const uint query_length = dims.z;
+    const uint key_length = dims.w;
+    const uint head_dim = options.x;
+    const uint row_count = options.y;
+    if (row >= row_count) return;
+    const uint query_position = row % query_length;
+    const uint head = (row / query_length) % heads;
+    const uint batch = row / (heads * query_length);
+    const uint query_base = row * head_dim;
+    threadgroup float accumulator[256];
+    threadgroup float reduction[256];
+    threadgroup float state[4];
+    for (uint col = lane; col < head_dim; col += lanes) accumulator[col] = 0.0f;
+    if (lane == 0) { state[0] = -INFINITY; state[1] = 0.0f; }
+    threadgroup_barrier(mem_flags::mem_threadgroup);
+    const uint key_value_head = head / (heads / key_value_heads);
+    for (uint key_position = 0; key_position < key_length; ++key_position) {
+        const uint key_base =
+            ((batch * key_value_heads + key_value_head) * key_length + key_position) * head_dim;
+        float score = 0.0f;
+        for (uint col = lane; col < head_dim; col += lanes)
+            score += query[query_base + col] * key[key_base + col];
+        reduction[lane] = score;
+        threadgroup_barrier(mem_flags::mem_threadgroup);
+        for (uint stride = lanes / 2; stride > 0; stride /= 2) {
+            if (lane < stride) reduction[lane] += reduction[lane + stride];
+            threadgroup_barrier(mem_flags::mem_threadgroup);
+        }
+        if (lane == 0) {
+            const bool excluded = (options.z & 1u && key_position > query_position) ||
+                (options.z & 2u && mask[query_position * key_length + key_position]);
+            score = excluded ? -INFINITY : reduction[0] * rsqrt(float(head_dim));
+            const float previous_maximum = state[0];
+            const float next_maximum = max(previous_maximum, score);
+            const float previous_scale = isinf(previous_maximum) ? 0.0f
+                : exp(previous_maximum - next_maximum);
+            const float value_scale = isinf(score) ? 0.0f : exp(score - next_maximum);
+            state[0] = next_maximum;
+            state[1] = state[1] * previous_scale + value_scale;
+            state[2] = previous_scale;
+            state[3] = value_scale;
+        }
+        threadgroup_barrier(mem_flags::mem_threadgroup);
+        for (uint col = lane; col < head_dim; col += lanes)
+            accumulator[col] = accumulator[col] * state[2] + value[key_base + col] * state[3];
+        threadgroup_barrier(mem_flags::mem_threadgroup);
+    }
+    for (uint col = lane; col < head_dim; col += lanes)
+        output[query_base + col] = accumulator[col] / state[1];
+}
+
 kernel void matmul_f32(
     device const float* a [[buffer(0)]],
     device const float* b [[buffer(1)]],
@@ -574,6 +638,7 @@ public:
         reduce_pipeline = pipeline("reduce_f32");
         argmax_pipeline = pipeline("argmax_f32");
         softmax_pipeline = pipeline("softmax_last_dimension_f32");
+        attention_pipeline = pipeline("scaled_dot_product_attention_f32");
     }
 
     id<MTLComputePipelineState> pipeline(const char* name) {
@@ -752,6 +817,7 @@ public:
     id<MTLComputePipelineState> reduce_pipeline = nil;
     id<MTLComputePipelineState> argmax_pipeline = nil;
     id<MTLComputePipelineState> softmax_pipeline = nil;
+    id<MTLComputePipelineState> attention_pipeline = nil;
     mutable std::mutex mps_cache_mutex;
     mutable std::unordered_map<std::string, MPSMatrixMultiplication*>
         multiplication_cache;
@@ -1350,6 +1416,64 @@ std::optional<Tensor> MetalDeviceImpl::try_rms_norm_rope(
             [encoder setBytes:dims.data() length:sizeof(dims) atIndex:3];
             [encoder setBytes:parameters.data() length:sizeof(parameters) atIndex:4];
         });
+    return output;
+}
+
+std::optional<Tensor> MetalDeviceImpl::try_scaled_dot_product_attention(
+    const Tensor& query, const Tensor& key, const Tensor& value,
+    const Tensor& mask, bool is_causal) const {
+    if (query.dtype() != DType::Float32 || key.dtype() != DType::Float32 ||
+        value.dtype() != DType::Float32 || query.ndim() != 4 || key.ndim() != 4 ||
+        value.ndim() != 4 || query.device().type != DeviceType::Metal ||
+        key.device() != query.device() || value.device() != query.device() ||
+        !query.is_contiguous() || !key.is_contiguous() || !value.is_contiguous() ||
+        query.shape()[0] != key.shape()[0] || query.shape()[1] % key.shape()[1] != 0 ||
+        key.shape() != value.shape() || query.shape()[3] != key.shape()[3] ||
+        query.shape()[3] > 256) return std::nullopt;
+    const auto query_length = query.shape()[2];
+    const auto key_length = key.shape()[2];
+    if (mask.defined() && (mask.dtype() != DType::Bool || mask.device() != query.device() ||
+        mask.shape() != Shape{query_length, key_length} || !mask.is_contiguous()))
+        return std::nullopt;
+    Tensor output = empty(query.shape(), DType::Float32);
+    if (output.numel() == 0) return output;
+    const auto& query_storage = require_metal_storage(*query.storage());
+    const auto& key_storage = require_metal_storage(*key.storage());
+    const auto& value_storage = require_metal_storage(*value.storage());
+    auto& output_storage = require_metal_storage(*output.storage());
+    id<MTLBuffer> mask_buffer = nil;
+    NSUInteger mask_offset = 0;
+    if (mask.defined()) {
+        mask_buffer = buffer_from_storage(require_metal_storage(*mask.storage()));
+        mask_offset = static_cast<NSUInteger>(mask.storage_offset());
+    }
+    const auto rows = query.shape()[0] * query.shape()[1] * query_length;
+    std::array<uint32_t, 4> dims = {static_cast<uint32_t>(query.shape()[1]),
+        static_cast<uint32_t>(key.shape()[1]), static_cast<uint32_t>(query_length),
+        static_cast<uint32_t>(key_length)};
+    std::array<uint32_t, 3> options = {static_cast<uint32_t>(query.shape()[3]),
+        static_cast<uint32_t>(rows), static_cast<uint32_t>((is_causal ? 1 : 0) |
+            (mask.defined() ? 2 : 0))};
+    id<MTLCommandBuffer> command_buffer = [impl_->queue commandBuffer];
+    id<MTLComputeCommandEncoder> encoder = [command_buffer computeCommandEncoder];
+    [encoder setComputePipelineState:impl_->attention_pipeline];
+    [encoder setBuffer:buffer_from_storage(query_storage)
+        offset:static_cast<NSUInteger>(query.storage_offset() * sizeof(float)) atIndex:0];
+    [encoder setBuffer:buffer_from_storage(key_storage)
+        offset:static_cast<NSUInteger>(key.storage_offset() * sizeof(float)) atIndex:1];
+    [encoder setBuffer:buffer_from_storage(value_storage)
+        offset:static_cast<NSUInteger>(value.storage_offset() * sizeof(float)) atIndex:2];
+    [encoder setBuffer:mask_buffer offset:mask_offset atIndex:3];
+    [encoder setBuffer:buffer_from_storage(output_storage) offset:0 atIndex:4];
+    [encoder setBytes:dims.data() length:sizeof(dims) atIndex:5];
+    [encoder setBytes:options.data() length:sizeof(options) atIndex:6];
+    [encoder dispatchThreadgroups:MTLSizeMake(static_cast<NSUInteger>(rows), 1, 1)
+        threadsPerThreadgroup:MTLSizeMake(256, 1, 1)];
+    [encoder endEncoding];
+    [command_buffer commit];
+    [command_buffer waitUntilCompleted];
+    if (command_buffer.status == MTLCommandBufferStatusError)
+        throw std::runtime_error("Metal scaled dot product attention execution failed");
     return output;
 }
 
