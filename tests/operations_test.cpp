@@ -79,6 +79,19 @@ TEST(OperationsTest, RmsNormRopeUsesPortableDeviceFallback) {
     EXPECT_NEAR(actual[3], 4.0f * inverse_first, 1e-6f);
 }
 
+TEST(OperationsTest, AddRmsNormReturnsResidualAndNormalizedValues) {
+    const citrius::Tensor left(std::vector<float>{1, 2, 3, 4}, {2, 2});
+    const citrius::Tensor right(std::vector<float>{2, 2, 1, 0}, {2, 2});
+    const citrius::Tensor weight(std::vector<float>{1.5f, 0.5f});
+    const auto result = citrius::add_rms_norm(left, right, weight, 1e-6f);
+    EXPECT_EQ(values(result.residual), std::vector<float>({3, 4, 4, 4}));
+    const auto normalized = values(result.normalized);
+    EXPECT_NEAR(normalized[0], 1.2727922f, 1e-6f);
+    EXPECT_NEAR(normalized[1], 0.5656854f, 1e-6f);
+    EXPECT_NEAR(normalized[2], 1.5f, 1e-6f);
+    EXPECT_NEAR(normalized[3], 0.5f, 1e-6f);
+}
+
 TEST(OperationsTest, MultipliesUsingTensorDevice) {
     const citrius::Tensor left(std::vector<float>{1, 2, 3, 4, 5, 6}, {2, 3});
     const citrius::Tensor right(

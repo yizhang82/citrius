@@ -56,6 +56,7 @@ Tensor Qwen3RMSNorm::forward(const Tensor& input) {
 
 Tensor& Qwen3RMSNorm::weight() { return parameter("weight"); }
 const Tensor& Qwen3RMSNorm::weight() const { return parameter("weight"); }
+float Qwen3RMSNorm::epsilon() const { return eps_; }
 
 Qwen3MLP::Qwen3MLP(const Qwen3Config& config) {
     config.validate();
@@ -127,8 +128,9 @@ Qwen3DecoderLayer::Qwen3DecoderLayer(const Qwen3Config& config) {
 Tensor Qwen3DecoderLayer::forward(const Tensor& input) { return forward(input, Tensor()); }
 Tensor Qwen3DecoderLayer::forward(const Tensor& input, const Tensor& attn_mask) {
     const Tensor attended = attention_->forward((*input_norm_)(input), attn_mask);
-    const Tensor attention_residual = add(input, attended);
-    return add(attention_residual, (*mlp_)((*post_attention_norm_)(attention_residual)));
+    const auto attention_state = citrius::add_rms_norm(
+        input, attended, post_attention_norm_->weight(), post_attention_norm_->epsilon());
+    return add(attention_state.residual, (*mlp_)(attention_state.normalized));
 }
 Qwen3Attention& Qwen3DecoderLayer::attention() { return *attention_; }
 Qwen3MLP& Qwen3DecoderLayer::mlp() { return *mlp_; }

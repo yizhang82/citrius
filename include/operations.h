@@ -4,6 +4,11 @@
 
 namespace citrius {
 
+struct AddRmsNormResult {
+    Tensor residual;
+    Tensor normalized;
+};
+
 /// Adds two tensors element by element.
 /// @param left Left input tensor.
 /// @param right Right input tensor with the same shape, dtype, and device as `left`.
@@ -64,6 +69,14 @@ Tensor rms_norm_rope(
     const Tensor& weight,
     float epsilon,
     float theta);
+
+/// Adds two tensors and RMS-normalizes the sum, returning both values so a
+/// residual connection does not require a second materialization.
+AddRmsNormResult add_rms_norm(
+    const Tensor& left,
+    const Tensor& right,
+    const Tensor& weight,
+    float epsilon);
 
 /// Multiplies two tensors element by element using trailing-dimension broadcasting.
 /// @param left Left Float32 input tensor.

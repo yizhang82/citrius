@@ -5,6 +5,7 @@
 
 #include <memory>
 #include <optional>
+#include <utility>
 
 namespace citrius::impl {
 
@@ -47,6 +48,13 @@ public:
         const Tensor& value,
         const Tensor& mask,
         bool is_causal) const {
+        return std::nullopt;
+    }
+    virtual std::optional<std::pair<Tensor, Tensor>> try_add_rms_norm(
+        const Tensor& left,
+        const Tensor& right,
+        const Tensor& weight,
+        float epsilon) const {
         return std::nullopt;
     }
     virtual TensorStoragePtr ensure_storage(

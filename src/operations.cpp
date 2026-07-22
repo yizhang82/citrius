@@ -354,6 +354,32 @@ Tensor rms_norm_rope(
     return add(mul(packed, cos_tensor), mul(rotated, sin_tensor));
 }
 
+AddRmsNormResult add_rms_norm(
+    const Tensor& left,
+    const Tensor& right,
+    const Tensor& weight,
+    float epsilon) {
+    require_matching_devices(left, right);
+    require_matching_devices(left, weight);
+    require_float32(left);
+    require_float32(right);
+    require_float32(weight);
+    if (left.shape() != right.shape() || left.ndim() == 0 ||
+        weight.shape() != Shape{left.shape().back()})
+        throw std::invalid_argument("add_rms_norm inputs have incompatible shapes");
+    if (!(epsilon > 0.0f))
+        throw std::invalid_argument("add_rms_norm epsilon must be positive");
+
+    const auto optimized = dispatch(
+        left, right,
+        [&weight, epsilon](const auto& device, const Tensor& a, const Tensor& b) {
+            return device.try_add_rms_norm(a, b, weight, epsilon);
+        });
+    if (optimized) return {optimized->first, optimized->second};
+    Tensor residual = add(left, right);
+    return {residual, rms_norm(residual, weight, epsilon)};
+}
+
 Tensor mul(const Tensor& left, const Tensor& right) {
 #ifdef CITRIUS_HAS_CUDA
     if (left.device().type == DeviceType::CUDA)

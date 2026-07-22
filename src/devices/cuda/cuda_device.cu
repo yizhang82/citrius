@@ -303,6 +303,47 @@ __global__ void scaled_dot_product_attention_f32(
         output[row * head_dim + column] = accumulator[column] / state[1];
 }
 
+__global__ void add_rms_norm_f32(
+    const float* left,
+    const float* right,
+    const float* weight,
+    float* residual,
+    float* normalized,
+    std::int64_t row_count,
+    std::int64_t row_size,
+    float epsilon) {
+    __shared__ float warp_sums[32];
+    const auto lane = threadIdx.x & 31;
+    const auto warp = threadIdx.x >> 5;
+    const auto warp_count = (blockDim.x + 31) / 32;
+    for (std::int64_t row = blockIdx.x; row < row_count; row += gridDim.x) {
+        const auto offset = row * row_size;
+        float sum_squares = 0.0f;
+        for (std::int64_t column = threadIdx.x; column < row_size; column += blockDim.x) {
+            const float value = left[offset + column] + right[offset + column];
+            residual[offset + column] = value;
+            sum_squares += value * value;
+        }
+        for (int reduction_offset = 16; reduction_offset > 0; reduction_offset /= 2)
+            sum_squares += __shfl_down_sync(0xffffffff, sum_squares, reduction_offset);
+        if (lane == 0) warp_sums[warp] = sum_squares;
+        __syncthreads();
+        if (warp == 0) {
+            sum_squares = lane < warp_count ? warp_sums[lane] : 0.0f;
+            for (int reduction_offset = 16; reduction_offset > 0; reduction_offset /= 2)
+                sum_squares += __shfl_down_sync(0xffffffff, sum_squares, reduction_offset);
+            if (lane == 0)
+                warp_sums[0] = rsqrtf(sum_squares / static_cast<float>(row_size) + epsilon);
+        }
+        __syncthreads();
+        const float inverse_rms = warp_sums[0];
+        for (std::int64_t column = threadIdx.x; column < row_size; column += blockDim.x)
+            normalized[offset + column] =
+                residual[offset + column] * inverse_rms * weight[column];
+        __syncthreads();
+    }
+}
+
 __device__ float apply_elementwise(
     float a,
     float b,
@@ -909,6 +950,39 @@ std::optional<Tensor> CudaDeviceImpl::try_scaled_dot_product_attention(
         query_length, key_length, query.shape()[3], is_causal);
     check_cuda(cudaGetLastError(), "failed to launch CUDA scaled_dot_product_attention kernel");
     return output;
+}
+
+std::optional<std::pair<Tensor, Tensor>> CudaDeviceImpl::try_add_rms_norm(
+    const Tensor& left,
+    const Tensor& right,
+    const Tensor& weight,
+    float epsilon) const {
+    if (left.dtype() != DType::Float32 || right.dtype() != DType::Float32 ||
+        weight.dtype() != DType::Float32 || left.shape() != right.shape() ||
+        left.ndim() == 0 || weight.shape() != Shape{left.shape().back()} ||
+        left.device() != Device::cuda(device_index_) || right.device() != left.device() ||
+        weight.device() != left.device() || !left.is_contiguous() ||
+        !right.is_contiguous() || !weight.is_contiguous()) {
+        return std::nullopt;
+    }
+    Tensor residual = empty(left.shape(), DType::Float32);
+    Tensor normalized = empty(left.shape(), DType::Float32);
+    if (left.numel() == 0) return std::pair{residual, normalized};
+    auto left_storage = ensure_storage(left.storage());
+    auto right_storage = ensure_storage(right.storage());
+    auto weight_storage = ensure_storage(weight.storage());
+    const auto row_size = left.shape().back();
+    const auto row_count = left.numel() / row_size;
+    const auto blocks = static_cast<unsigned>(
+        std::min<std::int64_t>(row_count, max_elementwise_blocks_));
+    add_rms_norm_f32<<<blocks, 256, 0, stream(context_)>>>(
+        data(require_cuda_storage(*left_storage)) + left.storage_offset(),
+        data(require_cuda_storage(*right_storage)) + right.storage_offset(),
+        data(require_cuda_storage(*weight_storage)) + weight.storage_offset(),
+        data(require_cuda_storage(*residual.storage())),
+        data(require_cuda_storage(*normalized.storage())), row_count, row_size, epsilon);
+    check_cuda(cudaGetLastError(), "failed to launch CUDA add_rms_norm kernel");
+    return std::pair{residual, normalized};
 }
 
 Tensor CudaDeviceImpl::add(const Tensor& a, const Tensor& b) const {

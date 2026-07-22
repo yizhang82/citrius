@@ -36,6 +36,7 @@ public:
     Tensor forward(const Tensor& input) override;
     Tensor& weight();
     const Tensor& weight() const;
+    float epsilon() const;
 
 private:
     std::int64_t hidden_size_;

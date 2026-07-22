@@ -60,6 +60,11 @@ public:
         const Tensor& value,
         const Tensor& mask,
         bool is_causal) const override;
+    std::optional<std::pair<Tensor, Tensor>> try_add_rms_norm(
+        const Tensor& left,
+        const Tensor& right,
+        const Tensor& weight,
+        float epsilon) const override;
     Tensor broadcast_elementwise(
         const Tensor& a,
         const Tensor& b,

@@ -689,6 +689,45 @@ TEST(CudaDeviceTest, FusedRmsNormRopeMatchesPortableReference) {
         EXPECT_NEAR(actual[index], expected[index], 3e-6f);
 }
 
+TEST(CudaDeviceTest, FusedAddRmsNormMatchesPortableReference) {
+    std::string error;
+    auto device = make_cuda_device(&error);
+    if (!device)
+        GTEST_SKIP() << error;
+    std::vector<float> left_values(3 * 128);
+    std::vector<float> right_values(3 * 128);
+    std::vector<float> weight_values(128);
+    for (std::size_t index = 0; index < left_values.size(); ++index) {
+        left_values[index] = static_cast<float>(static_cast<int>(index % 19) - 9) / 4.0f;
+        right_values[index] = static_cast<float>(static_cast<int>(index % 13) - 6) / 5.0f;
+    }
+    for (std::size_t index = 0; index < weight_values.size(); ++index)
+        weight_values[index] = 0.5f + static_cast<float>(index % 9) / 10.0f;
+    const citrius::Tensor left(left_values, {3, 128}, citrius::Device::cuda());
+    const citrius::Tensor right(right_values, {3, 128}, citrius::Device::cuda());
+    const citrius::Tensor weight(weight_values, {128}, citrius::Device::cuda());
+    const auto optimized = device->try_add_rms_norm(left, right, weight, 1e-6f);
+    ASSERT_TRUE(optimized.has_value());
+    const auto residual = values(optimized->first);
+    const auto normalized = values(optimized->second);
+    for (std::int64_t row = 0; row < 3; ++row) {
+        float sum_squares = 0.0f;
+        for (std::int64_t column = 0; column < 128; ++column) {
+            const auto index = static_cast<std::size_t>(row * 128 + column);
+            const float expected_residual = left_values[index] + right_values[index];
+            EXPECT_FLOAT_EQ(residual[index], expected_residual);
+            sum_squares += expected_residual * expected_residual;
+        }
+        const float inverse_rms = 1.0f / std::sqrt(sum_squares / 128.0f + 1e-6f);
+        for (std::int64_t column = 0; column < 128; ++column) {
+            const auto index = static_cast<std::size_t>(row * 128 + column);
+            EXPECT_NEAR(normalized[index], residual[index] * inverse_rms *
+                                               weight_values[static_cast<std::size_t>(column)],
+                        3e-6f);
+        }
+    }
+}
+
 TEST(CudaDeviceTest, LastDimensionReductionsHandleIrregularQwenSizedRows) {
     std::string error;
     auto device = make_cuda_device(&error);
