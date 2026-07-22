@@ -54,7 +54,12 @@ def main():
     
     print("Initializing model from config...")
     # Initialize the model structure with random weights
-    model = AutoModelForCausalLM.from_config(config, trust_remote_code=True)
+    model = AutoModelForCausalLM.from_config(
+        config,
+        trust_remote_code=True,
+        attn_implementation="sdpa",
+    )
+    print(f"Attention implementation: {model.config._attn_implementation}")
     
     print(f"Loading tensor weights from: {tensor_path}")
     state_dict = load_file(tensor_path)
