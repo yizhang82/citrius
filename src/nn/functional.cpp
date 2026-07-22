@@ -11,6 +11,9 @@
 #ifdef CITRIUS_HAS_CUDA
 #include "impl/cuda_device.h"
 #endif
+#ifdef CITRIUS_HAS_METAL
+#include "impl/metal_device.h"
+#endif
 
 #include <cmath>
 #include <stdexcept>
@@ -95,6 +98,16 @@ Tensor layer_norm(
 }
 
 Tensor softmax(const Tensor& tensor, std::int64_t dim) {
+    ENSURE_TENSOR_DEFINED(tensor);
+    ENSURE_TENSOR_DTYPE(tensor, DType::Float32);
+    if (dim < 0) dim += static_cast<std::int64_t>(tensor.ndim());
+    if (dim < 0 || dim >= static_cast<std::int64_t>(tensor.ndim()))
+        throw std::out_of_range("softmax dimension is out of range");
+#ifdef CITRIUS_HAS_METAL
+    if (tensor.device().type == DeviceType::Metal &&
+        dim == static_cast<std::int64_t>(tensor.ndim()) - 1 && tensor.is_contiguous())
+        return impl::MetalDeviceImpl().softmax_last_dimension(tensor);
+#endif
     const Tensor shifted = sub(tensor, citrius::max(tensor, dim, true));
     const Tensor exponentials = citrius::exp(shifted);
     return div(exponentials, sum(exponentials, dim, true));

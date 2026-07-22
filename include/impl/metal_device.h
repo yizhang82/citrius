@@ -76,6 +76,7 @@ public:
         MetalReductionOperation operation) const;
     Tensor argmax(const Tensor& tensor, std::int64_t dimension, bool keepdim) const;
     Tensor argmax(const Tensor& tensor) const;
+    Tensor softmax_last_dimension(const Tensor& tensor) const;
     TensorStoragePtr ensure_storage(
         const TensorStoragePtr& storage,
         ConversionPolicy policy = ConversionPolicy::Error) const override;

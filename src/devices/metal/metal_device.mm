@@ -307,6 +307,44 @@ kernel void argmax_f32(
     out[id] = best_index;
 }
 
+kernel void softmax_last_dimension_f32(
+    device const float* input [[buffer(0)]],
+    device float* out [[buffer(1)]],
+    constant uint2& dims [[buffer(2)]],
+    uint row [[threadgroup_position_in_grid]],
+    uint lane [[thread_position_in_threadgroup]],
+    uint lanes [[threads_per_threadgroup]]) {
+    if (row >= dims.x) return;
+    const uint width = dims.y;
+    const uint base = row * width;
+    threadgroup float scratch[256];
+    float local_max = -INFINITY;
+    for (uint col = lane; col < width; col += lanes)
+        local_max = max(local_max, input[base + col]);
+    scratch[lane] = local_max;
+    threadgroup_barrier(mem_flags::mem_threadgroup);
+    for (uint stride = lanes / 2; stride > 0; stride /= 2) {
+        if (lane < stride) scratch[lane] = max(scratch[lane], scratch[lane + stride]);
+        threadgroup_barrier(mem_flags::mem_threadgroup);
+    }
+    const float row_max = scratch[0];
+    float local_sum = 0.0f;
+    for (uint col = lane; col < width; col += lanes) {
+        const float value = exp(input[base + col] - row_max);
+        out[base + col] = value;
+        local_sum += value;
+    }
+    scratch[lane] = local_sum;
+    threadgroup_barrier(mem_flags::mem_threadgroup);
+    for (uint stride = lanes / 2; stride > 0; stride /= 2) {
+        if (lane < stride) scratch[lane] += scratch[lane + stride];
+        threadgroup_barrier(mem_flags::mem_threadgroup);
+    }
+    const float inverse_sum = 1.0f / scratch[0];
+    for (uint col = lane; col < width; col += lanes)
+        out[base + col] *= inverse_sum;
+}
+
 kernel void matmul_f32(
     device const float* a [[buffer(0)]],
     device const float* b [[buffer(1)]],
@@ -535,6 +573,7 @@ public:
         gather_pipeline = pipeline("gather_rows_kernel");
         reduce_pipeline = pipeline("reduce_f32");
         argmax_pipeline = pipeline("argmax_f32");
+        softmax_pipeline = pipeline("softmax_last_dimension_f32");
     }
 
     id<MTLComputePipelineState> pipeline(const char* name) {
@@ -712,6 +751,7 @@ public:
     id<MTLComputePipelineState> gather_pipeline = nil;
     id<MTLComputePipelineState> reduce_pipeline = nil;
     id<MTLComputePipelineState> argmax_pipeline = nil;
+    id<MTLComputePipelineState> softmax_pipeline = nil;
     mutable std::mutex mps_cache_mutex;
     mutable std::unordered_map<std::string, MPSMatrixMultiplication*>
         multiplication_cache;
@@ -1103,6 +1143,40 @@ Tensor MetalDeviceImpl::argmax(const Tensor& tensor) const {
     Tensor flattened({packed.numel()}, {1}, packed.storage_offset(), packed.dtype(),
                      packed.device(), packed.storage());
     return argmax(flattened, 0, false);
+}
+
+Tensor MetalDeviceImpl::softmax_last_dimension(const Tensor& tensor) const {
+    require_defined(tensor, "input");
+    require_float32(tensor, "input");
+    if (!tensor.is_contiguous() || tensor.ndim() == 0)
+        throw std::invalid_argument("Metal softmax requires contiguous non-scalar input");
+    const auto width = tensor.shape().back();
+    if (width <= 0) throw std::invalid_argument("softmax dimension cannot be empty");
+    const auto rows = tensor.numel() / width;
+    if (rows > UINT32_MAX || width > UINT32_MAX)
+        throw std::invalid_argument("Metal softmax dimensions are too large");
+    Tensor output = empty(tensor.shape(), DType::Float32);
+    const auto& input_storage = require_metal_storage(*tensor.storage());
+    auto& output_storage = require_metal_storage(*output.storage());
+    std::array<uint32_t, 2> dims = {
+        static_cast<uint32_t>(rows), static_cast<uint32_t>(width)};
+    id<MTLCommandBuffer> command_buffer = [impl_->queue commandBuffer];
+    id<MTLComputeCommandEncoder> encoder = [command_buffer computeCommandEncoder];
+    [encoder setComputePipelineState:impl_->softmax_pipeline];
+    [encoder setBuffer:buffer_from_storage(input_storage)
+        offset:static_cast<NSUInteger>(tensor.storage_offset() * sizeof(float)) atIndex:0];
+    [encoder setBuffer:buffer_from_storage(output_storage) offset:0 atIndex:1];
+    [encoder setBytes:dims.data() length:sizeof(dims) atIndex:2];
+    const NSUInteger lanes = std::min<NSUInteger>(
+        256, impl_->softmax_pipeline.maxTotalThreadsPerThreadgroup);
+    [encoder dispatchThreadgroups:MTLSizeMake(static_cast<NSUInteger>(rows), 1, 1)
+        threadsPerThreadgroup:MTLSizeMake(lanes, 1, 1)];
+    [encoder endEncoding];
+    [command_buffer commit];
+    [command_buffer waitUntilCompleted];
+    if (command_buffer.status == MTLCommandBufferStatusError)
+        throw std::runtime_error("Metal softmax execution failed");
+    return output;
 }
 
 Tensor MetalDeviceImpl::matmul(const Tensor& a, const Tensor& b) const {
