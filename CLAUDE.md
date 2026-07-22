@@ -316,11 +316,13 @@ build\Release\decoder_chat.exe `
   --tokenizer "$qwenSnapshot" `
   --prompt "Who are you?" `
   --max-new-tokens 50 `
-  --device cuda
+  --device cuda `
+  --dtype bfloat16
 ```
 
-Use `--device cpu` for CPU execution. The CUDA command requires an existing build
-configured with `build.bat --cuda`.
+Use `--dtype float32`, `float16`, or `bfloat16` to select projection and embedding
+weight precision. Use `--device cpu` for CPU execution. The CUDA command requires
+an existing build configured with `build.bat --cuda`.
 
 Run the equivalent Hugging Face/PyTorch Qwen3-0.6B comparison with:
 

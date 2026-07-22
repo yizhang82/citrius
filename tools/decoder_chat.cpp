@@ -16,6 +16,7 @@ struct Options {
     std::string prompt = "Hello";
     std::int64_t max_new_tokens = 64;
     citrius::Device device = citrius::Device::cpu();
+    citrius::DType dtype = citrius::DType::Float32;
 };
 
 class DecoderBackend {
@@ -32,6 +33,7 @@ class Qwen3Backend final : public DecoderBackend {
     explicit Qwen3Backend(const Options& options) {
         citrius::models::Qwen3Config config;
         config.device = options.device;
+        config.dtype = options.dtype;
         model_ = std::make_unique<citrius::models::Qwen3ForCausalLM>(config);
         citrius::models::load_qwen3_weights(*model_, options.checkpoint);
     }
@@ -88,7 +90,8 @@ void usage() {
               << "  --tokenizer DIR     Directory containing vocab.json and merges.txt\n"
               << "  --prompt TEXT       User prompt (default: Hello)\n"
               << "  --max-new-tokens N  Tokens to generate (default: 64)\n"
-              << "  --device cpu|cuda   Execution device (default: cpu)\n";
+              << "  --device cpu|cuda   Execution device (default: cpu)\n"
+              << "  --dtype TYPE        float32, float16, or bfloat16 (default: float32)\n";
 }
 
 Options parse_options(int argc, char** argv) {
@@ -110,6 +113,18 @@ Options parse_options(int argc, char** argv) {
             options.prompt = value();
         else if (argument == "--max-new-tokens")
             options.max_new_tokens = std::stoll(value());
+        else if (argument == "--dtype") {
+            const std::string dtype = value();
+            if (dtype == "float32")
+                options.dtype = citrius::DType::Float32;
+            else if (dtype == "float16")
+                options.dtype = citrius::DType::Float16;
+            else if (dtype == "bfloat16")
+                options.dtype = citrius::DType::BFloat16;
+            else
+                throw std::invalid_argument(
+                    "dtype must be float32, float16, or bfloat16");
+        }
         else if (argument == "--device") {
             const std::string device = value();
             if (device == "cpu")
