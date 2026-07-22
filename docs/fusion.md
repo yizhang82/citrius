@@ -25,6 +25,8 @@ The fusion system should:
 - Provide strict diagnostics proving which implementation executed.
 - Support differential testing against eager and handwritten execution.
 - Keep a path open for CPU and Metal without requiring all backends initially.
+- Keep symbolic execution orthogonal to autograd state.
+- Allow the same tensor IR to represent compiled forward and backward graphs.
 
 The initial implementation is not intended to generate general GEMM kernels,
 support data-dependent control flow, or transparently delay every eager tensor
@@ -129,6 +131,69 @@ return eager_add(left, right);
 Static C++ control flow is resolved during tracing. Operations that inspect
 tensor data, such as `item()` used in a branch condition, should initially be
 rejected during capture.
+
+## Tensor representation
+
+Symbolic execution should not use a `SymbolicTensor` subclass or virtual
+`Tensor` methods. Citrius passes and returns tensors by value, so subclassing
+would introduce slicing and force pointer-based polymorphism through the public
+API. Instead, `Tensor` remains a small value handle around shared tensor
+identity:
+
+```cpp
+class Tensor {
+public:
+    bool defined() const;
+    bool is_eager() const;
+    bool is_symbolic() const;
+
+private:
+    std::shared_ptr<impl::TensorImpl> impl_;
+};
+```
+
+`TensorImpl` separates the execution payload from optional differentiation
+state:
+
+```cpp
+struct TensorImpl {
+    Shape shape;
+    Strides strides;
+    std::int64_t storage_offset = 0;
+    DType dtype = DType::Float32;
+    Device device;
+
+    TensorPayload payload;
+    std::shared_ptr<AutogradMeta> autograd;
+    std::shared_ptr<VersionCounter> version;
+};
+
+using TensorPayload = std::variant<
+    EagerTensorPayload,
+    SymbolicTensorPayload>;
+
+struct EagerTensorPayload {
+    TensorStoragePtr storage;
+};
+
+struct SymbolicTensorPayload {
+    GraphValue value;
+};
+```
+
+An undefined tensor has a null `impl_`. Most inference tensors leave
+`autograd == nullptr`, avoiding unnecessary differentiation metadata.
+
+A copied tensor handle shares its `TensorImpl`. A newly created view receives a
+new `TensorImpl`, shares eager storage when applicable, and records a view
+relationship. An explicit deep copy receives new storage and new identity.
+`detach()` shares storage and versioning but creates a new identity without a
+gradient edge.
+
+Symbolic tensors have metadata and a graph value but no storage. Operations
+that require host data or a memory handle, such as `item()` and direct storage
+access, reject symbolic values. View operations transform symbolic layout
+metadata and record view nodes rather than materializing memory.
 
 ## High-level tensor IR
 
@@ -427,6 +492,188 @@ struct FusionStats {
 };
 ```
 
+## Autograd integration
+
+Symbolic representation and differentiation state are independent axes. An
+eager or symbolic tensor may require gradients, and neither concern should
+produce another tensor subclass or payload alternative.
+
+### Eager autograd metadata
+
+Autograd metadata should contain only differentiation-specific state:
+
+```cpp
+struct AutogradMeta {
+    bool requires_grad = false;
+    bool retain_grad = false;
+    bool is_leaf = false;
+
+    Tensor gradient;
+    Edge gradient_edge;
+
+    std::weak_ptr<TensorImpl> view_base;
+    std::shared_ptr<ViewInfo> view_info;
+    std::vector<BackwardHook> hooks;
+};
+
+struct Edge {
+    std::shared_ptr<BackwardNode> function;
+    std::size_t input_index = 0;
+};
+```
+
+An eager differentiable operation executes normally and attaches a backward
+node only when gradient mode is enabled and at least one input requires a
+gradient. Leaf tensors use gradient accumulators rather than producer nodes.
+
+Thread-local `NoGradGuard` and `InferenceModeGuard` should be distinct.
+`NoGradGuard` disables recording while retaining ordinary tensor and version
+behavior. `InferenceModeGuard` may omit autograd metadata and version tracking
+where safe.
+
+### Operation definitions
+
+Operation semantics should be registered once and reused by capture, fusion,
+and graph differentiation:
+
+```cpp
+struct OperationDefinition {
+    InferFunction infer;
+    DecomposeFunction decompose;
+    DifferentiateFunction differentiate;
+    FusionClass fusion_class;
+    AliasBehavior alias_behavior;
+};
+```
+
+The differentiation callback builds ordinary tensor IR. For multiplication:
+
+```text
+%grad_left_raw  = multiply %grad_output, %right
+%grad_right_raw = multiply %grad_output, %left
+%grad_left      = sum_to_shape %grad_left_raw, shape(%left)
+%grad_right     = sum_to_shape %grad_right_raw, shape(%right)
+```
+
+This lets forward and backward graphs use the same inference, canonicalization,
+fusion, lowering, and code-generation machinery.
+
+### Ahead-of-time autograd
+
+Training compilation should differentiate the captured forward graph before
+lowering:
+
+```text
+captured forward graph
+        |
+        +-- determine required gradients
+        +-- determine values required by backward
+        v
+differentiate tensor IR
+        |
+        +-- optimized forward graph
+        +-- optimized backward graph
+        +-- saved-value and recomputation plan
+        v
+joint fusion, lowering, and memory planning
+```
+
+A compiled training artifact contains:
+
+```cpp
+struct CompiledTrainingPlan {
+    ExecutablePlan forward;
+    ExecutablePlan backward;
+    SavedValuePlan saved_values;
+};
+```
+
+Calling a compiled forward plan creates an invocation context containing the
+saved values and parameter bindings required by its matching backward plan.
+Forward-only compilation omits this machinery.
+
+### Saved values and recomputation
+
+Derivative rules declare whether they need inputs, outputs, or metadata:
+
+```cpp
+enum class SaveKind {
+    Input,
+    Output,
+    Metadata,
+};
+```
+
+The compiler may save a value, recompute it, compress it, or derive it from
+another retained value. Initial behavior should always save required values;
+recomputation and activation checkpointing are later optimizations.
+
+Backward lifetimes participate in memory planning. A saved forward value is
+released after its final backward use, and gradient buffers may reuse slots
+when their lifetimes do not overlap.
+
+### Views, mutation, and versioning
+
+Views and their bases share a version counter. Any in-place write increments
+it. A saved tensor records the expected version and backward rejects execution
+if the value was modified after being saved:
+
+```cpp
+struct SavedTensor {
+    Tensor tensor;
+    std::uint64_t expected_version = 0;
+};
+```
+
+The first autograd and compiler implementations should remain functional and
+support little or no mutation. If general in-place APIs are added, capture must
+functionalize them into new SSA values before optimization.
+
+View derivative rules apply inverse layout transformations where possible:
+
+```text
+reshape     -> reshape gradient to the input shape
+transpose   -> apply the inverse transpose
+expand      -> sum gradient to the input shape
+slice       -> scatter gradient into an input-shaped zero tensor
+contiguous  -> restore the logical input layout
+```
+
+The alias analysis used for fusion must be shared with view autograd and
+functionalization.
+
+### Backward fusion
+
+Backward graphs often contain larger elementwise regions than inference graphs.
+For SwiGLU, one generated backward kernel can read `gate`, `up`, and
+`grad_output`, then write both `grad_gate` and `grad_up` without materializing
+sigmoid, SiLU, or derivative intermediates.
+
+Multiple gradient contributions initially form explicit additions in the IR.
+The compiler may fuse these additions with their producers or plan a dedicated
+accumulation buffer. The initial scheduler should execute one backward graph on
+one device stream and avoid concurrent accumulation and atomics.
+
+### Numeric policy
+
+Autograd and fusion must distinguish storage, computation, accumulation,
+output, and gradient-accumulation dtypes:
+
+```cpp
+struct NumericPolicy {
+    DType input_dtype;
+    DType compute_dtype;
+    DType accumulation_dtype;
+    DType output_dtype;
+    DType gradient_accumulation_dtype;
+};
+```
+
+For mixed-precision training, BF16 activations and weights may use FP32 GEMM and
+gradient accumulation, while losses, master weights, and optimizer state remain
+FP32. These choices must be explicit in IR and cache keys rather than inferred
+from a single tensor dtype.
+
 ## Qwen3 integration and testing
 
 Qwen3 is the primary integration workload because it already has handwritten
@@ -476,20 +723,157 @@ planning, layout propagation, and KV caching are likely more valuable than
 generic elementwise fusion alone. The fusion compiler nevertheless provides a
 systematic way to select and test those implementations.
 
-## Development sequence
+## Work items
 
-1. Add `FusionMode`, scoped overrides, strict generated mode, and statistics.
-2. Add canonical primitive decompositions for the existing compound operations.
-3. Add explicit module or callable capture and a high-level tensor graph.
-4. Replay captured graphs eagerly to validate capture and shape inference.
-5. Implement elementwise fusion grouping and scalar-expression kernel IR.
-6. Emit grid-stride CUDA kernels and compile them through NVRTC.
-7. Add canonical cache keys, an in-memory compiled-kernel cache, and diagnostics.
-8. Differential-test generated SwiGLU in isolation and through tiny Qwen3.
-9. Add block-reduction IR and generated residual-add plus RMSNorm.
-10. Add GEMM implementation selection, packed projections, and epilogues.
-11. Add lifetime analysis and reusable intermediate-buffer planning.
-12. Extend the stable kernel IR to Metal and CPU implementations as justified.
+The checkboxes below track implementation rather than design completion. Items
+are ordered so each milestone leaves a testable vertical slice.
+
+### Tensor identity, views, and modes
+
+- [ ] Introduce shared `TensorImpl` while preserving existing public value
+  semantics and shallow-copy behavior.
+- [ ] Represent eager and symbolic execution with a tagged `TensorPayload`.
+- [ ] Define exact copy, deep-copy, view, and detach semantics in tests.
+- [ ] Add shared version counters for storage aliases and views.
+- [ ] Add `AutogradMeta` as an optional allocation.
+- [ ] Add thread-local gradient, inference, capture, and fusion modes with scoped
+  guards.
+- [ ] Reject storage access, `item()`, and data-dependent control flow for
+  symbolic tensors with actionable errors.
+
+### Operation semantics and primitive execution
+
+- [ ] Add an operation-definition registry containing inference,
+  decomposition, differentiation, fusion, and alias behavior.
+- [ ] Add canonical primitive decompositions for SwiGLU, RMSNorm,
+  residual-add plus RMSNorm, RMSNorm plus RoPE, and attention.
+- [ ] Prevent recursive redispatch while executing or recording a
+  decomposition.
+- [ ] Implement `FusionMode::Disabled` and verify it executes only primitives.
+- [ ] Implement `FusionMode::Handwritten` through the existing `try_*` hooks.
+- [ ] Add fusion statistics and strict no-fallback enforcement.
+
+### Graph capture and tensor IR
+
+- [ ] Add graph, value, operation, parameter, and symbolic-shape types.
+- [ ] Import eager module parameters into a capture as named graph parameters.
+- [ ] Route top-level operations and view operations through the active capture
+  context.
+- [ ] Add explicit `compile(callable, examples, options)` and
+  `compile(module, examples, options)` entry points.
+- [ ] Validate graph ownership and reject mixing unrelated symbolic graphs.
+- [ ] Implement shape, dtype, device, layout, and alias inference.
+- [ ] Replay captured graphs eagerly as the first executable-plan backend.
+- [ ] Add graph dumps and structural capture tests.
+
+### Fusion and kernel IR
+
+- [ ] Classify elementwise, reduction, view, library, and opaque operations.
+- [ ] Implement conservative producer-consumer elementwise fusion.
+- [ ] Fold views into consumer indexing where layouts permit.
+- [ ] Add legality checks for aliases, external uses, layouts, and devices.
+- [ ] Add a scalar-expression kernel IR with grid-stride scheduling.
+- [ ] Lower broadcasted Float32 elementwise groups to kernel IR.
+- [ ] Add Float16 and BFloat16 loads, stores, and conversions.
+- [ ] Add multiple-output generated kernels.
+- [ ] Add block-reduction, shared-memory, barrier, and broadcast IR.
+
+### CUDA runtime compilation
+
+- [ ] Add an optional NVRTC build dependency and runtime capability check.
+- [ ] Emit self-contained CUDA C++ from elementwise kernel IR.
+- [ ] Compile generated source to PTX and preserve source and compiler logs on
+  failure.
+- [ ] Load PTX through the CUDA Driver API and own module lifetimes safely.
+- [ ] Launch generated kernels on the shared `CudaExecutionContext` stream.
+- [ ] Create canonical IR hashes and architecture-aware cache keys.
+- [ ] Add a thread-safe in-memory compiled-kernel cache.
+- [ ] Test cache hits, concurrent compilation, compilation failures, and module
+  cleanup.
+
+### Qwen3 fusion validation
+
+- [ ] Generate SwiGLU from primitive `silu` and multiply operations.
+- [ ] Compare disabled, handwritten, and generated SwiGLU over boundary sizes
+  and supported dtypes.
+- [ ] Require generated execution and assert fusion statistics in tests.
+- [ ] Run a deterministic tiny Qwen3 MLP in all three fusion modes.
+- [ ] Generate residual-add plus RMSNorm with both required outputs.
+- [ ] Compare generated reductions using documented absolute and relative
+  tolerances.
+- [ ] Run the full deterministic tiny Qwen3 model in all fusion modes and
+  compare logits and selected tokens.
+- [ ] Add a short checkpoint-backed greedy decoding comparison.
+
+### GEMM, layout, and memory optimization
+
+- [ ] Add backend selection for mixed-input and mixed-output GEMMs.
+- [ ] Evaluate cuBLASLt or CUTLASS epilogues for residual addition, activation,
+  and output conversion.
+- [ ] Recognize and pack QKV projections.
+- [ ] Recognize and pack gate/up projections.
+- [ ] Propagate layouts through reshape, transpose, permute, and GEMM consumers.
+- [ ] Add value lifetime analysis and reusable intermediate-buffer slots.
+- [ ] Report materializations, allocated bytes, and peak temporary memory in
+  compilation diagnostics.
+- [ ] Add performance gates comparing compiled execution with current
+  handwritten Qwen3 execution.
+
+### Eager autograd foundation
+
+- [ ] Add `requires_grad`, leaf state, gradient edges, and leaf accumulation.
+- [ ] Implement `NoGradGuard` and `InferenceModeGuard` semantics.
+- [ ] Implement a backward engine with dependency counting and one-stream CUDA
+  scheduling.
+- [ ] Add eager backward rules for add, multiply, matmul, sum, mean, unary
+  operations, reshape, transpose, and broadcast.
+- [ ] Implement `sum_to_shape` and the initial view inverse operations.
+- [ ] Add saved tensors with version validation.
+- [ ] Test repeated backward, retained graphs, detached tensors, views, and
+  illegal mutation.
+
+### Compiled autograd
+
+- [ ] Build backward tensor IR using registered differentiation rules.
+- [ ] Determine forward values and metadata required by backward.
+- [ ] Produce paired forward and backward executable plans.
+- [ ] Bind each forward invocation to its saved-value backward context.
+- [ ] Fuse elementwise backward regions and generate multiple gradient outputs.
+- [ ] Plan saved-value and gradient-buffer lifetimes jointly.
+- [ ] Add compiled gradient accumulation for shared graph inputs and parameters.
+- [ ] Add training state, gradient requirements, and numeric policy to
+  specialization and cache keys.
+- [ ] Differential-test eager and compiled forward values and gradients.
+- [ ] Add gradcheck-style finite-difference tests for generated operations.
+
+### Later work
+
+- [ ] Add save-versus-recompute analysis and activation checkpointing.
+- [ ] Functionalize supported in-place operations during capture.
+- [ ] Add higher-order gradient support deliberately rather than implicitly.
+- [ ] Add mixed-precision training, FP32 master weights, and loss scaling.
+- [ ] Extend the stable kernel IR to Metal.
+- [ ] Select an interpreted, template-based, or JIT CPU kernel-IR backend.
+- [ ] Reevaluate LLVM or MLIR only after the internal IR requirements stabilize.
+
+## Milestone gates
+
+The first generated-inference milestone is complete when a captured SwiGLU
+region compiles through NVRTC, executes without fallback, hits the compilation
+cache on its second invocation, and matches eager and handwritten results.
+
+The first generated-reduction milestone is complete when residual-add plus
+RMSNorm produces both outputs correctly across boundary sizes and runs inside a
+tiny Qwen3 model.
+
+The first compiled-autograd milestone is complete when a captured elementwise
+function produces forward values and first-order gradients matching eager
+autograd, with the backward elementwise region executed as a generated kernel.
+
+The Qwen compiler milestone is complete when a deterministic tiny Qwen3 model
+runs in disabled, handwritten, and generated modes with matching selected
+tokens, no unintended eager fallbacks, bounded numerical error, and recorded
+compile-time, memory, and steady-state performance results.
 
 This sequence provides a complete capture-to-execution vertical slice before
 adding complex reductions or adopting a heavyweight compiler framework. An
