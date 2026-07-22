@@ -10,9 +10,11 @@
 #include <array>
 #include <cstdint>
 #include <climits>
+#include <functional>
 #include <stdexcept>
 #include <string>
 #include <utility>
+#include <vector>
 
 namespace citrius::impl {
 
@@ -42,6 +44,103 @@ kernel void sub_f32(
     if (id < count) {
         out[id] = a[id] - b[id];
     }
+}
+
+inline float apply_binary(float a, float b, uint operation) {
+    switch (operation) {
+        case 0: return a + b;
+        case 1: return a - b;
+        case 2: return a * b;
+        case 3: return a / b;
+        default: return max(a, b);
+    }
+}
+
+kernel void broadcast_elementwise_f32(
+    device const float* a [[buffer(0)]],
+    device const float* b [[buffer(1)]],
+    device float* out [[buffer(2)]],
+    device const long* metadata [[buffer(3)]],
+    constant uint4& config [[buffer(4)]],
+    uint id [[thread_position_in_grid]]) {
+    const uint count = config.x;
+    const uint rank = config.y;
+    const uint a_rank = config.z;
+    const uint b_rank = config.w;
+    if (id >= count) return;
+    device const long* shape = metadata;
+    device const long* output_strides = shape + rank;
+    device const long* a_shape = output_strides + rank;
+    device const long* a_strides = a_shape + a_rank;
+    device const long* b_shape = a_strides + a_rank;
+    device const long* b_strides = b_shape + b_rank;
+    device const long* operation = b_strides + b_rank;
+    long a_index = 0;
+    long b_index = 0;
+    for (uint axis = 0; axis < rank; ++axis) {
+        const long coordinate = (long(id) / output_strides[axis]) % shape[axis];
+        const uint a_padding = rank - a_rank;
+        const uint b_padding = rank - b_rank;
+        if (axis >= a_padding && a_shape[axis - a_padding] != 1)
+            a_index += coordinate * a_strides[axis - a_padding];
+        if (axis >= b_padding && b_shape[axis - b_padding] != 1)
+            b_index += coordinate * b_strides[axis - b_padding];
+    }
+    out[id] = apply_binary(a[a_index], b[b_index], uint(*operation));
+}
+
+kernel void scalar_elementwise_f32(
+    device const float* input [[buffer(0)]],
+    device float* out [[buffer(1)]],
+    constant uint& count [[buffer(2)]],
+    constant float& scalar [[buffer(3)]],
+    constant uint2& config [[buffer(4)]],
+    uint id [[thread_position_in_grid]]) {
+    if (id >= count) return;
+    const float a = config.y ? scalar : input[id];
+    const float b = config.y ? input[id] : scalar;
+    out[id] = apply_binary(a, b, config.x);
+}
+
+kernel void unary_f32(
+    device const float* input [[buffer(0)]],
+    device float* out [[buffer(1)]],
+    constant uint& count [[buffer(2)]],
+    constant uint& operation [[buffer(3)]],
+    constant float& argument [[buffer(4)]],
+    uint id [[thread_position_in_grid]]) {
+    if (id >= count) return;
+    switch (operation) {
+        case 0: out[id] = exp(input[id]); break;
+        case 1: out[id] = sqrt(input[id]); break;
+        default: out[id] = pow(input[id], argument); break;
+    }
+}
+
+kernel void masked_fill_f32(
+    device const float* input [[buffer(0)]],
+    device const uchar* mask [[buffer(1)]],
+    device float* out [[buffer(2)]],
+    device const long* metadata [[buffer(3)]],
+    constant uint3& config [[buffer(4)]],
+    constant float& value [[buffer(5)]],
+    uint id [[thread_position_in_grid]]) {
+    const uint count = config.x;
+    const uint rank = config.y;
+    const uint mask_rank = config.z;
+    if (id >= count) return;
+    device const long* shape = metadata;
+    device const long* output_strides = shape + rank;
+    device const long* mask_shape = output_strides + rank;
+    device const long* mask_strides = mask_shape + mask_rank;
+    long mask_index = 0;
+    const uint padding = rank - mask_rank;
+    for (uint axis = 0; axis < rank; ++axis) {
+        const long coordinate = (long(id) / output_strides[axis]) % shape[axis];
+        if (axis >= padding && mask_shape[axis - padding] != 1)
+            mask_index += coordinate * mask_strides[axis - padding];
+    }
+    out[id] = mask[mask_index] ? value : input[id];
 }
 
 kernel void matmul_f32(
@@ -91,6 +190,26 @@ void require_2d_matmul_shapes(const Tensor& a, const Tensor& b) {
     }
 }
 
+Shape broadcast_shape(const Shape& left, const Shape& right) {
+    const std::size_t rank = std::max(left.size(), right.size());
+    Shape output(rank, 1);
+    for (std::size_t offset = 0; offset < rank; ++offset) {
+        const auto left_dim = offset < left.size() ? left[left.size() - 1 - offset] : 1;
+        const auto right_dim = offset < right.size() ? right[right.size() - 1 - offset] : 1;
+        if (left_dim != right_dim && left_dim != 1 && right_dim != 1)
+            throw std::invalid_argument("tensor shapes are not broadcastable");
+        output[rank - 1 - offset] = std::max(left_dim, right_dim);
+    }
+    return output;
+}
+
+Strides row_major_strides(const Shape& shape) {
+    Strides result(shape.size(), 1);
+    for (std::size_t index = shape.size(); index-- > 1;)
+        result[index - 1] = result[index] * shape[index];
+    return result;
+}
+
 id<MTLBuffer> buffer_from_storage(const MetalMemTensorStorageImpl& storage) {
     return (__bridge id<MTLBuffer>)storage.handle().ptr;
 }
@@ -122,6 +241,10 @@ public:
         add_pipeline = pipeline("add_f32");
         sub_pipeline = pipeline("sub_f32");
         matmul_pipeline = pipeline("matmul_f32");
+        broadcast_pipeline = pipeline("broadcast_elementwise_f32");
+        scalar_pipeline = pipeline("scalar_elementwise_f32");
+        unary_pipeline = pipeline("unary_f32");
+        masked_fill_pipeline = pipeline("masked_fill_f32");
     }
 
     id<MTLComputePipelineState> pipeline(const char* name) {
@@ -227,12 +350,34 @@ public:
         [command_buffer waitUntilCompleted];
     }
 
+    void run_1d(id<MTLComputePipelineState> state, NSUInteger count,
+                const std::function<void(id<MTLComputeCommandEncoder>)>& bind) const {
+        if (count > UINT32_MAX) throw std::invalid_argument("Metal element count is too large");
+        if (count == 0) return;
+        id<MTLCommandBuffer> command_buffer = [queue commandBuffer];
+        id<MTLComputeCommandEncoder> encoder = [command_buffer computeCommandEncoder];
+        [encoder setComputePipelineState:state];
+        bind(encoder);
+        const NSUInteger threads = std::min<NSUInteger>(state.maxTotalThreadsPerThreadgroup, 256);
+        [encoder dispatchThreads:MTLSizeMake(count, 1, 1)
+            threadsPerThreadgroup:MTLSizeMake(threads, 1, 1)];
+        [encoder endEncoding];
+        [command_buffer commit];
+        [command_buffer waitUntilCompleted];
+        if (command_buffer.status == MTLCommandBufferStatusError)
+            throw std::runtime_error("Metal kernel execution failed");
+    }
+
     id<MTLDevice> device = nil;
     id<MTLCommandQueue> queue = nil;
     id<MTLLibrary> library = nil;
     id<MTLComputePipelineState> add_pipeline = nil;
     id<MTLComputePipelineState> sub_pipeline = nil;
     id<MTLComputePipelineState> matmul_pipeline = nil;
+    id<MTLComputePipelineState> broadcast_pipeline = nil;
+    id<MTLComputePipelineState> scalar_pipeline = nil;
+    id<MTLComputePipelineState> unary_pipeline = nil;
+    id<MTLComputePipelineState> masked_fill_pipeline = nil;
 };
 
 MetalDeviceImpl::MetalDeviceImpl()
@@ -297,6 +442,126 @@ Tensor MetalDeviceImpl::sub(const Tensor& a, const Tensor& b) const {
         buffer_from_storage(output_storage),
         a.numel());
 
+    return output;
+}
+
+Tensor MetalDeviceImpl::broadcast_elementwise(
+    const Tensor& a, const Tensor& b, MetalElementwiseOperation operation) const {
+    require_defined(a, "left");
+    require_defined(b, "right");
+    require_float32(a, "left");
+    require_float32(b, "right");
+    ENSURE_TENSOR_DEVICE_MATCH_2(a, b);
+    const Shape output_shape = broadcast_shape(a.shape(), b.shape());
+    Tensor output = empty(output_shape, DType::Float32);
+    const auto& a_storage = require_metal_storage(*a.storage());
+    const auto& b_storage = require_metal_storage(*b.storage());
+    auto& output_storage = require_metal_storage(*output.storage());
+    const Strides output_strides = row_major_strides(output_shape);
+    std::vector<std::int64_t> metadata;
+    metadata.insert(metadata.end(), output_shape.begin(), output_shape.end());
+    metadata.insert(metadata.end(), output_strides.begin(), output_strides.end());
+    metadata.insert(metadata.end(), a.shape().begin(), a.shape().end());
+    metadata.insert(metadata.end(), a.strides().begin(), a.strides().end());
+    metadata.insert(metadata.end(), b.shape().begin(), b.shape().end());
+    metadata.insert(metadata.end(), b.strides().begin(), b.strides().end());
+    metadata.push_back(static_cast<std::int64_t>(operation));
+    id<MTLBuffer> metadata_buffer = [impl_->device newBufferWithBytes:metadata.data()
+        length:metadata.size() * sizeof(std::int64_t) options:MTLResourceStorageModeShared];
+    std::array<uint32_t, 4> config = {static_cast<uint32_t>(output.numel()),
+        static_cast<uint32_t>(output.ndim()), static_cast<uint32_t>(a.ndim()),
+        static_cast<uint32_t>(b.ndim())};
+    impl_->run_1d(impl_->broadcast_pipeline, static_cast<NSUInteger>(output.numel()),
+        [&](id<MTLComputeCommandEncoder> encoder) {
+            [encoder setBuffer:buffer_from_storage(a_storage)
+                offset:static_cast<NSUInteger>(a.storage_offset() * sizeof(float)) atIndex:0];
+            [encoder setBuffer:buffer_from_storage(b_storage)
+                offset:static_cast<NSUInteger>(b.storage_offset() * sizeof(float)) atIndex:1];
+            [encoder setBuffer:buffer_from_storage(output_storage) offset:0 atIndex:2];
+            [encoder setBuffer:metadata_buffer offset:0 atIndex:3];
+            [encoder setBytes:config.data() length:sizeof(config) atIndex:4];
+        });
+    return output;
+}
+
+Tensor MetalDeviceImpl::scalar_elementwise(
+    const Tensor& tensor, float scalar, MetalElementwiseOperation operation,
+    bool scalar_is_left) const {
+    require_defined(tensor, "input");
+    require_float32(tensor, "input");
+    if (!tensor.is_contiguous())
+        throw std::invalid_argument("Metal scalar elementwise requires contiguous input");
+    Tensor output = empty(tensor.shape(), tensor.dtype());
+    const auto& input_storage = require_metal_storage(*tensor.storage());
+    auto& output_storage = require_metal_storage(*output.storage());
+    const uint32_t count = static_cast<uint32_t>(tensor.numel());
+    std::array<uint32_t, 2> config = {static_cast<uint32_t>(operation), scalar_is_left ? 1u : 0u};
+    impl_->run_1d(impl_->scalar_pipeline, count, [&](id<MTLComputeCommandEncoder> encoder) {
+        [encoder setBuffer:buffer_from_storage(input_storage)
+            offset:static_cast<NSUInteger>(tensor.storage_offset() * sizeof(float)) atIndex:0];
+        [encoder setBuffer:buffer_from_storage(output_storage) offset:0 atIndex:1];
+        [encoder setBytes:&count length:sizeof(count) atIndex:2];
+        [encoder setBytes:&scalar length:sizeof(scalar) atIndex:3];
+        [encoder setBytes:config.data() length:sizeof(config) atIndex:4];
+    });
+    return output;
+}
+
+Tensor MetalDeviceImpl::unary(
+    const Tensor& tensor, MetalUnaryOperation operation, float argument) const {
+    require_defined(tensor, "input");
+    require_float32(tensor, "input");
+    if (!tensor.is_contiguous()) throw std::invalid_argument("Metal unary requires contiguous input");
+    Tensor output = empty(tensor.shape(), tensor.dtype());
+    const auto& input_storage = require_metal_storage(*tensor.storage());
+    auto& output_storage = require_metal_storage(*output.storage());
+    const uint32_t count = static_cast<uint32_t>(tensor.numel());
+    const uint32_t op = static_cast<uint32_t>(operation);
+    impl_->run_1d(impl_->unary_pipeline, count, [&](id<MTLComputeCommandEncoder> encoder) {
+        [encoder setBuffer:buffer_from_storage(input_storage)
+            offset:static_cast<NSUInteger>(tensor.storage_offset() * sizeof(float)) atIndex:0];
+        [encoder setBuffer:buffer_from_storage(output_storage) offset:0 atIndex:1];
+        [encoder setBytes:&count length:sizeof(count) atIndex:2];
+        [encoder setBytes:&op length:sizeof(op) atIndex:3];
+        [encoder setBytes:&argument length:sizeof(argument) atIndex:4];
+    });
+    return output;
+}
+
+Tensor MetalDeviceImpl::masked_fill(const Tensor& tensor, const Tensor& mask, float value) const {
+    require_defined(tensor, "input");
+    require_float32(tensor, "input");
+    ENSURE_TENSOR_DEFINED(mask);
+    ENSURE_TENSOR_DTYPE(mask, DType::Bool);
+    ENSURE_TENSOR_DEVICE_MATCH_2(tensor, mask);
+    if (!tensor.is_contiguous()) throw std::invalid_argument("Metal masked_fill requires contiguous input");
+    if (broadcast_shape(tensor.shape(), mask.shape()) != tensor.shape())
+        throw std::invalid_argument("masked_fill mask must broadcast to the input shape");
+    Tensor output = empty(tensor.shape(), tensor.dtype());
+    const auto& input_storage = require_metal_storage(*tensor.storage());
+    const auto& mask_storage = require_metal_storage(*mask.storage());
+    auto& output_storage = require_metal_storage(*output.storage());
+    const Strides output_strides = row_major_strides(tensor.shape());
+    std::vector<std::int64_t> metadata;
+    metadata.insert(metadata.end(), tensor.shape().begin(), tensor.shape().end());
+    metadata.insert(metadata.end(), output_strides.begin(), output_strides.end());
+    metadata.insert(metadata.end(), mask.shape().begin(), mask.shape().end());
+    metadata.insert(metadata.end(), mask.strides().begin(), mask.strides().end());
+    id<MTLBuffer> metadata_buffer = [impl_->device newBufferWithBytes:metadata.data()
+        length:metadata.size() * sizeof(std::int64_t) options:MTLResourceStorageModeShared];
+    std::array<uint32_t, 3> config = {static_cast<uint32_t>(tensor.numel()),
+        static_cast<uint32_t>(tensor.ndim()), static_cast<uint32_t>(mask.ndim())};
+    impl_->run_1d(impl_->masked_fill_pipeline, static_cast<NSUInteger>(tensor.numel()),
+        [&](id<MTLComputeCommandEncoder> encoder) {
+            [encoder setBuffer:buffer_from_storage(input_storage)
+                offset:static_cast<NSUInteger>(tensor.storage_offset() * sizeof(float)) atIndex:0];
+            [encoder setBuffer:buffer_from_storage(mask_storage)
+                offset:static_cast<NSUInteger>(mask.storage_offset()) atIndex:1];
+            [encoder setBuffer:buffer_from_storage(output_storage) offset:0 atIndex:2];
+            [encoder setBuffer:metadata_buffer offset:0 atIndex:3];
+            [encoder setBytes:config.data() length:sizeof(config) atIndex:4];
+            [encoder setBytes:&value length:sizeof(value) atIndex:5];
+        });
     return output;
 }
 

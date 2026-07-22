@@ -3,9 +3,24 @@
 #include "device.h"
 #include "metal_storage.h"
 
+#include <cstdint>
 #include <memory>
 
 namespace citrius::impl {
+
+enum class MetalElementwiseOperation : std::uint32_t {
+    Add,
+    Subtract,
+    Multiply,
+    Divide,
+    Maximum,
+};
+
+enum class MetalUnaryOperation : std::uint32_t {
+    Exp,
+    Sqrt,
+    Power,
+};
 
 class MetalDeviceImpl final : public IDevice {
 public:
@@ -21,6 +36,20 @@ public:
     Tensor sub(const Tensor& a, const Tensor& b) const override;
     Tensor matmul(const Tensor& a, const Tensor& b) const override;
     Tensor batched_matmul(const Tensor& a, const Tensor& b) const override;
+    Tensor broadcast_elementwise(
+        const Tensor& a,
+        const Tensor& b,
+        MetalElementwiseOperation operation) const;
+    Tensor scalar_elementwise(
+        const Tensor& tensor,
+        float scalar,
+        MetalElementwiseOperation operation,
+        bool scalar_is_left = false) const;
+    Tensor unary(
+        const Tensor& tensor,
+        MetalUnaryOperation operation,
+        float argument = 0.0f) const;
+    Tensor masked_fill(const Tensor& tensor, const Tensor& mask, float value) const;
     TensorStoragePtr ensure_storage(
         const TensorStoragePtr& storage,
         ConversionPolicy policy = ConversionPolicy::Error) const override;
