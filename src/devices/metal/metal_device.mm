@@ -1,6 +1,7 @@
 #include "impl/metal_device.h"
 
 #include "impl/cpu_storage.h"
+#include "impl/batched_matmul_layout.h"
 #include "tensor_utils.h"
 
 #import <Foundation/Foundation.h>
@@ -61,7 +62,7 @@ kernel void broadcast_elementwise_f32(
     device const float* b [[buffer(1)]],
     device float* out [[buffer(2)]],
     device const long* metadata [[buffer(3)]],
-    constant uint3& config [[buffer(4)]],
+    constant uint4& config [[buffer(4)]],
     uint id [[thread_position_in_grid]]) {
     const uint count = config.x;
     const uint rank = config.y;
@@ -325,6 +326,30 @@ kernel void matmul_f32(
     }
     out[row * n + col] = total;
 }
+
+kernel void batched_matmul_f32(
+    device const float* a [[buffer(0)]],
+    device const float* b [[buffer(1)]],
+    device float* out [[buffer(2)]],
+    device const long* a_offsets [[buffer(3)]],
+    device const long* b_offsets [[buffer(4)]],
+    constant uint4& dims [[buffer(5)]],
+    uint3 id [[thread_position_in_grid]]) {
+    const uint col = id.x;
+    const uint row = id.y;
+    const uint batch = id.z;
+    const uint m = dims.x;
+    const uint k = dims.y;
+    const uint n = dims.z;
+    const uint batches = dims.w;
+    if (row >= m || col >= n || batch >= batches) return;
+    float total = 0.0f;
+    const long a_base = a_offsets[batch];
+    const long b_base = b_offsets[batch];
+    for (uint inner = 0; inner < k; ++inner)
+        total += a[a_base + row * k + inner] * b[b_base + inner * n + col];
+    out[(batch * m + row) * n + col] = total;
+}
 )";
 
 void require_defined(const Tensor& tensor, const char* name) {
@@ -401,6 +426,7 @@ public:
         add_pipeline = pipeline("add_f32");
         sub_pipeline = pipeline("sub_f32");
         matmul_pipeline = pipeline("matmul_f32");
+        batched_matmul_pipeline = pipeline("batched_matmul_f32");
         broadcast_pipeline = pipeline("broadcast_elementwise_f32");
         scalar_pipeline = pipeline("scalar_elementwise_f32");
         unary_pipeline = pipeline("unary_f32");
@@ -477,7 +503,9 @@ public:
         id<MTLBuffer> out,
         std::int64_t m,
         std::int64_t k,
-        std::int64_t n) const {
+        std::int64_t n,
+        NSUInteger a_offset,
+        NSUInteger b_offset) const {
         // The first matmul kernel uses uint dimensions in Metal. This keeps
         // validation explicit until larger shape handling is designed.
         if (m < 0 || k < 0 || n < 0 || m > UINT32_MAX || k > UINT32_MAX || n > UINT32_MAX) {
@@ -498,8 +526,8 @@ public:
 
         // Binding slots mirror the matmul_f32 kernel signature.
         [encoder setComputePipelineState:matmul_pipeline];
-        [encoder setBuffer:a offset:0 atIndex:0];
-        [encoder setBuffer:b offset:0 atIndex:1];
+        [encoder setBuffer:a offset:a_offset atIndex:0];
+        [encoder setBuffer:b offset:b_offset atIndex:1];
         [encoder setBuffer:out offset:0 atIndex:2];
         [encoder setBytes:dims.data() length:sizeof(uint32_t) * dims.size() atIndex:3];
 
@@ -539,6 +567,7 @@ public:
     id<MTLComputePipelineState> add_pipeline = nil;
     id<MTLComputePipelineState> sub_pipeline = nil;
     id<MTLComputePipelineState> matmul_pipeline = nil;
+    id<MTLComputePipelineState> batched_matmul_pipeline = nil;
     id<MTLComputePipelineState> broadcast_pipeline = nil;
     id<MTLComputePipelineState> scalar_pipeline = nil;
     id<MTLComputePipelineState> unary_pipeline = nil;
@@ -945,9 +974,11 @@ Tensor MetalDeviceImpl::matmul(const Tensor& a, const Tensor& b) const {
     const std::int64_t k = a.shape()[1];
     const std::int64_t n = b.shape()[1];
 
+    const Tensor packed_a = a.is_contiguous() ? a : contiguous(a);
+    const Tensor packed_b = b.is_contiguous() ? b : contiguous(b);
     auto output = empty({m, n}, a.dtype());
-    auto a_storage_ptr = ensure_storage(a.storage(), ConversionPolicy::CopyToDevice);
-    auto b_storage_ptr = ensure_storage(b.storage(), ConversionPolicy::CopyToDevice);
+    auto a_storage_ptr = ensure_storage(packed_a.storage(), ConversionPolicy::CopyToDevice);
+    auto b_storage_ptr = ensure_storage(packed_b.storage(), ConversionPolicy::CopyToDevice);
     const auto& a_storage = require_metal_storage(*a_storage_ptr);
     const auto& b_storage = require_metal_storage(*b_storage_ptr);
     auto& output_storage = require_metal_storage(*output.storage());
@@ -958,13 +989,50 @@ Tensor MetalDeviceImpl::matmul(const Tensor& a, const Tensor& b) const {
         buffer_from_storage(output_storage),
         m,
         k,
-        n);
+        n,
+        static_cast<NSUInteger>(packed_a.storage_offset() * sizeof(float)),
+        static_cast<NSUInteger>(packed_b.storage_offset() * sizeof(float)));
 
     return output;
 }
 
-Tensor MetalDeviceImpl::batched_matmul(const Tensor&, const Tensor&) const {
-    throw std::runtime_error("Metal batched_matmul is not implemented");
+Tensor MetalDeviceImpl::batched_matmul(const Tensor& a, const Tensor& b) const {
+    const Tensor packed_a = a.is_contiguous() ? a : contiguous(a);
+    const Tensor packed_b = b.is_contiguous() ? b : contiguous(b);
+    const BatchedLayout layout = make_batched_layout(packed_a, packed_b);
+    Tensor output = empty(layout.output, DType::Float32);
+    if (output.numel() == 0) return output;
+    const auto& a_storage = require_metal_storage(*packed_a.storage());
+    const auto& b_storage = require_metal_storage(*packed_b.storage());
+    auto& output_storage = require_metal_storage(*output.storage());
+    id<MTLBuffer> a_offsets = [impl_->device newBufferWithBytes:layout.a_offsets.data()
+        length:layout.a_offsets.size() * sizeof(std::int64_t) options:MTLResourceStorageModeShared];
+    id<MTLBuffer> b_offsets = [impl_->device newBufferWithBytes:layout.b_offsets.data()
+        length:layout.b_offsets.size() * sizeof(std::int64_t) options:MTLResourceStorageModeShared];
+    const auto m = packed_a.shape()[packed_a.ndim() - 2];
+    const auto k = packed_a.shape().back();
+    const auto n = packed_b.shape().back();
+    std::array<uint32_t, 4> dims = {static_cast<uint32_t>(m), static_cast<uint32_t>(k),
+        static_cast<uint32_t>(n), static_cast<uint32_t>(layout.a_offsets.size())};
+    id<MTLCommandBuffer> command_buffer = [impl_->queue commandBuffer];
+    id<MTLComputeCommandEncoder> encoder = [command_buffer computeCommandEncoder];
+    [encoder setComputePipelineState:impl_->batched_matmul_pipeline];
+    [encoder setBuffer:buffer_from_storage(a_storage)
+        offset:static_cast<NSUInteger>(packed_a.storage_offset() * sizeof(float)) atIndex:0];
+    [encoder setBuffer:buffer_from_storage(b_storage)
+        offset:static_cast<NSUInteger>(packed_b.storage_offset() * sizeof(float)) atIndex:1];
+    [encoder setBuffer:buffer_from_storage(output_storage) offset:0 atIndex:2];
+    [encoder setBuffer:a_offsets offset:0 atIndex:3];
+    [encoder setBuffer:b_offsets offset:0 atIndex:4];
+    [encoder setBytes:dims.data() length:sizeof(dims) atIndex:5];
+    [encoder dispatchThreads:MTLSizeMake(static_cast<NSUInteger>(n), static_cast<NSUInteger>(m),
+        layout.a_offsets.size()) threadsPerThreadgroup:MTLSizeMake(8, 8, 1)];
+    [encoder endEncoding];
+    [command_buffer commit];
+    [command_buffer waitUntilCompleted];
+    if (command_buffer.status == MTLCommandBufferStatusError)
+        throw std::runtime_error("Metal batched matmul execution failed");
+    return output;
 }
 
 TensorStoragePtr MetalDeviceImpl::ensure_storage(
