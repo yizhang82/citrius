@@ -32,16 +32,26 @@ void check_cublas(cublasStatus_t status, const char* operation) {
 void require_matmul_inputs(const Tensor& a, const Tensor& b) {
     ENSURE_TENSOR_DEFINED(a);
     ENSURE_TENSOR_DEFINED(b);
-    ENSURE_TENSOR_DTYPE(a, DType::Float32);
-    ENSURE_TENSOR_DTYPE(b, DType::Float32);
+    if ((a.dtype() != DType::Float16 && a.dtype() != DType::BFloat16 &&
+         a.dtype() != DType::Float32) || b.dtype() != a.dtype())
+        throw std::invalid_argument("cuBLAS matmul requires matching floating-point dtypes");
     ENSURE_TENSOR_DIM(a, 2);
     ENSURE_TENSOR_DIM(b, 2);
     if (a.shape()[1] != b.shape()[0])
         throw std::invalid_argument("matmul inner dimensions must match");
 }
 
-float* data(ITensorStorage& storage) {
-    return static_cast<float*>(storage.handle().ptr);
+void* data(ITensorStorage& storage) {
+    return storage.handle().ptr;
+}
+
+cudaDataType_t cuda_dtype(DType dtype) {
+    switch (dtype) {
+        case DType::Float16: return CUDA_R_16F;
+        case DType::BFloat16: return CUDA_R_16BF;
+        case DType::Float32: return CUDA_R_32F;
+        default: throw std::invalid_argument("unsupported cuBLAS dtype");
+    }
 }
 
 cudaStream_t stream(const std::shared_ptr<CudaExecutionContext>& context) {
@@ -101,8 +111,10 @@ void CublasCudaDeviceImpl::matmul_out(const Tensor& a, const Tensor& b, Tensor& 
         throw std::invalid_argument("cuBLAS matmul strides are too large");
     auto ap = ensure_storage(packed_a.storage(), ConversionPolicy::CopyToDevice);
     auto bp = ensure_storage(packed_b.storage(), ConversionPolicy::CopyToDevice);
-    auto* a_data = data(*ap) + a_layout.storage_offset;
-    auto* b_data = data(*bp) + b_layout.storage_offset;
+    auto* a_data = static_cast<std::byte*>(data(*ap)) +
+        a_layout.storage_offset * dtype_size(a.dtype());
+    auto* b_data = static_cast<std::byte*>(data(*bp)) +
+        b_layout.storage_offset * dtype_size(b.dtype());
     const auto a_operation = a_layout.type == CudaMatrixLayoutType::RowMajor
                                  ? CUBLAS_OP_N : CUBLAS_OP_T;
     const auto b_operation = b_layout.type == CudaMatrixLayoutType::RowMajor
@@ -118,7 +130,8 @@ void CublasCudaDeviceImpl::matmul_out(const Tensor& a, const Tensor& b, Tensor& 
     // bytes are exactly row-major C, so no physical transpose is needed.
     // This accounts for the (n, m, k) problem dimensions and leading
     // dimensions n for B^T, k for A^T, and n for C^T below.
-    check_cublas(cublasSgemm(impl_->handle,       // cuBLAS context for the selected CUDA device
+    const auto data_type = cuda_dtype(a.dtype());
+    check_cublas(cublasGemmEx(impl_->handle,      // cuBLAS context for the selected CUDA device
                              b_operation,
                              a_operation,
                              static_cast<int>(n), // rows of the column-major result C^T
@@ -126,17 +139,24 @@ void CublasCudaDeviceImpl::matmul_out(const Tensor& a, const Tensor& b, Tensor& 
                              static_cast<int>(k), // shared dimension of B^T and A^T
                              &alpha,              // scale applied to B^T * A^T (1.0)
                              b_data,
+                             data_type,
                              static_cast<int>(b_layout.leading_dimension),
                              a_data,
+                             data_type,
                              static_cast<int>(a_layout.leading_dimension),
                              &beta, // scale applied to the previous output contents (0.0)
                              data(*out.storage()), // column-major C^T bytes, equivalent to
                                                    // row-major C
-                             static_cast<int>(n)), // leading dimension of C^T
+                             data_type,
+                             static_cast<int>(n), // leading dimension of C^T
+                             CUBLAS_COMPUTE_32F,
+                             CUBLAS_GEMM_DEFAULT_TENSOR_OP),
                  "cuBLAS matmul failed");
 }
 
 Tensor CublasCudaDeviceImpl::batched_matmul(const Tensor& a, const Tensor& b) const {
+    ENSURE_TENSOR_DTYPE(a, DType::Float32);
+    ENSURE_TENSOR_DTYPE(b, DType::Float32);
     auto l = make_batched_layout(a, b);
     auto out = empty(l.output, DType::Float32);
     if (out.numel() == 0)
@@ -147,9 +167,9 @@ Tensor CublasCudaDeviceImpl::batched_matmul(const Tensor& a, const Tensor& b) co
     if (m > INT_MAX || k > INT_MAX || n > INT_MAX || l.a_offsets.size() > INT_MAX)
         throw std::invalid_argument("cuBLAS batched dimensions are too large");
     std::vector<float*> ah(l.a_offsets.size()), bh(l.b_offsets.size()), ch(l.a_offsets.size());
-    auto* ad = data(*ap);
-    auto* bd = data(*bp);
-    auto* cd = data(*out.storage());
+    auto* ad = static_cast<float*>(data(*ap));
+    auto* bd = static_cast<float*>(data(*bp));
+    auto* cd = static_cast<float*>(data(*out.storage()));
     for (std::size_t i = 0; i < ah.size(); ++i) {
         ah[i] = ad + l.a_offsets[i];
         bh[i] = bd + l.b_offsets[i];

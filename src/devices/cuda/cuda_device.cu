@@ -1422,8 +1422,9 @@ void CudaDeviceImpl::sub_out(const Tensor& a, const Tensor& b, Tensor& out) cons
 Tensor CudaDeviceImpl::matmul(const Tensor& a, const Tensor& b) const {
     require_defined(a, "left");
     require_defined(b, "right");
-    require_float32(a, "left");
-    require_float32(b, "right");
+    if (!is_floating_point(a.dtype()) || a.dtype() == DType::Float64 ||
+        b.dtype() != a.dtype())
+        throw std::invalid_argument("CUDA matmul requires matching Float16, BFloat16, or Float32 inputs");
     require_2d_matmul_shapes(a, b);
     const auto m = a.shape()[0], k = a.shape()[1], n = b.shape()[1];
     auto out = empty({m, n}, a.dtype());

@@ -56,6 +56,19 @@ std::vector<float> values(const citrius::Tensor& tensor) {
         ->copy_to_host(result.data(), result.size() * sizeof(float));
     return result;
 }
+std::vector<float> floating_values(const citrius::Tensor& tensor) {
+    if (tensor.dtype() == citrius::DType::Float32) return values(tensor);
+    const auto cpu = tensor.to(citrius::Device::cpu());
+    const auto storage = std::static_pointer_cast<citrius::impl::CpuMemTensorStorageImpl>(
+        cpu.storage());
+    const auto* bits = storage->data_as<std::uint16_t>();
+    std::vector<float> result(static_cast<std::size_t>(cpu.numel()));
+    for (std::size_t index = 0; index < result.size(); ++index)
+        result[index] = cpu.dtype() == citrius::DType::Float16
+            ? citrius::float16_to_float(bits[index])
+            : citrius::bfloat16_to_float(bits[index]);
+    return result;
+}
 std::vector<std::int64_t> indices(const citrius::Tensor& tensor) {
     std::vector<std::int64_t> result(static_cast<std::size_t>(tensor.numel()));
     std::static_pointer_cast<citrius::impl::CudaMemTensorStorageImpl>(tensor.storage())
@@ -598,6 +611,28 @@ TEST(CudaDeviceTest, FullReductionsMatchCpuReference) {
     EXPECT_NEAR(values(citrius::mean(cuda_input))[0], 17.0f / 6.0f, 1e-6f);
     EXPECT_EQ(values(citrius::max(cuda_input)), std::vector<float>({9.0f}));
     EXPECT_NEAR(values(citrius::variance(cuda_input))[0], 14.138889f, 1e-5f);
+}
+
+TEST(CudaDeviceTest, CublasTensorCoreMatmulSupportsFloat16AndBFloat16) {
+    std::string error;
+    auto device = make_cuda_device(&error);
+    if (!device)
+        GTEST_SKIP() << error;
+    citrius::impl::CublasCudaDeviceImpl cublas;
+    const std::vector<float> left_values{1, 2, 3, 4, 5, 6};
+    const std::vector<float> right_values{1, 2, 3, 4, 5, 6};
+    for (const auto dtype : {citrius::DType::Float16, citrius::DType::BFloat16}) {
+        const auto left = citrius::from_vector(
+            left_values, {2, 3}, dtype, citrius::Device::cuda());
+        const auto right = citrius::from_vector(
+            right_values, {3, 2}, dtype, citrius::Device::cuda());
+        const auto output = cublas.matmul(left, right);
+        EXPECT_EQ(output.dtype(), dtype);
+        const auto actual = floating_values(output);
+        const std::vector<float> expected{22, 28, 49, 64};
+        for (std::size_t index = 0; index < actual.size(); ++index)
+            EXPECT_NEAR(actual[index], expected[index], dtype == citrius::DType::Float16 ? 0.05f : 0.25f);
+    }
 }
 
 TEST(CudaDeviceTest, FusedRmsNormMatchesReference) {
