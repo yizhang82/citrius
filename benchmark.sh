@@ -7,7 +7,7 @@ BUILD_DIR="$ROOT_DIR/build"
 usage() {
     echo "Usage:"
     echo "  ./benchmark.sh operations --cpu|--metal|--cuda|--all [--html [FILE]]"
-    echo "  ./benchmark.sh qwen3-decoding --cpu|--cuda [--tokens N]"
+    echo "  ./benchmark.sh qwen3-decoding --cpu|--cuda [--tokens N] [--dtype float32|float16|bfloat16]"
     echo "  ./benchmark.sh add-kernel [--size N] [--iterations N] [--samples N]"
     echo "  ./benchmark.sh matmul-kernel [--size N] [--iterations N] [--samples N]"
 }
@@ -79,7 +79,7 @@ case "$benchmark" in
         esac
         benchmark_args=()
         while [[ $# -gt 0 ]]; do
-            [[ "$1" == "--tokens" && $# -ge 2 ]] || { usage; exit 1; }
+            [[ ("$1" == "--tokens" || "$1" == "--dtype") && $# -ge 2 ]] || { usage; exit 1; }
             benchmark_args+=("$1" "$2")
             shift 2
         done

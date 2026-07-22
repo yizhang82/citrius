@@ -295,6 +295,14 @@ Override the generated token count with `--tokens`:
 benchmark.bat qwen3-decoding --cuda --tokens 10
 ```
 
+Select reduced-precision projection and embedding weights with `--dtype`. On
+CUDA, `float16` and `bfloat16` use cuBLAS tensor-core GEMMs with FP32
+accumulation; normalization, attention, residuals, and logits remain FP32:
+
+```bat
+benchmark.bat qwen3-decoding --cuda --dtype bfloat16 --tokens 10
+```
+
 The benchmark excludes model construction, reports time to first token (TTFT),
 end-to-end tokens per second, and post-first-token tokens per second. CUDA requires
 an existing build configured with `build.bat --cuda`.

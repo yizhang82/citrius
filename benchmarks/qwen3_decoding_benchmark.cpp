@@ -21,8 +21,18 @@ constexpr std::int64_t default_generated_token_count = 500;
 
 struct Options {
     citrius::Device device;
+    citrius::DType dtype = citrius::DType::Float32;
     std::int64_t generated_token_count = default_generated_token_count;
 };
+
+const char* dtype_name(citrius::DType dtype) {
+    switch (dtype) {
+    case citrius::DType::Float32: return "float32";
+    case citrius::DType::Float16: return "float16";
+    case citrius::DType::BFloat16: return "bfloat16";
+    default: return "unknown";
+    }
+}
 
 Options parse_options(int argc, char** argv) {
     Options options;
@@ -52,14 +62,25 @@ Options parse_options(int argc, char** argv) {
                 options.generated_token_count <= 0) {
                 throw std::invalid_argument("--tokens requires a positive integer");
             }
+        } else if (argument == "--dtype") {
+            if (++index == argc)
+                throw std::invalid_argument("--dtype requires float32, float16, or bfloat16");
+            const std::string value = argv[index];
+            if (value == "float32") options.dtype = citrius::DType::Float32;
+            else if (value == "float16") options.dtype = citrius::DType::Float16;
+            else if (value == "bfloat16") options.dtype = citrius::DType::BFloat16;
+            else throw std::invalid_argument(
+                "--dtype requires float32, float16, or bfloat16");
         } else {
             throw std::invalid_argument(
-                "usage: qwen3_decoding_benchmark --cpu|--cuda [--tokens N]");
+                "usage: qwen3_decoding_benchmark --cpu|--cuda [--tokens N] "
+                "[--dtype float32|float16|bfloat16]");
         }
     }
     if (!has_device)
         throw std::invalid_argument(
-            "usage: qwen3_decoding_benchmark --cpu|--cuda [--tokens N]");
+            "usage: qwen3_decoding_benchmark --cpu|--cuda [--tokens N] "
+            "[--dtype float32|float16|bfloat16]");
     return options;
 }
 
@@ -78,9 +99,11 @@ int main(int argc, char** argv) {
         const std::int64_t generated_token_count = options.generated_token_count;
         citrius::models::Qwen3Config config;
         config.device = device;
+        config.dtype = options.dtype;
 
         std::cout << "Qwen3-0.6B checkpoint-free greedy decoding baseline\n"
                   << "Device: " << (device.type == citrius::DeviceType::CUDA ? "CUDA" : "CPU")
+                  << "\nParameter dtype: " << dtype_name(options.dtype)
                   << "\nGenerated tokens: " << generated_token_count << "\nPrompt tokens: 9\n"
                   << "Constructing initialized model (excluded from timings)...\n";
         citrius::models::Qwen3ForCausalLM model(config);

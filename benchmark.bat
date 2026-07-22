@@ -74,9 +74,13 @@ shift
 
 :parse_qwen3_decoding_args
 if "%~1"=="" goto run_qwen3_decoding
-if /I not "%~1"=="--tokens" goto usage_error
+if /I "%~1"=="--tokens" goto add_qwen3_decoding_arg
+if /I "%~1"=="--dtype" goto add_qwen3_decoding_arg
+goto usage_error
+
+:add_qwen3_decoding_arg
 if "%~2"=="" goto usage_error
-set "BENCH_ARGS=%BENCH_ARGS% --tokens %~2"
+set "BENCH_ARGS=%BENCH_ARGS% %~1 %~2"
 shift
 shift
 goto parse_qwen3_decoding_args
@@ -156,7 +160,7 @@ exit /B 0
 :usage_error
 echo Usage:
 echo   benchmark.bat operations --cpu^|--cuda^|--all [--html [FILE]]
-echo   benchmark.bat qwen3-decoding --cpu^|--cuda [--tokens N]
+echo   benchmark.bat qwen3-decoding --cpu^|--cuda [--tokens N] [--dtype float32^|float16^|bfloat16]
 echo   benchmark.bat add-kernel [--size N] [--iterations N] [--samples N]
 echo   benchmark.bat matmul-kernel [--size N] [--iterations N] [--samples N]
 exit /B 1
