@@ -116,6 +116,7 @@ class Qwen3ForCausalLM final : public nn::Module {
 public:
     explicit Qwen3ForCausalLM(Qwen3Config config = {});
     Tensor forward(const Tensor& input_ids) override;
+    Tensor forward_last_token(const Tensor& input_ids);
     Qwen3Model& model();
     const Qwen3Config& config() const;
 

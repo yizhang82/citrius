@@ -37,7 +37,7 @@ class Qwen3Backend final : public DecoderBackend {
     }
 
     citrius::Tensor logits(const citrius::Tensor& input_ids) override {
-        return (*model_)(input_ids);
+        return model_->forward_last_token(input_ids);
     }
 
     std::int64_t eos_token_id() const override {

@@ -181,6 +181,15 @@ Tensor Qwen3ForCausalLM::forward(const Tensor& input_ids) {
     return matmul(hidden, transpose(model_->token_embedding().weight(), 0, 1));
 }
 
+Tensor Qwen3ForCausalLM::forward_last_token(const Tensor& input_ids) {
+    const Tensor hidden = (*model_)(input_ids);
+    const Tensor last_hidden = contiguous(
+        hidden.index({indexing::Slice(), -1, indexing::Slice()}));
+    return reshape(
+        matmul(last_hidden, transpose(model_->token_embedding().weight(), 0, 1)),
+        {hidden.shape()[0], 1, config().vocab_size});
+}
+
 Qwen3Model& Qwen3ForCausalLM::model() { return *model_; }
 const Qwen3Config& Qwen3ForCausalLM::config() const { return model_->config(); }
 

@@ -89,6 +89,20 @@ TEST(Qwen3Test, ProducesVocabularyLogits) {
     EXPECT_EQ(model.model().token_embedding().weight().shape(), (citrius::Shape{8, 4}));
 }
 
+TEST(Qwen3Test, LastTokenForwardMatchesFullLogits) {
+    citrius::models::Qwen3ForCausalLM model(tiny_config());
+    const auto input_ids =
+        citrius::from_vector(std::vector<std::int64_t>{1, 2, 3}, {1, 3});
+    const auto full = model(input_ids);
+    const auto last = model.forward_last_token(input_ids);
+    EXPECT_EQ(last.shape(), (citrius::Shape{1, 1, 8}));
+    const auto full_values = values(full);
+    const auto last_values = values(last);
+    ASSERT_EQ(last_values.size(), 8u);
+    for (std::size_t index = 0; index < last_values.size(); ++index)
+        EXPECT_NEAR(last_values[index], full_values[16 + index], 1e-6f);
+}
+
 TEST(Qwen3Test, CausalMaskPreventsFutureTokensAffectingEarlierLogits) {
     citrius::models::Qwen3ForCausalLM model(tiny_config());
     const auto first = model(citrius::from_vector(std::vector<std::int64_t>{1, 2}, {1, 2}));

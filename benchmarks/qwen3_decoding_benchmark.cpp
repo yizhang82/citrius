@@ -66,7 +66,7 @@ int main(int argc, char** argv) {
             const auto token_start = Clock::now();
             const auto input_ids = citrius::from_vector(
                 context, {1, static_cast<std::int64_t>(context.size())}, device);
-            const std::int64_t token = last_token_argmax(model(input_ids));
+            const std::int64_t token = last_token_argmax(model.forward_last_token(input_ids));
             const auto token_end = Clock::now();
             token_seconds.push_back(std::chrono::duration<double>(token_end - token_start).count());
             generated.push_back(token);
