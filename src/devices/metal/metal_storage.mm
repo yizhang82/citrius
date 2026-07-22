@@ -1,4 +1,5 @@
 #include "impl/metal_storage.h"
+#include "impl/metal_device.h"
 
 #import <Metal/Metal.h>
 
@@ -59,6 +60,7 @@ StorageHandle MetalMemTensorStorageImpl::handle() const {
 }
 
 std::shared_ptr<ITensorStorage> MetalMemTensorStorageImpl::clone() const {
+    MetalDeviceImpl().synchronize();
     auto copied = std::make_shared<MetalMemTensorStorageImpl>(nbytes(), dtype());
     copied->copy_from_host([impl_->buffer contents], nbytes());
     return copied;
@@ -69,6 +71,7 @@ void MetalMemTensorStorageImpl::copy_from_host(const void* data, std::size_t nby
         throw std::invalid_argument("host data is larger than Metal storage");
     }
 
+    MetalDeviceImpl().synchronize();
     std::memcpy([impl_->buffer contents], data, nbytes);
 }
 
@@ -80,6 +83,7 @@ void MetalMemTensorStorageImpl::copy_to_host(
         throw std::invalid_argument("host destination is larger than Metal storage");
     }
 
+    MetalDeviceImpl().synchronize();
     const auto* source = static_cast<const std::byte*>([impl_->buffer contents]) + source_offset;
     std::memcpy(data, source, nbytes);
 }

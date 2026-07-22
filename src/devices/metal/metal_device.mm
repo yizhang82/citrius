@@ -694,10 +694,7 @@ public:
         [encoder dispatchThreads:grid_size threadsPerThreadgroup:group_size];
         [encoder endEncoding];
 
-        // Keep execution synchronous for now so returned tensors are ready to
-        // read immediately in tests and early user code.
-        [command_buffer commit];
-        [command_buffer waitUntilCompleted];
+        submit(command_buffer);
     }
 
     void run_matmul(
@@ -771,11 +768,7 @@ public:
         [multiplication encodeToCommandBuffer:command_buffer
             leftMatrix:left rightMatrix:right resultMatrix:result];
 
-        // Synchronous completion keeps the public operation semantics eager.
-        [command_buffer commit];
-        [command_buffer waitUntilCompleted];
-        if (command_buffer.status == MTLCommandBufferStatusError)
-            throw std::runtime_error("Metal MPS matmul execution failed");
+        submit(command_buffer);
     }
 
     void run_1d(id<MTLComputePipelineState> state, NSUInteger count,
@@ -790,10 +783,31 @@ public:
         [encoder dispatchThreads:MTLSizeMake(count, 1, 1)
             threadsPerThreadgroup:MTLSizeMake(threads, 1, 1)];
         [encoder endEncoding];
+        submit(command_buffer);
+    }
+
+    void submit(id<MTLCommandBuffer> command_buffer) const {
+        std::lock_guard lock(submission_mutex);
         [command_buffer commit];
-        [command_buffer waitUntilCompleted];
-        if (command_buffer.status == MTLCommandBufferStatusError)
-            throw std::runtime_error("Metal kernel execution failed");
+        pending_command_buffers.push_back(command_buffer);
+    }
+
+    void synchronize() const {
+        std::vector<id<MTLCommandBuffer>> command_buffers;
+        {
+            std::lock_guard lock(submission_mutex);
+            command_buffers.swap(pending_command_buffers);
+        }
+        for (id<MTLCommandBuffer> command_buffer : command_buffers) {
+            [command_buffer waitUntilCompleted];
+            if (command_buffer.status == MTLCommandBufferStatusError) {
+                const char* description = command_buffer.error
+                    ? [[command_buffer.error localizedDescription] UTF8String]
+                    : "unknown error";
+                throw std::runtime_error(
+                    std::string("Metal command buffer execution failed: ") + description);
+            }
+        }
     }
 
     id<MTLDevice> device = nil;
@@ -818,6 +832,8 @@ public:
     id<MTLComputePipelineState> argmax_pipeline = nil;
     id<MTLComputePipelineState> softmax_pipeline = nil;
     id<MTLComputePipelineState> attention_pipeline = nil;
+    mutable std::mutex submission_mutex;
+    mutable std::vector<id<MTLCommandBuffer>> pending_command_buffers;
     mutable std::mutex mps_cache_mutex;
     mutable std::unordered_map<std::string, MPSMatrixMultiplication*>
         multiplication_cache;
@@ -1113,6 +1129,7 @@ Tensor MetalDeviceImpl::gather_rows(const Tensor& table, const Tensor& indices) 
             [encoder setBuffer:invalid offset:0 atIndex:3];
             [encoder setBytes:config.data() length:sizeof(config) atIndex:4];
         });
+    impl_->synchronize();
     if (*static_cast<const int*>(invalid.contents) != 0)
         throw std::out_of_range("gather_rows index is out of range");
     return output;
@@ -1238,10 +1255,7 @@ Tensor MetalDeviceImpl::softmax_last_dimension(const Tensor& tensor) const {
     [encoder dispatchThreadgroups:MTLSizeMake(static_cast<NSUInteger>(rows), 1, 1)
         threadsPerThreadgroup:MTLSizeMake(lanes, 1, 1)];
     [encoder endEncoding];
-    [command_buffer commit];
-    [command_buffer waitUntilCompleted];
-    if (command_buffer.status == MTLCommandBufferStatusError)
-        throw std::runtime_error("Metal softmax execution failed");
+    impl_->submit(command_buffer);
     return output;
 }
 
@@ -1316,10 +1330,7 @@ Tensor MetalDeviceImpl::batched_matmul(const Tensor& a, const Tensor& b) const {
         static_cast<NSUInteger>((n + 15) / 16), static_cast<NSUInteger>((m + 15) / 16),
         layout.a_offsets.size()) threadsPerThreadgroup:MTLSizeMake(16, 16, 1)];
     [encoder endEncoding];
-    [command_buffer commit];
-    [command_buffer waitUntilCompleted];
-    if (command_buffer.status == MTLCommandBufferStatusError)
-        throw std::runtime_error("Metal batched matmul execution failed");
+    impl_->submit(command_buffer);
     return output;
 }
 
@@ -1470,11 +1481,12 @@ std::optional<Tensor> MetalDeviceImpl::try_scaled_dot_product_attention(
     [encoder dispatchThreadgroups:MTLSizeMake(static_cast<NSUInteger>(rows), 1, 1)
         threadsPerThreadgroup:MTLSizeMake(256, 1, 1)];
     [encoder endEncoding];
-    [command_buffer commit];
-    [command_buffer waitUntilCompleted];
-    if (command_buffer.status == MTLCommandBufferStatusError)
-        throw std::runtime_error("Metal scaled dot product attention execution failed");
+    impl_->submit(command_buffer);
     return output;
+}
+
+void MetalDeviceImpl::synchronize() const {
+    impl_->synchronize();
 }
 
 TensorStoragePtr MetalDeviceImpl::ensure_storage(
