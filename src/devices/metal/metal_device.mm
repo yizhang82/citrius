@@ -350,6 +350,75 @@ kernel void batched_matmul_f32(
         total += a[a_base + row * k + inner] * b[b_base + inner * n + col];
     out[(batch * m + row) * n + col] = total;
 }
+
+kernel void rms_norm_f32(
+    device const float* input [[buffer(0)]], device const float* weight [[buffer(1)]],
+    device float* out [[buffer(2)]], constant uint2& dims [[buffer(3)]],
+    constant float& epsilon [[buffer(4)]], uint row [[thread_position_in_grid]]) {
+    if (row >= dims.x) return;
+    const uint width = dims.y;
+    const uint base = row * width;
+    float squares = 0.0f;
+    for (uint col = 0; col < width; ++col) squares += input[base + col] * input[base + col];
+    const float inverse = rsqrt(squares / float(width) + epsilon);
+    for (uint col = 0; col < width; ++col)
+        out[base + col] = input[base + col] * inverse * weight[col];
+}
+
+kernel void swiglu_f32(
+    device const float* gate [[buffer(0)]], device const float* up [[buffer(1)]],
+    device float* out [[buffer(2)]], constant uint& count [[buffer(3)]],
+    uint id [[thread_position_in_grid]]) {
+    if (id < count) out[id] = (gate[id] / (1.0f + exp(-gate[id]))) * up[id];
+}
+
+kernel void add_rms_norm_f32(
+    device const float* left [[buffer(0)]], device const float* right [[buffer(1)]],
+    device const float* weight [[buffer(2)]], device float* residual [[buffer(3)]],
+    device float* normalized [[buffer(4)]], constant uint2& dims [[buffer(5)]],
+    constant float& epsilon [[buffer(6)]], uint row [[thread_position_in_grid]]) {
+    if (row >= dims.x) return;
+    const uint width = dims.y;
+    const uint base = row * width;
+    float squares = 0.0f;
+    for (uint col = 0; col < width; ++col) {
+        const float value = left[base + col] + right[base + col];
+        residual[base + col] = value;
+        squares += value * value;
+    }
+    const float inverse = rsqrt(squares / float(width) + epsilon);
+    for (uint col = 0; col < width; ++col)
+        normalized[base + col] = residual[base + col] * inverse * weight[col];
+}
+
+kernel void rms_norm_rope_f32(
+    device const float* input [[buffer(0)]], device const float* weight [[buffer(1)]],
+    device float* out [[buffer(2)]], constant uint4& dims [[buffer(3)]],
+    constant float2& parameters [[buffer(4)]], uint row [[thread_position_in_grid]]) {
+    const uint batch = dims.x;
+    const uint sequence = dims.y;
+    const uint heads = dims.z;
+    const uint width = dims.w;
+    if (row >= batch * sequence * heads) return;
+    const uint head = row % heads;
+    const uint position = (row / heads) % sequence;
+    const uint batch_index = row / (heads * sequence);
+    const uint input_base = row * width;
+    const uint output_base = ((batch_index * heads + head) * sequence + position) * width;
+    float squares = 0.0f;
+    for (uint col = 0; col < width; ++col) squares += input[input_base + col] * input[input_base + col];
+    const float inverse = rsqrt(squares / float(width) + parameters.x);
+    const uint half_width = width / 2;
+    for (uint col = 0; col < width; ++col) {
+        const uint frequency_index = col % half_width;
+        const float angle = float(position) * pow(parameters.y, -2.0f * float(frequency_index) / float(width));
+        const uint other = col < half_width ? col + half_width : col - half_width;
+        const float current = input[input_base + col] * inverse * weight[col];
+        float rotated = input[input_base + other] * inverse * weight[other];
+        if (col < half_width) rotated = -rotated;
+        out[output_base + col] = current * cos(angle) + rotated * sin(angle);
+    }
+}
 )";
 
 void require_defined(const Tensor& tensor, const char* name) {
@@ -427,6 +496,10 @@ public:
         sub_pipeline = pipeline("sub_f32");
         matmul_pipeline = pipeline("matmul_f32");
         batched_matmul_pipeline = pipeline("batched_matmul_f32");
+        rms_norm_pipeline = pipeline("rms_norm_f32");
+        swiglu_pipeline = pipeline("swiglu_f32");
+        add_rms_norm_pipeline = pipeline("add_rms_norm_f32");
+        rms_norm_rope_pipeline = pipeline("rms_norm_rope_f32");
         broadcast_pipeline = pipeline("broadcast_elementwise_f32");
         scalar_pipeline = pipeline("scalar_elementwise_f32");
         unary_pipeline = pipeline("unary_f32");
@@ -568,6 +641,10 @@ public:
     id<MTLComputePipelineState> sub_pipeline = nil;
     id<MTLComputePipelineState> matmul_pipeline = nil;
     id<MTLComputePipelineState> batched_matmul_pipeline = nil;
+    id<MTLComputePipelineState> rms_norm_pipeline = nil;
+    id<MTLComputePipelineState> swiglu_pipeline = nil;
+    id<MTLComputePipelineState> add_rms_norm_pipeline = nil;
+    id<MTLComputePipelineState> rms_norm_rope_pipeline = nil;
     id<MTLComputePipelineState> broadcast_pipeline = nil;
     id<MTLComputePipelineState> scalar_pipeline = nil;
     id<MTLComputePipelineState> unary_pipeline = nil;
@@ -1035,6 +1112,102 @@ Tensor MetalDeviceImpl::batched_matmul(const Tensor& a, const Tensor& b) const {
     [command_buffer waitUntilCompleted];
     if (command_buffer.status == MTLCommandBufferStatusError)
         throw std::runtime_error("Metal batched matmul execution failed");
+    return output;
+}
+
+std::optional<Tensor> MetalDeviceImpl::try_rms_norm(
+    const Tensor& input, const Tensor& weight, float epsilon) const {
+    if (!input.is_contiguous() || !weight.is_contiguous()) return std::nullopt;
+    Tensor output = empty(input.shape(), DType::Float32);
+    const auto& input_storage = require_metal_storage(*input.storage());
+    const auto& weight_storage = require_metal_storage(*weight.storage());
+    auto& output_storage = require_metal_storage(*output.storage());
+    const uint32_t width = static_cast<uint32_t>(input.shape().back());
+    const uint32_t rows = static_cast<uint32_t>(input.numel() / width);
+    std::array<uint32_t, 2> dims = {rows, width};
+    impl_->run_1d(impl_->rms_norm_pipeline, rows, [&](id<MTLComputeCommandEncoder> encoder) {
+        [encoder setBuffer:buffer_from_storage(input_storage)
+            offset:static_cast<NSUInteger>(input.storage_offset() * sizeof(float)) atIndex:0];
+        [encoder setBuffer:buffer_from_storage(weight_storage)
+            offset:static_cast<NSUInteger>(weight.storage_offset() * sizeof(float)) atIndex:1];
+        [encoder setBuffer:buffer_from_storage(output_storage) offset:0 atIndex:2];
+        [encoder setBytes:dims.data() length:sizeof(dims) atIndex:3];
+        [encoder setBytes:&epsilon length:sizeof(epsilon) atIndex:4];
+    });
+    return output;
+}
+
+std::optional<Tensor> MetalDeviceImpl::try_swiglu(
+    const Tensor& gate, const Tensor& up) const {
+    if (!gate.is_contiguous() || !up.is_contiguous()) return std::nullopt;
+    Tensor output = empty(gate.shape(), DType::Float32);
+    const auto& gate_storage = require_metal_storage(*gate.storage());
+    const auto& up_storage = require_metal_storage(*up.storage());
+    auto& output_storage = require_metal_storage(*output.storage());
+    const uint32_t count = static_cast<uint32_t>(gate.numel());
+    impl_->run_1d(impl_->swiglu_pipeline, count, [&](id<MTLComputeCommandEncoder> encoder) {
+        [encoder setBuffer:buffer_from_storage(gate_storage)
+            offset:static_cast<NSUInteger>(gate.storage_offset() * sizeof(float)) atIndex:0];
+        [encoder setBuffer:buffer_from_storage(up_storage)
+            offset:static_cast<NSUInteger>(up.storage_offset() * sizeof(float)) atIndex:1];
+        [encoder setBuffer:buffer_from_storage(output_storage) offset:0 atIndex:2];
+        [encoder setBytes:&count length:sizeof(count) atIndex:3];
+    });
+    return output;
+}
+
+std::optional<std::pair<Tensor, Tensor>> MetalDeviceImpl::try_add_rms_norm(
+    const Tensor& left, const Tensor& right, const Tensor& weight, float epsilon) const {
+    if (!left.is_contiguous() || !right.is_contiguous() || !weight.is_contiguous())
+        return std::nullopt;
+    Tensor residual = empty(left.shape(), DType::Float32);
+    Tensor normalized = empty(left.shape(), DType::Float32);
+    const auto& left_storage = require_metal_storage(*left.storage());
+    const auto& right_storage = require_metal_storage(*right.storage());
+    const auto& weight_storage = require_metal_storage(*weight.storage());
+    auto& residual_storage = require_metal_storage(*residual.storage());
+    auto& normalized_storage = require_metal_storage(*normalized.storage());
+    const uint32_t width = static_cast<uint32_t>(left.shape().back());
+    const uint32_t rows = static_cast<uint32_t>(left.numel() / width);
+    std::array<uint32_t, 2> dims = {rows, width};
+    impl_->run_1d(impl_->add_rms_norm_pipeline, rows, [&](id<MTLComputeCommandEncoder> encoder) {
+        [encoder setBuffer:buffer_from_storage(left_storage)
+            offset:static_cast<NSUInteger>(left.storage_offset() * sizeof(float)) atIndex:0];
+        [encoder setBuffer:buffer_from_storage(right_storage)
+            offset:static_cast<NSUInteger>(right.storage_offset() * sizeof(float)) atIndex:1];
+        [encoder setBuffer:buffer_from_storage(weight_storage)
+            offset:static_cast<NSUInteger>(weight.storage_offset() * sizeof(float)) atIndex:2];
+        [encoder setBuffer:buffer_from_storage(residual_storage) offset:0 atIndex:3];
+        [encoder setBuffer:buffer_from_storage(normalized_storage) offset:0 atIndex:4];
+        [encoder setBytes:dims.data() length:sizeof(dims) atIndex:5];
+        [encoder setBytes:&epsilon length:sizeof(epsilon) atIndex:6];
+    });
+    return std::make_pair(std::move(residual), std::move(normalized));
+}
+
+std::optional<Tensor> MetalDeviceImpl::try_rms_norm_rope(
+    const Tensor& input, const Tensor& weight, float epsilon, float theta) const {
+    if (!input.is_contiguous() || !weight.is_contiguous()) return std::nullopt;
+    Shape output_shape = {input.shape()[0], input.shape()[2], input.shape()[1], input.shape()[3]};
+    Tensor output = empty(output_shape, DType::Float32);
+    const auto& input_storage = require_metal_storage(*input.storage());
+    const auto& weight_storage = require_metal_storage(*weight.storage());
+    auto& output_storage = require_metal_storage(*output.storage());
+    std::array<uint32_t, 4> dims = {static_cast<uint32_t>(input.shape()[0]),
+        static_cast<uint32_t>(input.shape()[1]), static_cast<uint32_t>(input.shape()[2]),
+        static_cast<uint32_t>(input.shape()[3])};
+    std::array<float, 2> parameters = {epsilon, theta};
+    const NSUInteger rows = static_cast<NSUInteger>(input.numel() / input.shape().back());
+    impl_->run_1d(impl_->rms_norm_rope_pipeline, rows,
+        [&](id<MTLComputeCommandEncoder> encoder) {
+            [encoder setBuffer:buffer_from_storage(input_storage)
+                offset:static_cast<NSUInteger>(input.storage_offset() * sizeof(float)) atIndex:0];
+            [encoder setBuffer:buffer_from_storage(weight_storage)
+                offset:static_cast<NSUInteger>(weight.storage_offset() * sizeof(float)) atIndex:1];
+            [encoder setBuffer:buffer_from_storage(output_storage) offset:0 atIndex:2];
+            [encoder setBytes:dims.data() length:sizeof(dims) atIndex:3];
+            [encoder setBytes:parameters.data() length:sizeof(parameters) atIndex:4];
+        });
     return output;
 }
 
