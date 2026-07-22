@@ -19,17 +19,11 @@ namespace citrius::models {
 namespace {
 
 Tensor tied_vocabulary_projection(const Tensor& hidden, const Tensor& weight) {
-    const DType gemm_dtype = hidden.device().type == DeviceType::CUDA
-        ? weight.dtype()
-        : hidden.dtype();
-    const Tensor gemm_input = hidden.dtype() == gemm_dtype
-        ? hidden
-        : cast(hidden, gemm_dtype);
+    const DType gemm_dtype = hidden.dtype();
+    const Tensor& gemm_input = hidden;
     Tensor gemm_weight = transpose(weight, 0, 1);
     if (gemm_weight.dtype() != gemm_dtype) gemm_weight = cast(gemm_weight, gemm_dtype);
-    Tensor logits = matmul(gemm_input, gemm_weight);
-    if (logits.dtype() != hidden.dtype()) logits = cast(logits, hidden.dtype());
-    return logits;
+    return matmul(gemm_input, gemm_weight);
 }
 
 } // namespace

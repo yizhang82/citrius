@@ -717,6 +717,27 @@ TEST(CudaDeviceTest, Bfloat16QwenLogitsCloselyMatchFloat32) {
     const auto input_ids = citrius::from_vector(
         std::vector<std::int64_t>{1, 5, 2, 7}, {1, 4}, citrius::Device::cuda());
 
+    const auto compare = [](const char* stage, const citrius::Tensor& expected_tensor,
+                            const citrius::Tensor& actual_tensor, float tolerance) {
+        const auto expected_values = values(expected_tensor);
+        const auto actual_values = values(actual_tensor);
+        ASSERT_EQ(actual_values.size(), expected_values.size()) << stage;
+        for (std::size_t index = 0; index < actual_values.size(); ++index) {
+            EXPECT_NEAR(actual_values[index], expected_values[index], tolerance)
+                << stage << " element " << index;
+        }
+    };
+    const auto float_embedding = float_model.model().token_embedding()(input_ids);
+    const auto bfloat_embedding = bfloat_model.model().token_embedding()(input_ids);
+    compare("embedding", float_embedding, bfloat_embedding, 0.002f);
+    compare("attention",
+            float_model.model().layer(0).attention()(float_embedding),
+            bfloat_model.model().layer(0).attention()(bfloat_embedding), 0.02f);
+    compare("mlp",
+            float_model.model().layer(0).mlp()(float_embedding),
+            bfloat_model.model().layer(0).mlp()(bfloat_embedding), 0.02f);
+    compare("model hidden",
+            float_model.model()(input_ids), bfloat_model.model()(input_ids), 0.02f);
     const auto expected = values(float_model.forward_last_token(input_ids));
     const auto actual = values(bfloat_model.forward_last_token(input_ids));
 
