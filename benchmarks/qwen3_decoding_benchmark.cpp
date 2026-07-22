@@ -52,6 +52,15 @@ Options parse_options(int argc, char** argv) {
             throw std::invalid_argument(
                 "CUDA support was not enabled; configure with build.bat --cuda");
 #endif
+        } else if (argument == "--metal") {
+            if (has_device) throw std::invalid_argument("device may only be specified once");
+#ifdef CITRIUS_HAS_METAL
+            options.device = citrius::Device::metal();
+            has_device = true;
+#else
+            throw std::invalid_argument(
+                "Metal support was not enabled; configure with ./build.sh --metal");
+#endif
         } else if (argument == "--tokens") {
             if (++index == argc)
                 throw std::invalid_argument("--tokens requires a positive integer");
@@ -73,14 +82,18 @@ Options parse_options(int argc, char** argv) {
                 "--dtype requires float32, float16, or bfloat16");
         } else {
             throw std::invalid_argument(
-                "usage: qwen3_decoding_benchmark --cpu|--cuda [--tokens N] "
+                "usage: qwen3_decoding_benchmark --cpu|--cuda|--metal [--tokens N] "
                 "[--dtype float32|float16|bfloat16]");
         }
     }
     if (!has_device)
         throw std::invalid_argument(
-            "usage: qwen3_decoding_benchmark --cpu|--cuda [--tokens N] "
+            "usage: qwen3_decoding_benchmark --cpu|--cuda|--metal [--tokens N] "
             "[--dtype float32|float16|bfloat16]");
+    if (options.device.type == citrius::DeviceType::Metal &&
+        options.dtype != citrius::DType::Float32) {
+        throw std::invalid_argument("Metal Qwen3 decoding currently requires float32");
+    }
     return options;
 }
 
@@ -101,8 +114,10 @@ int main(int argc, char** argv) {
         config.device = device;
         config.dtype = options.dtype;
 
+        const char* device_name = device.type == citrius::DeviceType::CUDA ? "CUDA" :
+            device.type == citrius::DeviceType::Metal ? "Metal" : "CPU";
         std::cout << "Qwen3-0.6B checkpoint-free greedy decoding baseline\n"
-                  << "Device: " << (device.type == citrius::DeviceType::CUDA ? "CUDA" : "CPU")
+                  << "Device: " << device_name
                   << "\nParameter dtype: " << dtype_name(options.dtype)
                   << "\nGenerated tokens: " << generated_token_count << "\nPrompt tokens: 9\n"
                   << "Constructing initialized model (excluded from timings)...\n";

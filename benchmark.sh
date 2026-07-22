@@ -7,7 +7,7 @@ BUILD_DIR="$ROOT_DIR/build"
 usage() {
     echo "Usage:"
     echo "  ./benchmark.sh operations --cpu|--metal|--cuda|--all [--html [FILE]]"
-    echo "  ./benchmark.sh qwen3-decoding --cpu|--cuda [--tokens N] [--dtype float32|float16|bfloat16]"
+    echo "  ./benchmark.sh qwen3-decoding --cpu|--cuda|--metal [--tokens N] [--dtype float32|float16|bfloat16]"
     echo "  ./benchmark.sh add-kernel [--size N] [--iterations N] [--samples N]"
     echo "  ./benchmark.sh matmul-kernel [--size N] [--iterations N] [--samples N]"
 }
@@ -75,6 +75,7 @@ case "$benchmark" in
         case "$backend" in
             --cpu) ;;
             --cuda) require_backend "CUDA" CITRIUS_ENABLE_CUDA --cuda ;;
+            --metal) require_backend "Metal" CITRIUS_ENABLE_METAL --metal ;;
             *) usage; exit 1 ;;
         esac
         benchmark_args=()
