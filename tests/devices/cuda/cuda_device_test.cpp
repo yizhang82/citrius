@@ -635,6 +635,23 @@ TEST(CudaDeviceTest, CublasTensorCoreMatmulSupportsFloat16AndBFloat16) {
     }
 }
 
+TEST(CudaDeviceTest, CastsFloat16AndBFloat16OnCuda) {
+    std::string error;
+    auto device = make_cuda_device(&error);
+    if (!device)
+        GTEST_SKIP() << error;
+    const citrius::Tensor input(
+        std::vector<float>{1.0f, -2.5f, 0.333333f}, citrius::Device::cuda());
+    for (const auto dtype : {citrius::DType::Float16, citrius::DType::BFloat16}) {
+        const auto restored = citrius::cast(
+            citrius::cast(input, dtype), citrius::DType::Float32);
+        const auto actual = values(restored);
+        EXPECT_NEAR(actual[0], 1.0f, 1e-3f);
+        EXPECT_NEAR(actual[1], -2.5f, 1e-3f);
+        EXPECT_NEAR(actual[2], 0.333333f, 2e-3f);
+    }
+}
+
 TEST(CudaDeviceTest, FusedRmsNormMatchesReference) {
     std::string error;
     auto device = make_cuda_device(&error);

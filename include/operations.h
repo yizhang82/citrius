@@ -52,6 +52,9 @@ Tensor sub(const Tensor& left, const Tensor& right);
 /// @endcode
 Tensor matmul(const Tensor& left, const Tensor& right);
 
+/// Converts floating-point tensor elements to another floating-point dtype.
+Tensor cast(const Tensor& tensor, DType dtype);
+
 /// Applies root-mean-square normalization over the last dimension.
 /// A device may provide a fused implementation; otherwise this uses the
 /// portable tensor-operation composition.

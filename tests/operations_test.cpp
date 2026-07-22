@@ -163,6 +163,19 @@ TEST(OperationsTest, ComputesUnaryMath) {
     EXPECT_EQ(values(citrius::pow(input, 2.0f)), std::vector<float>({0, 1, 16}));
 }
 
+TEST(OperationsTest, CastsFloatingPointDtypes) {
+    const citrius::Tensor input(std::vector<float>{1.0f, -2.5f, 0.333333f});
+    for (const auto dtype : {citrius::DType::Float16, citrius::DType::BFloat16}) {
+        const auto reduced = citrius::cast(input, dtype);
+        const auto restored = citrius::cast(reduced, citrius::DType::Float32);
+        const auto actual = values(restored);
+        EXPECT_EQ(reduced.dtype(), dtype);
+        EXPECT_NEAR(actual[0], 1.0f, 1e-3f);
+        EXPECT_NEAR(actual[1], -2.5f, 1e-3f);
+        EXPECT_NEAR(actual[2], 0.333333f, 2e-3f);
+    }
+}
+
 TEST(OperationsTest, BroadcastsBooleanMask) {
     const citrius::Tensor input(
         std::vector<float>{1, 2, 3, 4, 5, 6},

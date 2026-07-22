@@ -267,6 +267,31 @@ Tensor matmul(const Tensor& left, const Tensor& right) {
     });
 }
 
+Tensor cast(const Tensor& tensor, DType dtype) {
+    ENSURE_TENSOR_DEFINED(tensor);
+    if (!is_floating_point(tensor.dtype()) || tensor.dtype() == DType::Float64 ||
+        !is_floating_point(dtype) || dtype == DType::Float64)
+        throw std::invalid_argument("cast supports Float16, BFloat16, and Float32");
+    if (tensor.dtype() == dtype) return tensor;
+#ifdef CITRIUS_HAS_CUDA
+    if (tensor.device().type == DeviceType::CUDA)
+        return CudaDeviceImpl(tensor.device().index).cast(tensor, dtype);
+#endif
+    const Tensor packed = tensor.is_contiguous() ? tensor : contiguous(tensor);
+    const Tensor cpu = packed.to(Device::cpu());
+    const auto storage = std::static_pointer_cast<impl::CpuMemTensorStorageImpl>(cpu.storage());
+    std::vector<float> values(static_cast<std::size_t>(cpu.numel()));
+    if (cpu.dtype() == DType::Float32) {
+        std::copy_n(storage->data_as<float>(), values.size(), values.begin());
+    } else {
+        const auto* bits = storage->data_as<std::uint16_t>();
+        for (std::size_t index = 0; index < values.size(); ++index)
+            values[index] = cpu.dtype() == DType::Float16
+                ? float16_to_float(bits[index]) : bfloat16_to_float(bits[index]);
+    }
+    return from_vector(values, packed.shape(), dtype, tensor.device());
+}
+
 Tensor rms_norm(const Tensor& input, const Tensor& weight, float epsilon) {
     require_matching_devices(input, weight);
     require_float32(input);

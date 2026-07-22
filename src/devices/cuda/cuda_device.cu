@@ -6,6 +6,8 @@
 #include "tensor_utils.h"
 
 #include <cuda_runtime.h>
+#include <cuda_bf16.h>
+#include <cuda_fp16.h>
 
 #include <algorithm>
 #include <numeric>
@@ -113,6 +115,27 @@ __global__ void sub_f32(const float* a, const float* b, float* out, std::int64_t
     const auto stride = static_cast<std::int64_t>(blockDim.x) * gridDim.x;
     for (auto i = first; i < count; i += stride)
         out[i] = a[i] - b[i];
+}
+
+__global__ void cast_floating(
+    const void* input,
+    void* output,
+    std::int64_t count,
+    DType input_dtype,
+    DType output_dtype) {
+    const auto first = static_cast<std::int64_t>(blockIdx.x) * blockDim.x + threadIdx.x;
+    const auto stride = static_cast<std::int64_t>(blockDim.x) * gridDim.x;
+    for (auto index = first; index < count; index += stride) {
+        float value;
+        if (input_dtype == DType::Float32) value = static_cast<const float*>(input)[index];
+        else if (input_dtype == DType::Float16)
+            value = __half2float(static_cast<const __half*>(input)[index]);
+        else value = __bfloat162float(static_cast<const __nv_bfloat16*>(input)[index]);
+        if (output_dtype == DType::Float32) static_cast<float*>(output)[index] = value;
+        else if (output_dtype == DType::Float16)
+            static_cast<__half*>(output)[index] = __float2half_rn(value);
+        else static_cast<__nv_bfloat16*>(output)[index] = __float2bfloat16_rn(value);
+    }
 }
 
 __global__ void rms_norm_f32(
@@ -818,6 +841,26 @@ Tensor CudaDeviceImpl::empty(Shape shape, DType dtype) const {
     auto storage = std::make_shared<CudaMemTensorStorageImpl>(
         static_cast<std::size_t>(metadata.numel()) * dtype_size(dtype), dtype, context_);
     return Tensor(std::move(shape), dtype, Device::cuda(device_index_), std::move(storage));
+}
+
+Tensor CudaDeviceImpl::cast(const Tensor& tensor, DType dtype) const {
+    if (!is_floating_point(tensor.dtype()) || tensor.dtype() == DType::Float64 ||
+        !is_floating_point(dtype) || dtype == DType::Float64)
+        throw std::invalid_argument("CUDA cast supports Float16, BFloat16, and Float32");
+    if (tensor.device() != Device::cuda(device_index_))
+        throw std::invalid_argument("cast input is on a different CUDA device");
+    if (tensor.dtype() == dtype) return tensor;
+    const Tensor packed = tensor.is_contiguous() ? tensor : contiguous(tensor);
+    Tensor output = empty(packed.shape(), dtype);
+    if (output.numel() == 0) return output;
+    const auto blocks = static_cast<unsigned>(std::min<std::int64_t>(
+        (output.numel() + 255) / 256, max_elementwise_blocks_));
+    cast_floating<<<blocks, 256, 0, stream(context_)>>>(
+        require_cuda_storage(*packed.storage()).handle().ptr,
+        require_cuda_storage(*output.storage()).handle().ptr,
+        output.numel(), packed.dtype(), dtype);
+    check_cuda(cudaGetLastError(), "failed to launch CUDA cast kernel");
+    return output;
 }
 
 std::optional<Tensor> CudaDeviceImpl::try_rms_norm(

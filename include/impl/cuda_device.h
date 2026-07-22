@@ -89,6 +89,7 @@ public:
     Tensor contiguous(const Tensor& tensor) const;
     Tensor concat(const std::vector<Tensor>& tensors, std::int64_t dimension) const;
     Tensor gather_rows(const Tensor& table, const Tensor& indices) const;
+    Tensor cast(const Tensor& tensor, DType dtype) const;
     virtual void add_out(const Tensor& a, const Tensor& b, Tensor& out) const;
     virtual void sub_out(const Tensor& a, const Tensor& b, Tensor& out) const;
     virtual void matmul_out(const Tensor& a, const Tensor& b, Tensor& out) const;
