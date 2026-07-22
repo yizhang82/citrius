@@ -13,6 +13,7 @@
 #include <cstdint>
 #include <climits>
 #include <functional>
+#include <limits>
 #include <mutex>
 #include <stdexcept>
 #include <string>
@@ -853,9 +854,23 @@ DeviceType MetalDeviceImpl::type() const {
 }
 
 Tensor MetalDeviceImpl::empty(Shape shape, DType dtype) const {
-    const Tensor metadata(shape, dtype, Device::cpu());
+    std::int64_t count = 1;
+    for (const auto dimension : shape) {
+        if (dimension < 0) throw std::invalid_argument("tensor dimensions cannot be negative");
+        if (dimension == 0) {
+            count = 0;
+        } else if (count != 0) {
+            if (count > std::numeric_limits<std::int64_t>::max() / dimension)
+                throw std::invalid_argument("tensor shape is too large");
+            count *= dimension;
+        }
+    }
+    const auto element_size = dtype_size(dtype);
+    if (static_cast<std::uint64_t>(count) >
+        std::numeric_limits<std::size_t>::max() / element_size)
+        throw std::invalid_argument("tensor allocation is too large");
     auto storage = std::make_shared<MetalMemTensorStorageImpl>(
-        static_cast<std::size_t>(metadata.numel()) * dtype_size(dtype),
+        static_cast<std::size_t>(count) * element_size,
         dtype);
     return Tensor(std::move(shape), dtype, Device::metal(), std::move(storage));
 }
