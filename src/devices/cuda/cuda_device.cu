@@ -801,13 +801,15 @@ Tensor CudaDeviceImpl::argmax(const Tensor& tensor, std::int64_t dimension, bool
     const auto inner_size = std::accumulate(
         tensor.shape().begin() + static_cast<std::ptrdiff_t>(axis + 1), tensor.shape().end(),
         std::int64_t{1}, std::multiplies<>());
-    auto input = ensure_storage(tensor.storage(), ConversionPolicy::CopyToDevice);
+    const Tensor packed = tensor.is_contiguous() ? tensor : contiguous(tensor);
+    auto input = ensure_storage(packed.storage(), ConversionPolicy::CopyToDevice);
     const auto blocks = static_cast<unsigned>(
         std::min<std::int64_t>(output.numel(), max_elementwise_blocks_));
     auto* output_data = static_cast<std::int64_t*>(
         require_cuda_storage(*output.storage()).handle().ptr);
     argmax_f32<<<blocks, 256, 0, stream(context_)>>>(
-        data(require_cuda_storage(*input)), output_data, output.numel(), reduction_size,
+        data(require_cuda_storage(*input)) + packed.storage_offset(), output_data,
+        output.numel(), reduction_size,
         inner_size);
     check_cuda(cudaGetLastError(), "failed to launch CUDA argmax kernel");
     return output;

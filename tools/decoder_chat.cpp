@@ -1,12 +1,8 @@
 #include "citrius.h"
 
-#include "impl/cpu_storage.h"
-
-#include <algorithm>
 #include <cstdlib>
 #include <filesystem>
 #include <iostream>
-#include <memory>
 #include <stdexcept>
 #include <string>
 #include <vector>
@@ -59,14 +55,9 @@ class Qwen3Backend final : public DecoderBackend {
 };
 
 std::int64_t last_token_argmax(const citrius::Tensor& logits) {
-    const citrius::Tensor cpu = logits.to(citrius::Device::cpu());
-    const auto storage =
-        std::static_pointer_cast<citrius::impl::CpuMemTensorStorageImpl>(cpu.storage());
-    const float* data = storage->data_as<float>();
-    const std::int64_t vocabulary_size = cpu.shape().back();
-    const float* final_logits = data + cpu.numel() - vocabulary_size;
-    return static_cast<std::int64_t>(
-        std::max_element(final_logits, final_logits + vocabulary_size) - final_logits);
+    const auto final_logits = logits.index(
+        {citrius::indexing::Ellipsis, -1, citrius::indexing::Slice()});
+    return citrius::argmax(final_logits, -1).item<std::int64_t>();
 }
 
 std::vector<std::int64_t> generate(DecoderBackend& model, std::vector<std::int64_t>& context,

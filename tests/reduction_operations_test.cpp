@@ -1,3 +1,4 @@
+#include "indexing_operations.h"
 #include "reduction_operations.h"
 
 #include "impl/cpu_storage.h"
@@ -71,6 +72,20 @@ TEST(ReductionOperationsTest, ArgmaxReturnsInt64Indices) {
     EXPECT_EQ(indices(citrius::argmax(input, 0)), std::vector<std::int64_t>({1, 1, 1, 1}));
     EXPECT_EQ(indices(citrius::argmax(input)), std::vector<std::int64_t>({4}));
     EXPECT_EQ(citrius::argmax(input, 1, true).shape(), citrius::Shape({2, 1}));
+}
+
+TEST(ReductionOperationsTest, ArgmaxRespectsIndexedViewLayout) {
+    const citrius::Tensor input(
+        std::vector<float>{100, 90, 80, 70, 1, 7, 3, 2}, {2, 4});
+    const auto final_row = input.index({-1, citrius::indexing::Slice()});
+    const auto reversed = final_row.index(
+        {citrius::indexing::Slice(std::nullopt, std::nullopt, -1)});
+
+    EXPECT_EQ(final_row.storage_offset(), 4);
+    EXPECT_EQ(reversed.storage_offset(), 7);
+    EXPECT_EQ(citrius::argmax(final_row).item<std::int64_t>(), 1);
+    EXPECT_EQ(citrius::argmax(final_row, -1).item<std::int64_t>(), 1);
+    EXPECT_EQ(citrius::argmax(reversed).item<std::int64_t>(), 2);
 }
 
 TEST(ReductionOperationsTest, ArgmaxRejectsInvalidAndEmptyInputs) {

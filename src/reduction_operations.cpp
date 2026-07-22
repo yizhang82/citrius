@@ -1,6 +1,7 @@
 #include "reduction_operations.h"
 
 #include "impl/cpu_storage.h"
+#include "shape_operations.h"
 #include "tensor_factory.h"
 #include "tensor_utils.h"
 
@@ -159,9 +160,10 @@ Tensor argmax_cpu(const Tensor& tensor, std::int64_t dim, bool keepdim) {
     Shape output_shape = tensor.shape();
     if (keepdim) output_shape[axis] = 1;
     else output_shape.erase(output_shape.begin() + static_cast<std::ptrdiff_t>(axis));
-    const Tensor cpu = tensor.to(Device::cpu());
+    const Tensor packed = contiguous(tensor);
+    const Tensor cpu = packed.to(Device::cpu());
     const auto storage = std::static_pointer_cast<impl::CpuMemTensorStorageImpl>(cpu.storage());
-    const float* input = storage->data_as<float>();
+    const float* input = storage->data_as<float>() + cpu.storage_offset();
     const auto inner = std::accumulate(
         tensor.shape().begin() + static_cast<std::ptrdiff_t>(axis + 1), tensor.shape().end(),
         std::int64_t{1}, std::multiplies<>());
@@ -204,7 +206,7 @@ Tensor argmax(const Tensor& tensor) {
     if (tensor.device().type == DeviceType::CUDA)
         return impl::CudaDeviceImpl(tensor.device().index).argmax(tensor);
 #endif
-    const Tensor flattened({tensor.numel()}, tensor.dtype(), tensor.device(), tensor.storage());
+    const Tensor flattened = reshape(contiguous(tensor), {tensor.numel()});
     return argmax_cpu(flattened, 0, false);
 }
 

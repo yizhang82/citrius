@@ -1,6 +1,7 @@
 #pragma once
 
 #include "exceptions.h"
+#include "indexing_operations.h"
 #include "models/qwen3.h"
 #include "models/qwen3_tokenizer.h"
 #include "nn/feed_forward.h"

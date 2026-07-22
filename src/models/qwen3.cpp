@@ -1,5 +1,6 @@
 #include "models/qwen3.h"
 
+#include "indexing_operations.h"
 #include "nn/functional.h"
 #include "operations.h"
 #include "reduction_operations.h"
@@ -34,10 +35,12 @@ Tensor causal_mask(std::int64_t sequence_length, Device device) {
 Tensor repeat_key_value_heads(const Tensor& tensor, std::int64_t repetitions) {
     if (repetitions == 1) return tensor;
     const Tensor packed = contiguous(tensor);
-    const auto heads = split(packed, 1, 1);
     std::vector<Tensor> repeated;
-    repeated.reserve(heads.size() * static_cast<std::size_t>(repetitions));
-    for (const Tensor& head : heads) {
+    repeated.reserve(
+        static_cast<std::size_t>(packed.shape()[1] * repetitions));
+    for (std::int64_t head_index = 0; head_index < packed.shape()[1]; ++head_index) {
+        const Tensor head = packed.index(
+            {indexing::Slice(), indexing::Slice(head_index, head_index + 1)});
         for (std::int64_t index = 0; index < repetitions; ++index) repeated.push_back(head);
     }
     return concat(repeated, 1);
@@ -68,11 +71,12 @@ Tensor apply_rope(const Tensor& tensor, float theta) {
 
     const Tensor cos_tensor = from_vector(cosine, {1, 1, sequence_length, head_dim}, packed.device());
     const Tensor sin_tensor = from_vector(sine, {1, 1, sequence_length, head_dim}, packed.device());
-    const auto halves = split(packed, half, -1);
-    // Scalar operations currently consume packed storage. Materialize the split
+    // Scalar operations currently consume packed storage. Materialize the indexed
     // views so their storage offsets are not mistaken for the start of storage.
-    const Tensor first_half = contiguous(halves[0]);
-    const Tensor second_half = contiguous(halves[1]);
+    const Tensor first_half = contiguous(
+        packed.index({indexing::Ellipsis, indexing::Slice(0, half)}));
+    const Tensor second_half = contiguous(
+        packed.index({indexing::Ellipsis, indexing::Slice(half, head_dim)}));
     const Tensor rotated = concat({mul(second_half, -1.0f), first_half}, -1);
     return add(mul(packed, cos_tensor), mul(rotated, sin_tensor));
 }
