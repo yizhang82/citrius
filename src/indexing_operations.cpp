@@ -4,6 +4,9 @@
 #ifdef CITRIUS_HAS_CUDA
 #include "impl/cuda_device.h"
 #endif
+#ifdef CITRIUS_HAS_METAL
+#include "impl/metal_device.h"
+#endif
 #include "tensor_factory.h"
 #include "tensor_utils.h"
 
@@ -141,6 +144,10 @@ Tensor gather_rows(const Tensor& table, const Tensor& indices) {
     if (table.device().type == DeviceType::CUDA) {
         return impl::CudaDeviceImpl(table.device().index).gather_rows(table, indices);
     }
+#endif
+#ifdef CITRIUS_HAS_METAL
+    if (table.device().type == DeviceType::Metal)
+        return impl::MetalDeviceImpl().gather_rows(table, indices);
 #endif
 
     const Tensor cpu_table = table.to(Device::cpu());

@@ -50,6 +50,9 @@ public:
         MetalUnaryOperation operation,
         float argument = 0.0f) const;
     Tensor masked_fill(const Tensor& tensor, const Tensor& mask, float value) const;
+    Tensor contiguous(const Tensor& tensor) const;
+    Tensor concat(const std::vector<Tensor>& tensors, std::int64_t dimension) const;
+    Tensor gather_rows(const Tensor& table, const Tensor& indices) const;
     TensorStoragePtr ensure_storage(
         const TensorStoragePtr& storage,
         ConversionPolicy policy = ConversionPolicy::Error) const override;

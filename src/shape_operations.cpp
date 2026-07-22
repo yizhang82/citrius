@@ -4,6 +4,9 @@
 #ifdef CITRIUS_HAS_CUDA
 #include "impl/cuda_device.h"
 #endif
+#ifdef CITRIUS_HAS_METAL
+#include "impl/metal_device.h"
+#endif
 #include "tensor_factory.h"
 #include "tensor_utils.h"
 
@@ -229,7 +232,11 @@ Tensor contiguous(const Tensor& tensor) {
         case DeviceType::CUDA: return impl::CudaDeviceImpl(tensor.device().index).contiguous(tensor);
 #endif
         case DeviceType::Metal:
-            throw std::invalid_argument("Metal contiguous materialization is not implemented");
+#ifdef CITRIUS_HAS_METAL
+            return impl::MetalDeviceImpl().contiguous(tensor);
+#else
+            throw std::invalid_argument("tensor backend is not enabled");
+#endif
         default:
             throw std::invalid_argument("tensor backend is not enabled");
     }
@@ -277,6 +284,10 @@ Tensor concat(const std::vector<Tensor>& tensors, std::int64_t dim) {
     if (first.device().type == DeviceType::CUDA) {
         return impl::CudaDeviceImpl(first.device().index).concat(tensors, dim);
     }
+#endif
+#ifdef CITRIUS_HAS_METAL
+    if (first.device().type == DeviceType::Metal)
+        return impl::MetalDeviceImpl().concat(tensors, dim);
 #endif
     Tensor output = empty(output_shape, first.dtype(), Device::cpu());
     const std::int64_t inner = product(first.shape(), static_cast<std::size_t>(dim + 1), first.ndim());
