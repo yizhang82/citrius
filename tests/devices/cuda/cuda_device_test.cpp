@@ -661,6 +661,34 @@ TEST(CudaDeviceTest, FusedSwiGluMatchesReference) {
     }
 }
 
+TEST(CudaDeviceTest, FusedRmsNormRopeMatchesPortableReference) {
+    std::string error;
+    auto device = make_cuda_device(&error);
+    if (!device)
+        GTEST_SKIP() << error;
+
+    std::vector<float> input_values(2 * 3 * 2 * 8);
+    for (std::size_t index = 0; index < input_values.size(); ++index)
+        input_values[index] = static_cast<float>(static_cast<int>(index % 23) - 11) / 5.0f;
+    const std::vector<float> weight_values{0.5f, 0.75f, 1.0f, 1.25f,
+                                           1.5f, 1.75f, 2.0f, 2.25f};
+    const citrius::Tensor cpu_input(input_values, {2, 3, 2, 8});
+    const citrius::Tensor cpu_weight(weight_values, {8});
+    const auto expected_tensor = citrius::rms_norm_rope(
+        cpu_input, cpu_weight, 1e-6f, 10000.0f).to(citrius::Device::cuda());
+    const auto expected = values(expected_tensor);
+
+    const citrius::Tensor input(input_values, {2, 3, 2, 8}, citrius::Device::cuda());
+    const citrius::Tensor weight(weight_values, {8}, citrius::Device::cuda());
+    const auto optimized = device->try_rms_norm_rope(input, weight, 1e-6f, 10000.0f);
+    ASSERT_TRUE(optimized.has_value());
+    EXPECT_EQ(optimized->shape(), (citrius::Shape{2, 2, 3, 8}));
+    const auto actual = values(*optimized);
+    ASSERT_EQ(actual.size(), expected.size());
+    for (std::size_t index = 0; index < actual.size(); ++index)
+        EXPECT_NEAR(actual[index], expected[index], 3e-6f);
+}
+
 TEST(CudaDeviceTest, LastDimensionReductionsHandleIrregularQwenSizedRows) {
     std::string error;
     auto device = make_cuda_device(&error);

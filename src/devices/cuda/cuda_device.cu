@@ -168,6 +168,62 @@ __global__ void swiglu_f32(
     }
 }
 
+__global__ void rms_norm_rope_f32(
+    const float* input,
+    const float* weight,
+    float* output,
+    std::int64_t sequence,
+    std::int64_t heads,
+    std::int64_t head_dim,
+    std::int64_t row_count,
+    float epsilon,
+    float theta) {
+    __shared__ float warp_sums[32];
+    const auto lane = threadIdx.x & 31;
+    const auto warp = threadIdx.x >> 5;
+    const auto warp_count = (blockDim.x + 31) / 32;
+    const auto half = head_dim / 2;
+    for (std::int64_t row = blockIdx.x; row < row_count; row += gridDim.x) {
+        const float* input_row = input + row * head_dim;
+        float sum_squares = 0.0f;
+        for (std::int64_t column = threadIdx.x; column < head_dim; column += blockDim.x) {
+            const float value = input_row[column];
+            sum_squares += value * value;
+        }
+        for (int offset = 16; offset > 0; offset /= 2)
+            sum_squares += __shfl_down_sync(0xffffffff, sum_squares, offset);
+        if (lane == 0) warp_sums[warp] = sum_squares;
+        __syncthreads();
+        if (warp == 0) {
+            sum_squares = lane < warp_count ? warp_sums[lane] : 0.0f;
+            for (int offset = 16; offset > 0; offset /= 2)
+                sum_squares += __shfl_down_sync(0xffffffff, sum_squares, offset);
+            if (lane == 0)
+                warp_sums[0] = rsqrtf(sum_squares / static_cast<float>(head_dim) + epsilon);
+        }
+        __syncthreads();
+
+        const auto head = row % heads;
+        const auto sequence_position = (row / heads) % sequence;
+        const auto batch = row / (sequence * heads);
+        float* output_row = output +
+            ((batch * heads + head) * sequence + sequence_position) * head_dim;
+        const float inverse_rms = warp_sums[0];
+        for (std::int64_t column = threadIdx.x; column < head_dim; column += blockDim.x) {
+            const auto frequency_index = column % half;
+            const float angle = static_cast<float>(sequence_position) /
+                powf(theta, static_cast<float>(2 * frequency_index) /
+                                static_cast<float>(head_dim));
+            const float normalized = input_row[column] * inverse_rms * weight[column];
+            const auto partner_column = column < half ? column + half : column - half;
+            float partner = input_row[partner_column] * inverse_rms * weight[partner_column];
+            if (column < half) partner = -partner;
+            output_row[column] = normalized * cosf(angle) + partner * sinf(angle);
+        }
+        __syncthreads();
+    }
+}
+
 __device__ float apply_elementwise(
     float a,
     float b,
@@ -692,6 +748,38 @@ std::optional<Tensor> CudaDeviceImpl::try_swiglu(
         data(require_cuda_storage(*up_storage)) + up.storage_offset(),
         data(require_cuda_storage(*output.storage())), output.numel());
     check_cuda(cudaGetLastError(), "failed to launch CUDA swiglu kernel");
+    return output;
+}
+
+std::optional<Tensor> CudaDeviceImpl::try_rms_norm_rope(
+    const Tensor& input,
+    const Tensor& weight,
+    float epsilon,
+    float theta) const {
+    if (input.dtype() != DType::Float32 || weight.dtype() != DType::Float32 ||
+        input.ndim() != 4 || input.shape().back() % 2 != 0 ||
+        weight.shape() != Shape{input.shape().back()} ||
+        input.device() != Device::cuda(device_index_) || weight.device() != input.device() ||
+        !input.is_contiguous() || !weight.is_contiguous()) {
+        return std::nullopt;
+    }
+    const auto batch = input.shape()[0];
+    const auto sequence = input.shape()[1];
+    const auto heads = input.shape()[2];
+    const auto head_dim = input.shape()[3];
+    Tensor output = empty({batch, heads, sequence, head_dim}, DType::Float32);
+    if (output.numel() == 0) return output;
+    auto input_storage = ensure_storage(input.storage());
+    auto weight_storage = ensure_storage(weight.storage());
+    const auto row_count = batch * sequence * heads;
+    const auto blocks = static_cast<unsigned>(
+        std::min<std::int64_t>(row_count, max_elementwise_blocks_));
+    rms_norm_rope_f32<<<blocks, 256, 0, stream(context_)>>>(
+        data(require_cuda_storage(*input_storage)) + input.storage_offset(),
+        data(require_cuda_storage(*weight_storage)) + weight.storage_offset(),
+        data(require_cuda_storage(*output.storage())), sequence, heads, head_dim,
+        row_count, epsilon, theta);
+    check_cuda(cudaGetLastError(), "failed to launch CUDA rms_norm_rope kernel");
     return output;
 }
 

@@ -34,6 +34,13 @@ public:
         const Tensor& up) const {
         return std::nullopt;
     }
+    virtual std::optional<Tensor> try_rms_norm_rope(
+        const Tensor& input,
+        const Tensor& weight,
+        float epsilon,
+        float theta) const {
+        return std::nullopt;
+    }
     virtual TensorStoragePtr ensure_storage(
         const TensorStoragePtr& storage,
         ConversionPolicy policy = ConversionPolicy::Error) const = 0;

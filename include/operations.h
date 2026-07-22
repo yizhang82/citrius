@@ -56,6 +56,15 @@ Tensor rms_norm(const Tensor& input, const Tensor& weight, float epsilon);
 /// A device may provide a fused implementation.
 Tensor swiglu(const Tensor& gate, const Tensor& up);
 
+/// Applies per-head RMSNorm and rotary position embedding to a contiguous
+/// `[batch, sequence, heads, head_dim]` tensor, returning
+/// `[batch, heads, sequence, head_dim]` in attention-ready layout.
+Tensor rms_norm_rope(
+    const Tensor& input,
+    const Tensor& weight,
+    float epsilon,
+    float theta);
+
 /// Multiplies two tensors element by element using trailing-dimension broadcasting.
 /// @param left Left Float32 input tensor.
 /// @param right Right Float32 input tensor on the same device.

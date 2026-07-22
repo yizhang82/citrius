@@ -67,6 +67,18 @@ TEST(OperationsTest, SwiGluUsesPortableDeviceFallback) {
     EXPECT_NEAR(result[3], 7.0463766f, 1e-6f);
 }
 
+TEST(OperationsTest, RmsNormRopeUsesPortableDeviceFallback) {
+    const citrius::Tensor input(
+        std::vector<float>{1, 2, 3, 4, 5, 6, 7, 8}, {1, 2, 1, 4});
+    const citrius::Tensor weight(std::vector<float>{1, 1, 1, 1});
+    const auto result = citrius::rms_norm_rope(input, weight, 1e-6f, 10000.0f);
+    EXPECT_EQ(result.shape(), (citrius::Shape{1, 1, 2, 4}));
+    const auto actual = values(result);
+    const float inverse_first = 1.0f / std::sqrt(7.5f + 1e-6f);
+    EXPECT_NEAR(actual[0], inverse_first, 1e-6f);
+    EXPECT_NEAR(actual[3], 4.0f * inverse_first, 1e-6f);
+}
+
 TEST(OperationsTest, MultipliesUsingTensorDevice) {
     const citrius::Tensor left(std::vector<float>{1, 2, 3, 4, 5, 6}, {2, 3});
     const citrius::Tensor right(

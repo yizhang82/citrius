@@ -4,6 +4,7 @@
 #include "impl/multi_thread_cpu_device.h"
 #include "impl/cpu_storage.h"
 #include "exceptions.h"
+#include "indexing_operations.h"
 #include "reduction_operations.h"
 #include "shape_operations.h"
 #include "tensor_factory.h"
@@ -298,6 +299,59 @@ Tensor swiglu(const Tensor& gate, const Tensor& up) {
         });
     if (optimized) return *optimized;
     return mul(div(gate, add(exp(mul(gate, -1.0f)), 1.0f)), up);
+}
+
+Tensor rms_norm_rope(
+    const Tensor& input,
+    const Tensor& weight,
+    float epsilon,
+    float theta) {
+    require_matching_devices(input, weight);
+    require_float32(input);
+    require_float32(weight);
+    if (input.ndim() != 4 || input.shape().back() % 2 != 0 ||
+        weight.shape() != Shape{input.shape().back()}) {
+        throw std::invalid_argument(
+            "rms_norm_rope requires [batch, sequence, heads, even head_dim] input");
+    }
+    if (!(epsilon > 0.0f) || !(theta > 0.0f))
+        throw std::invalid_argument("rms_norm_rope epsilon and theta must be positive");
+
+    const auto optimized = dispatch(
+        input, weight,
+        [epsilon, theta](const auto& device, const Tensor& value, const Tensor& scale) {
+            return device.try_rms_norm_rope(value, scale, epsilon, theta);
+        });
+    if (optimized) return *optimized;
+
+    const Tensor normalized = rms_norm(input, weight, epsilon);
+    const Tensor packed = contiguous(permute(normalized, {0, 2, 1, 3}));
+    const auto sequence = packed.shape()[2];
+    const auto head_dim = packed.shape()[3];
+    const auto half = head_dim / 2;
+    std::vector<float> cosine(static_cast<std::size_t>(sequence * head_dim));
+    std::vector<float> sine(cosine.size());
+    for (std::int64_t position = 0; position < sequence; ++position) {
+        for (std::int64_t index = 0; index < half; ++index) {
+            const float frequency =
+                1.0f / std::pow(theta, static_cast<float>(2 * index) / head_dim);
+            const float angle = static_cast<float>(position) * frequency;
+            cosine[static_cast<std::size_t>(position * head_dim + index)] = std::cos(angle);
+            cosine[static_cast<std::size_t>(position * head_dim + half + index)] = std::cos(angle);
+            sine[static_cast<std::size_t>(position * head_dim + index)] = std::sin(angle);
+            sine[static_cast<std::size_t>(position * head_dim + half + index)] = std::sin(angle);
+        }
+    }
+    const Tensor cos_tensor = from_vector(
+        cosine, {1, 1, sequence, head_dim}, packed.device());
+    const Tensor sin_tensor = from_vector(
+        sine, {1, 1, sequence, head_dim}, packed.device());
+    const Tensor first_half = contiguous(
+        packed.index({indexing::Ellipsis, indexing::Slice(0, half)}));
+    const Tensor second_half = contiguous(
+        packed.index({indexing::Ellipsis, indexing::Slice(half, head_dim)}));
+    const Tensor rotated = concat({mul(second_half, -1.0f), first_half}, -1);
+    return add(mul(packed, cos_tensor), mul(rotated, sin_tensor));
 }
 
 Tensor mul(const Tensor& left, const Tensor& right) {

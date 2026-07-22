@@ -49,6 +49,11 @@ public:
     std::optional<Tensor> try_swiglu(
         const Tensor& gate,
         const Tensor& up) const override;
+    std::optional<Tensor> try_rms_norm_rope(
+        const Tensor& input,
+        const Tensor& weight,
+        float epsilon,
+        float theta) const override;
     Tensor broadcast_elementwise(
         const Tensor& a,
         const Tensor& b,

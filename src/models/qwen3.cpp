@@ -42,41 +42,6 @@ Tensor repeat_key_value_heads(const Tensor& tensor, std::int64_t repetitions) {
     return concat(repeated, 1);
 }
 
-Tensor apply_rope(const Tensor& tensor, float theta) {
-    const Tensor packed = contiguous(tensor);
-    const auto& shape = packed.shape();
-    const std::int64_t sequence_length = shape[2];
-    const std::int64_t head_dim = shape[3];
-    if (head_dim % 2 != 0) throw std::invalid_argument("Qwen3 RoPE head_dim must be even");
-
-    std::vector<float> cosine(static_cast<std::size_t>(sequence_length * head_dim));
-    std::vector<float> sine(cosine.size());
-    const std::int64_t half = head_dim / 2;
-    for (std::int64_t position = 0; position < sequence_length; ++position) {
-        for (std::int64_t index = 0; index < half; ++index) {
-            const float frequency = 1.0f / std::pow(theta, static_cast<float>(2 * index) / static_cast<float>(head_dim));
-            const float angle = static_cast<float>(position) * frequency;
-            const float cos_value = std::cos(angle);
-            const float sin_value = std::sin(angle);
-            cosine[static_cast<std::size_t>(position * head_dim + index)] = cos_value;
-            cosine[static_cast<std::size_t>(position * head_dim + half + index)] = cos_value;
-            sine[static_cast<std::size_t>(position * head_dim + index)] = sin_value;
-            sine[static_cast<std::size_t>(position * head_dim + half + index)] = sin_value;
-        }
-    }
-
-    const Tensor cos_tensor = from_vector(cosine, {1, 1, sequence_length, head_dim}, packed.device());
-    const Tensor sin_tensor = from_vector(sine, {1, 1, sequence_length, head_dim}, packed.device());
-    // Scalar operations currently consume packed storage. Materialize the indexed
-    // views so their storage offsets are not mistaken for the start of storage.
-    const Tensor first_half = contiguous(
-        packed.index({indexing::Ellipsis, indexing::Slice(0, half)}));
-    const Tensor second_half = contiguous(
-        packed.index({indexing::Ellipsis, indexing::Slice(half, head_dim)}));
-    const Tensor rotated = concat({mul(second_half, -1.0f), first_half}, -1);
-    return add(mul(packed, cos_tensor), mul(rotated, sin_tensor));
-}
-
 } // namespace
 
 void Qwen3Config::validate() const {
@@ -157,10 +122,10 @@ Tensor Qwen3Attention::forward(const Tensor& input, const Tensor& attn_mask) {
     Tensor query = reshape((*query_projection_)(input), {batch, sequence, config_.num_attention_heads, config_.head_dim});
     Tensor key = reshape((*key_projection_)(input), {batch, sequence, config_.num_key_value_heads, config_.head_dim});
     Tensor value = reshape((*value_projection_)(input), {batch, sequence, config_.num_key_value_heads, config_.head_dim});
-    query = (*query_norm_)(query);
-    key = (*key_norm_)(key);
-    query = apply_rope(permute(query, {0, 2, 1, 3}), config_.rope_theta);
-    key = apply_rope(permute(key, {0, 2, 1, 3}), config_.rope_theta);
+    query = citrius::rms_norm_rope(
+        query, query_norm_->weight(), config_.rms_norm_eps, config_.rope_theta);
+    key = citrius::rms_norm_rope(
+        key, key_norm_->weight(), config_.rms_norm_eps, config_.rope_theta);
     value = permute(value, {0, 2, 1, 3});
     const std::int64_t groups = config_.num_attention_heads / config_.num_key_value_heads;
     key = repeat_key_value_heads(key, groups);
