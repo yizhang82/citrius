@@ -1,5 +1,6 @@
 #include "impl/metal_storage.h"
 #include "impl/metal_device.h"
+#include "metal_context.h"
 
 #import <Metal/Metal.h>
 
@@ -13,18 +14,13 @@ public:
     Impl(std::size_t nbytes, DType dtype)
         : dtype(dtype),
           nbytes(nbytes) {
-        device = MTLCreateSystemDefaultDevice();
-        if (device == nil) {
-            throw std::runtime_error("Metal device is not available");
-        }
-
-        buffer = [device newBufferWithLength:nbytes options:MTLResourceStorageModeShared];
+        buffer = [shared_metal_device()
+            newBufferWithLength:nbytes options:MTLResourceStorageModeShared];
         if (buffer == nil) {
             throw std::runtime_error("failed to allocate Metal buffer");
         }
     }
 
-    id<MTLDevice> device = nil;
     id<MTLBuffer> buffer = nil;
     DType dtype;
     std::size_t nbytes;

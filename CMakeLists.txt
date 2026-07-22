@@ -44,6 +44,7 @@ if(CITRIUS_ENABLE_METAL)
 
     target_sources(citrius
         PRIVATE
+            src/devices/metal/metal_context.mm
             src/devices/metal/metal_device.mm
             src/devices/metal/metal_storage.mm
     )

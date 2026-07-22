@@ -2,6 +2,7 @@
 
 #include "impl/cpu_storage.h"
 #include "impl/batched_matmul_layout.h"
+#include "metal_context.h"
 #include "tensor_utils.h"
 
 #import <Foundation/Foundation.h>
@@ -602,10 +603,7 @@ id<MTLBuffer> buffer_from_storage(const MetalMemTensorStorageImpl& storage) {
 class MetalDeviceImpl::Impl {
 public:
     Impl() {
-        device = MTLCreateSystemDefaultDevice();
-        if (device == nil) {
-            throw std::runtime_error("Metal device is not available");
-        }
+        device = shared_metal_device();
 
         queue = [device newCommandQueue];
         if (queue == nil) {
