@@ -23,6 +23,7 @@ struct Qwen3Config {
     float rms_norm_eps = 1e-6f;
     float rope_theta = 1000000.0f;
     Device device = Device::cpu();
+    DType dtype = DType::Float32;
 
     void validate() const;
 };

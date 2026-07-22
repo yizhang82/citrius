@@ -89,6 +89,22 @@ TEST(Qwen3Test, ProducesVocabularyLogits) {
     EXPECT_EQ(model.model().token_embedding().weight().shape(), (citrius::Shape{8, 4}));
 }
 
+TEST(Qwen3Test, StoresProjectionWeightsInConfiguredReducedPrecision) {
+    auto config = tiny_config();
+    config.dtype = citrius::DType::BFloat16;
+    citrius::models::Qwen3ForCausalLM model(config);
+
+    const auto logits = model(
+        citrius::from_vector(std::vector<std::int64_t>{1, 2}, {1, 2}));
+
+    EXPECT_EQ(model.model().token_embedding().weight().dtype(), citrius::DType::BFloat16);
+    EXPECT_EQ(model.model().layer(0).attention().query_projection().weight().dtype(),
+              citrius::DType::BFloat16);
+    EXPECT_EQ(model.model().layer(0).input_norm().weight().dtype(), citrius::DType::Float32);
+    EXPECT_EQ(logits.dtype(), citrius::DType::Float32);
+    EXPECT_EQ(logits.shape(), (citrius::Shape{1, 2, 8}));
+}
+
 TEST(Qwen3Test, LastTokenForwardMatchesFullLogits) {
     citrius::models::Qwen3ForCausalLM model(tiny_config());
     const auto input_ids =
@@ -161,4 +177,20 @@ TEST(Qwen3Test, MapsHuggingFaceEmbeddingWeight) {
     ASSERT_EQ(loaded.size(), 32u);
     EXPECT_FLOAT_EQ(loaded.front(), 0.0f);
     EXPECT_FLOAT_EQ(loaded.back(), 31.0f);
+}
+
+TEST(Qwen3Test, ConvertsLoadedWeightsToConfiguredParameterDtype) {
+    auto config = tiny_config();
+    config.dtype = citrius::DType::Float16;
+    citrius::models::Qwen3ForCausalLM model(config);
+    std::vector<unsigned char> data;
+    for (int index = 0; index < 32; ++index) append_f32(data, static_cast<float>(index));
+    const std::string header =
+        R"({"model.embed_tokens.weight":{"dtype":"F32","shape":[8,4],"data_offsets":[0,128]}})";
+    const auto path = write_safetensors("citrius_qwen_fp16_mapping_test.safetensors", header, data);
+
+    citrius::models::load_qwen3_weights(model, path, false);
+    std::filesystem::remove(path);
+
+    EXPECT_EQ(model.model().token_embedding().weight().dtype(), citrius::DType::Float16);
 }

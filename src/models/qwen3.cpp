@@ -18,6 +18,20 @@
 namespace citrius::models {
 namespace {
 
+Tensor tied_vocabulary_projection(const Tensor& hidden, const Tensor& weight) {
+    const DType gemm_dtype = hidden.device().type == DeviceType::CUDA
+        ? weight.dtype()
+        : hidden.dtype();
+    const Tensor gemm_input = hidden.dtype() == gemm_dtype
+        ? hidden
+        : cast(hidden, gemm_dtype);
+    Tensor gemm_weight = transpose(weight, 0, 1);
+    if (gemm_weight.dtype() != gemm_dtype) gemm_weight = cast(gemm_weight, gemm_dtype);
+    Tensor logits = matmul(gemm_input, gemm_weight);
+    if (logits.dtype() != hidden.dtype()) logits = cast(logits, hidden.dtype());
+    return logits;
+}
+
 } // namespace
 
 void Qwen3Config::validate() const {
@@ -32,6 +46,9 @@ void Qwen3Config::validate() const {
     if (head_dim % 2 != 0) throw std::invalid_argument("Qwen3 head_dim must be even");
     if (!(rms_norm_eps > 0.0f) || !(rope_theta > 0.0f)) {
         throw std::invalid_argument("Qwen3 normalization epsilon and RoPE theta must be positive");
+    }
+    if (!is_floating_point(dtype)) {
+        throw std::invalid_argument("Qwen3 parameter dtype must be floating point");
     }
 }
 
@@ -60,9 +77,9 @@ float Qwen3RMSNorm::epsilon() const { return eps_; }
 
 Qwen3MLP::Qwen3MLP(const Qwen3Config& config) {
     config.validate();
-    gate_projection_ = register_module("gate_proj", std::make_shared<nn::Linear>(config.hidden_size, config.intermediate_size, false, config.device));
-    up_projection_ = register_module("up_proj", std::make_shared<nn::Linear>(config.hidden_size, config.intermediate_size, false, config.device));
-    down_projection_ = register_module("down_proj", std::make_shared<nn::Linear>(config.intermediate_size, config.hidden_size, false, config.device));
+    gate_projection_ = register_module("gate_proj", std::make_shared<nn::Linear>(config.hidden_size, config.intermediate_size, false, config.device, config.dtype));
+    up_projection_ = register_module("up_proj", std::make_shared<nn::Linear>(config.hidden_size, config.intermediate_size, false, config.device, config.dtype));
+    down_projection_ = register_module("down_proj", std::make_shared<nn::Linear>(config.intermediate_size, config.hidden_size, false, config.device, config.dtype));
 }
 
 Tensor Qwen3MLP::forward(const Tensor& input) {
@@ -76,10 +93,10 @@ nn::Linear& Qwen3MLP::down_projection() { return *down_projection_; }
 
 Qwen3Attention::Qwen3Attention(const Qwen3Config& config) : config_(config) {
     config_.validate();
-    query_projection_ = register_module("q_proj", std::make_shared<nn::Linear>(config.hidden_size, config.num_attention_heads * config.head_dim, false, config.device));
-    key_projection_ = register_module("k_proj", std::make_shared<nn::Linear>(config.hidden_size, config.num_key_value_heads * config.head_dim, false, config.device));
-    value_projection_ = register_module("v_proj", std::make_shared<nn::Linear>(config.hidden_size, config.num_key_value_heads * config.head_dim, false, config.device));
-    output_projection_ = register_module("o_proj", std::make_shared<nn::Linear>(config.num_attention_heads * config.head_dim, config.hidden_size, false, config.device));
+    query_projection_ = register_module("q_proj", std::make_shared<nn::Linear>(config.hidden_size, config.num_attention_heads * config.head_dim, false, config.device, config.dtype));
+    key_projection_ = register_module("k_proj", std::make_shared<nn::Linear>(config.hidden_size, config.num_key_value_heads * config.head_dim, false, config.device, config.dtype));
+    value_projection_ = register_module("v_proj", std::make_shared<nn::Linear>(config.hidden_size, config.num_key_value_heads * config.head_dim, false, config.device, config.dtype));
+    output_projection_ = register_module("o_proj", std::make_shared<nn::Linear>(config.num_attention_heads * config.head_dim, config.hidden_size, false, config.device, config.dtype));
     query_norm_ = register_module("q_norm", std::make_shared<Qwen3RMSNorm>(config.head_dim, config.rms_norm_eps, config.device));
     key_norm_ = register_module("k_norm", std::make_shared<Qwen3RMSNorm>(config.head_dim, config.rms_norm_eps, config.device));
 }
@@ -139,7 +156,7 @@ Qwen3RMSNorm& Qwen3DecoderLayer::post_attention_norm() { return *post_attention_
 
 Qwen3Model::Qwen3Model(Qwen3Config config) : config_(std::move(config)) {
     config_.validate();
-    token_embedding_ = register_module("embed_tokens", std::make_shared<nn::Embedding>(config_.vocab_size, config_.hidden_size, config_.device));
+    token_embedding_ = register_module("embed_tokens", std::make_shared<nn::Embedding>(config_.vocab_size, config_.hidden_size, config_.device, config_.dtype));
     layers_.reserve(static_cast<std::size_t>(config_.num_hidden_layers));
     for (std::int64_t index = 0; index < config_.num_hidden_layers; ++index) {
         layers_.push_back(register_module("layers_" + std::to_string(index), std::make_shared<Qwen3DecoderLayer>(config_)));
@@ -170,7 +187,7 @@ Qwen3ForCausalLM::Qwen3ForCausalLM(Qwen3Config config) {
 
 Tensor Qwen3ForCausalLM::forward(const Tensor& input_ids) {
     const Tensor hidden = (*model_)(input_ids);
-    return matmul(hidden, transpose(model_->token_embedding().weight(), 0, 1));
+    return tied_vocabulary_projection(hidden, model_->token_embedding().weight());
 }
 
 Tensor Qwen3ForCausalLM::forward_last_token(const Tensor& input_ids) {
@@ -178,7 +195,7 @@ Tensor Qwen3ForCausalLM::forward_last_token(const Tensor& input_ids) {
     const Tensor last_hidden = contiguous(
         hidden.index({indexing::Slice(), -1, indexing::Slice()}));
     return reshape(
-        matmul(last_hidden, transpose(model_->token_embedding().weight(), 0, 1)),
+        tied_vocabulary_projection(last_hidden, model_->token_embedding().weight()),
         {hidden.shape()[0], 1, config().vocab_size});
 }
 
@@ -199,7 +216,9 @@ void load_qwen3_weights(
         if (found->second.shape() != destination.shape()) {
             throw std::runtime_error("Qwen3 checkpoint shape mismatch: " + name);
         }
-        destination = found->second;
+        destination = found->second.dtype() == destination.dtype()
+            ? found->second
+            : cast(found->second, destination.dtype());
         tensors.erase(found);
     };
 
