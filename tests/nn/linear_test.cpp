@@ -1,6 +1,7 @@
 #include "nn/linear.h"
 
 #include "impl/cpu_storage.h"
+#include "tensor_factory.h"
 
 #include <gtest/gtest.h>
 
@@ -59,6 +60,18 @@ TEST(LinearTest, PreservesLeadingDimensions) {
     EXPECT_EQ(values(output), std::vector<float>({8, 18, 28, 38}));
     EXPECT_FALSE(linear.bias().defined());
     EXPECT_EQ(linear.named_parameters().size(), 1u);
+}
+
+TEST(LinearTest, StoresReducedPrecisionParametersAndReturnsFloat32) {
+    citrius::nn::Linear linear(2, 1, false, citrius::Device::cpu(), citrius::DType::BFloat16);
+    linear.weight() = citrius::from_vector(
+        std::vector<float>{2, 3}, {1, 2}, citrius::DType::BFloat16);
+
+    const auto output = linear(citrius::Tensor(std::vector<float>{1, 2}, {1, 2}));
+
+    EXPECT_EQ(linear.weight().dtype(), citrius::DType::BFloat16);
+    EXPECT_EQ(output.dtype(), citrius::DType::Float32);
+    EXPECT_EQ(values(output), std::vector<float>({8}));
 }
 
 TEST(LinearTest, RejectsInvalidShapes) {

@@ -2,6 +2,7 @@
 
 #include "operations.h"
 #include "shape_operations.h"
+#include "tensor_factory.h"
 #include "tensor_utils.h"
 
 #include <cmath>
@@ -27,25 +28,27 @@ Linear::Linear(
     std::int64_t in_features,
     std::int64_t out_features,
     bool use_bias,
-    Device device)
+    Device device,
+    DType dtype)
     : in_features_(in_features),
       out_features_(out_features),
       has_bias_(use_bias) {
     if (in_features <= 0 || out_features <= 0) {
         throw std::invalid_argument("Linear features must be positive");
     }
+    if (!is_floating_point(dtype)) {
+        throw std::invalid_argument("Linear parameters must use a floating-point dtype");
+    }
 
     const float bound = 1.0f / std::sqrt(static_cast<float>(in_features));
     register_parameter(
         "weight",
-        Tensor(
-            random_values(in_features * out_features, bound),
-            {out_features, in_features},
-            device));
+        from_vector(random_values(in_features * out_features, bound),
+                    {out_features, in_features}, dtype, device));
     register_parameter(
         "bias",
         use_bias
-            ? Tensor(random_values(out_features, bound), {out_features}, device)
+            ? from_vector(random_values(out_features, bound), {out_features}, dtype, device)
             : Tensor());
 }
 
@@ -63,8 +66,22 @@ Tensor Linear::forward(const Tensor& input) {
         input.dtype(),
         input.device(),
         input.storage());
-    Tensor output = matmul(matrix_input, transpose(weight(), 0, 1));
-    if (has_bias_) output = add(output, bias());
+    const DType gemm_dtype = input.device().type == DeviceType::CUDA
+        ? weight().dtype()
+        : input.dtype();
+    const Tensor gemm_input = matrix_input.dtype() == gemm_dtype
+        ? matrix_input
+        : cast(matrix_input, gemm_dtype);
+    Tensor gemm_weight = transpose(weight(), 0, 1);
+    if (gemm_weight.dtype() != gemm_dtype) gemm_weight = cast(gemm_weight, gemm_dtype);
+    Tensor output = matmul(gemm_input, gemm_weight);
+    if (output.dtype() != input.dtype()) output = cast(output, input.dtype());
+    if (has_bias_) {
+        const Tensor output_bias = bias().dtype() == output.dtype()
+            ? bias()
+            : cast(bias(), output.dtype());
+        output = add(output, output_bias);
+    }
 
     Shape output_shape = input.shape();
     output_shape.back() = out_features_;

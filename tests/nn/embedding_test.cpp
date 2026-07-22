@@ -50,3 +50,16 @@ TEST(EmbeddingTest, RejectsInvalidDimensionsIdsAndDtypes) {
         embedding(citrius::Tensor(std::vector<float>{0, 1})),
         std::invalid_argument);
 }
+
+TEST(EmbeddingTest, StoresReducedPrecisionWeightsAndReturnsFloat32) {
+    citrius::nn::Embedding embedding(
+        2, 2, citrius::Device::cpu(), citrius::DType::Float16);
+    embedding.weight() = citrius::from_vector(
+        std::vector<float>{1, 2, 3, 4}, {2, 2}, citrius::DType::Float16);
+
+    const auto output = embedding(citrius::from_vector(std::vector<std::int64_t>{1}));
+
+    EXPECT_EQ(embedding.weight().dtype(), citrius::DType::Float16);
+    EXPECT_EQ(output.dtype(), citrius::DType::Float32);
+    EXPECT_EQ(values(output), std::vector<float>({3, 4}));
+}

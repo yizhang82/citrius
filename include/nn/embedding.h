@@ -11,7 +11,8 @@ public:
     Embedding(
         std::int64_t num_embeddings,
         std::int64_t embedding_dim,
-        Device device = Device::cpu());
+        Device device = Device::cpu(),
+        DType dtype = DType::Float32);
 
     Tensor forward(const Tensor& input) override;
 

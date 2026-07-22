@@ -1,6 +1,8 @@
 #include "nn/embedding.h"
 
 #include "indexing_operations.h"
+#include "operations.h"
+#include "tensor_factory.h"
 
 #include <random>
 #include <stdexcept>
@@ -23,22 +25,26 @@ std::vector<float> random_values(std::int64_t count) {
 Embedding::Embedding(
     std::int64_t num_embeddings,
     std::int64_t embedding_dim,
-    Device device)
+    Device device,
+    DType dtype)
     : num_embeddings_(num_embeddings),
       embedding_dim_(embedding_dim) {
     if (num_embeddings <= 0 || embedding_dim <= 0) {
         throw std::invalid_argument("Embedding dimensions must be positive");
     }
+    if (!is_floating_point(dtype)) {
+        throw std::invalid_argument("Embedding parameters must use a floating-point dtype");
+    }
     register_parameter(
         "weight",
-        Tensor(
-            random_values(num_embeddings * embedding_dim),
-            {num_embeddings, embedding_dim},
-            device));
+        from_vector(random_values(num_embeddings * embedding_dim),
+                    {num_embeddings, embedding_dim}, dtype, device));
 }
 
 Tensor Embedding::forward(const Tensor& input) {
-    return gather_rows(weight(), input);
+    Tensor output = gather_rows(weight(), input);
+    if (output.dtype() != DType::Float32) output = cast(output, DType::Float32);
+    return output;
 }
 
 std::int64_t Embedding::num_embeddings() const {

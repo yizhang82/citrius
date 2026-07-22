@@ -131,7 +131,9 @@ Tensor gather_rows(const Tensor& table, const Tensor& indices) {
     ENSURE_TENSOR_DEFINED(table);
     ENSURE_TENSOR_DEFINED(indices);
     ENSURE_TENSOR_DIM(table, 2);
-    ENSURE_TENSOR_DTYPE(table, DType::Float32);
+    if (!is_floating_point(table.dtype())) {
+        throw std::invalid_argument("gather_rows table must have a floating-point dtype");
+    }
     ENSURE_TENSOR_DTYPE(indices, DType::Int64);
     ENSURE_TENSOR_DEVICE_MATCH_2(table, indices);
 
@@ -145,7 +147,7 @@ Tensor gather_rows(const Tensor& table, const Tensor& indices) {
     const Tensor cpu_indices = indices.to(Device::cpu());
     Shape output_shape = indices.shape();
     output_shape.push_back(table.shape()[1]);
-    Tensor output = empty(output_shape, DType::Float32, Device::cpu());
+    Tensor output = empty(output_shape, table.dtype(), Device::cpu());
 
     const auto table_storage =
         std::static_pointer_cast<impl::CpuMemTensorStorageImpl>(cpu_table.storage());
@@ -153,10 +155,11 @@ Tensor gather_rows(const Tensor& table, const Tensor& indices) {
         std::static_pointer_cast<impl::CpuMemTensorStorageImpl>(cpu_indices.storage());
     auto output_storage =
         std::static_pointer_cast<impl::CpuMemTensorStorageImpl>(output.storage());
-    const float* table_data = table_storage->data_as<float>();
+    const auto* table_data = table_storage->data_as<unsigned char>();
     const std::int64_t* index_data = index_storage->data_as<std::int64_t>();
-    float* output_data = output_storage->data_as<float>();
+    auto* output_data = output_storage->data_as<unsigned char>();
     const std::int64_t row_size = table.shape()[1];
+    const std::size_t row_bytes = static_cast<std::size_t>(row_size) * dtype_size(table.dtype());
 
     for (std::int64_t position = 0; position < indices.numel(); ++position) {
         const std::int64_t row = index_data[position];
@@ -164,9 +167,9 @@ Tensor gather_rows(const Tensor& table, const Tensor& indices) {
             throw std::out_of_range("gather_rows index is out of range");
         }
         std::memcpy(
-            output_data + position * row_size,
-            table_data + row * row_size,
-            static_cast<std::size_t>(row_size) * sizeof(float));
+            output_data + static_cast<std::size_t>(position) * row_bytes,
+            table_data + static_cast<std::size_t>(row) * row_bytes,
+            row_bytes);
     }
     return output.to(table.device());
 }

@@ -12,7 +12,8 @@ public:
         std::int64_t in_features,
         std::int64_t out_features,
         bool bias = true,
-        Device device = Device::cpu());
+        Device device = Device::cpu(),
+        DType dtype = DType::Float32);
 
     Tensor forward(const Tensor& input) override;
 

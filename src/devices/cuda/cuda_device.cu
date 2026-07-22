@@ -583,25 +583,25 @@ __global__ void reduce_last_dimension_f32(
     }
 }
 
-__global__ void gather_rows_f32(
-    const float* table,
+__global__ void gather_rows_bytes(
+    const unsigned char* table,
     const std::int64_t* indices,
-    float* output,
+    unsigned char* output,
     std::int64_t index_count,
     std::int64_t row_count,
-    std::int64_t row_size,
+    std::int64_t row_bytes,
     int* invalid_index) {
     const auto first = static_cast<std::int64_t>(blockIdx.x) * blockDim.x + threadIdx.x;
     const auto stride = static_cast<std::int64_t>(blockDim.x) * gridDim.x;
-    const auto output_count = index_count * row_size;
+    const auto output_count = index_count * row_bytes;
     for (auto output_index = first; output_index < output_count; output_index += stride) {
-        const auto index_position = output_index / row_size;
+        const auto index_position = output_index / row_bytes;
         const auto row = indices[index_position];
         if (row < 0 || row >= row_count) {
             atomicExch(invalid_index, 1);
             continue;
         }
-        output[output_index] = table[row * row_size + output_index % row_size];
+        output[output_index] = table[row * row_bytes + output_index % row_bytes];
     }
 }
 
@@ -1289,7 +1289,9 @@ Tensor CudaDeviceImpl::gather_rows(const Tensor& table, const Tensor& indices) c
     ENSURE_TENSOR_DEFINED(table);
     ENSURE_TENSOR_DEFINED(indices);
     ENSURE_TENSOR_DIM(table, 2);
-    ENSURE_TENSOR_DTYPE(table, DType::Float32);
+    if (!is_floating_point(table.dtype())) {
+        throw std::invalid_argument("gather_rows table must have a floating-point dtype");
+    }
     ENSURE_TENSOR_DTYPE(indices, DType::Int64);
     ENSURE_TENSOR_DEVICE_MATCH_2(table, indices);
     if (table.device() != Device::cuda(device_index_))
@@ -1299,7 +1301,7 @@ Tensor CudaDeviceImpl::gather_rows(const Tensor& table, const Tensor& indices) c
     const Tensor packed_indices = contiguous(indices);
     Shape output_shape = indices.shape();
     output_shape.push_back(table.shape()[1]);
-    Tensor output = empty(std::move(output_shape), DType::Float32);
+    Tensor output = empty(std::move(output_shape), table.dtype());
     if (indices.numel() == 0 || table.shape()[1] == 0) return output;
 
     CudaAllocation invalid_index(sizeof(int), context_);
@@ -1308,13 +1310,16 @@ Tensor CudaDeviceImpl::gather_rows(const Tensor& table, const Tensor& indices) c
     const auto& table_storage = require_cuda_storage(*packed_table.storage());
     const auto& index_storage = require_cuda_storage(*packed_indices.storage());
     auto& output_storage = require_cuda_storage(*output.storage());
-    const auto required_blocks = (output.numel() + 255) / 256;
+    const auto row_bytes = table.shape()[1] * static_cast<std::int64_t>(dtype_size(table.dtype()));
+    const auto output_bytes = output.numel() * static_cast<std::int64_t>(dtype_size(table.dtype()));
+    const auto required_blocks = (output_bytes + 255) / 256;
     const auto blocks = static_cast<unsigned>(
         std::min<std::int64_t>(required_blocks, max_elementwise_blocks_));
-    gather_rows_f32<<<blocks, 256, 0, stream(context_)>>>(
-        static_cast<const float*>(table_storage.handle().ptr),
+    gather_rows_bytes<<<blocks, 256, 0, stream(context_)>>>(
+        static_cast<const unsigned char*>(table_storage.handle().ptr),
         static_cast<const std::int64_t*>(index_storage.handle().ptr),
-        data(output_storage), indices.numel(), table.shape()[0], table.shape()[1],
+        static_cast<unsigned char*>(output_storage.handle().ptr),
+        indices.numel(), table.shape()[0], row_bytes,
         invalid_index.data_as<int>());
     check_cuda(cudaGetLastError(), "failed to launch CUDA gather_rows kernel");
     invalid_index.copy_to_host_async(&invalid, sizeof(invalid));
