@@ -17,7 +17,7 @@
 namespace {
 
 using Clock = std::chrono::steady_clock;
-constexpr std::int64_t default_generated_token_count = 500;
+constexpr std::int64_t default_generated_token_count = 50;
 
 struct Options {
     citrius::Device device;

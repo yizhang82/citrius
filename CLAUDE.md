@@ -282,7 +282,7 @@ benchmark.bat matmul-kernel --size 2048 --iterations 20 --samples 5
 ```
 
 Run the checkpoint-free Qwen3-0.6B greedy decoding benchmark, which generates
-500 tokens by default, with:
+50 tokens by default, with:
 
 ```bat
 benchmark.bat qwen3-decoding --cpu
