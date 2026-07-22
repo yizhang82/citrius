@@ -155,6 +155,13 @@ Default builds are CPU-only:
 ./build.sh
 ```
 
+Unix builds default to the optimized `Release` configuration. Use `--debug`
+when debugger-friendly code and assertions are required:
+
+```bash
+./build.sh --debug
+```
+
 Clean CPU-only build:
 
 ```bash

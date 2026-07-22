@@ -5,15 +5,20 @@ BUILD_DIR="build"
 CLEAN=0
 METAL=0
 CUDA=0
+BUILD_TYPE="Release"
 
 usage() {
-    echo "Usage: ./test.sh [--clean] [--metal] [--cuda]"
+    echo "Usage: ./test.sh [--clean] [--debug] [--metal] [--cuda]"
 }
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
         --clean)
             CLEAN=1
+            shift
+            ;;
+        --debug)
+            BUILD_TYPE="Debug"
             shift
             ;;
         --metal)
@@ -40,6 +45,7 @@ if [[ "$CLEAN" -eq 1 ]]; then
 fi
 
 cmake -S . -B "$BUILD_DIR" \
+    -DCMAKE_BUILD_TYPE="$BUILD_TYPE" \
     -DCITRIUS_ENABLE_METAL=$([[ "$METAL" -eq 1 ]] && echo ON || echo OFF) \
     -DCITRIUS_ENABLE_CUDA=$([[ "$CUDA" -eq 1 ]] && echo ON || echo OFF)
 
